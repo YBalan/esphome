@@ -11,6 +11,7 @@ substitutions:
   bms_update_interval: "5s"
   
   # relay limits
+  total_capacity: "314.0"
   soc_low_limit: "200.0"
   soc_high_limit: "300.0"
 
@@ -176,8 +177,29 @@ sensor:
     state_topic: "jkbms/ble_rssi" # Отдельный топик
     force_update: true
     filters:
-      - throttle: 15s # Пропускать значение не чаще раза в 60 секунд
-
+      - throttle: 15s # Пропускать значение не чаще раза в 15 секунд
+      
+  - platform: template
+    name: "Charging Time Remaining"
+    id: charging_time
+    unit_of_measurement: "h"
+    state_topic: "jkbms/charging_time_hours"
+    accuracy_decimals: 1
+    update_interval: 10s # Не нужно считать слишком часто
+    lambda: |-
+      float current = id(bms_a).state;
+      float total_cap = ${total_capacity};
+      float remaining_cap = id(bms_ah).state;
+      
+      // Если ток заряда больше 0.1 А (идет зарядка)
+      if (current > 0.1) {
+        float need_ah = total_cap - remaining_cap;
+        if (need_ah <= 0) return 0; // Уже заряжен
+        return need_ah / current;   // Часы = емкость / ток
+      } else {
+        return 0; // Не заряжается
+      }
+      
 # 5. СТАТУСЫ (Binary Sensors)
 binary_sensor:
   - platform: jk_bms_ble
@@ -249,8 +271,26 @@ text_sensor:
     errors:
       name: "BMS Errors"
       state_topic: "jkbms/errors"
+  # Charging Time
+  - platform: template
+    name: "Charging Time Formatted"
+    state_topic: "jkbms/charging_time_human"
+    update_interval: 10s
+    lambda: |-
+      float hours_raw = id(charging_time).state;
+      if (hours_raw <= 0) {
+        return {"NA"};
+      }
       
-      # 1. Скрипт таймера (управляет временем свечения)
+      int total_minutes = (int)(hours_raw * 60);
+      int h = total_minutes / 60;
+      int m = total_minutes % 60;
+      
+      char buf[20];
+      sprintf(buf, "%dh %dm", h, m);
+      return {buf};
+      
+# 1. Скрипт таймера (управляет временем свечения)
 script:
   - id: display_timer
     mode: restart # Если нажать кнопку снова, таймер сбросится на начало
