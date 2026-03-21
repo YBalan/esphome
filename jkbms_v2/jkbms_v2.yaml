@@ -1,0 +1,298 @@
+substitutions:
+  # Название устройства
+  device_name: jkbms-gateway-v2
+  
+  # Железо
+  bms_mac_address: "C8:47:80:28:71:3E"
+  relay_control_pin: "14"
+  
+  # Тайминги
+  display_on_time: "30s"
+  bms_update_interval: "5s"
+  
+  # relay limits
+  soc_low_limit: "200.0"
+  soc_high_limit: "300.0"
+
+esphome:
+  name: ${device_name}
+  # Запуск таймера при старте системы
+  on_boot:
+    priority: -100 # Запускаем в последнюю очередь, когда всё уже загрузилось
+    then:
+      - script.execute: display_timer
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf #arduino
+
+# 1. Настройки подключения
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Резервная точка доступа, если WiFi пропадет
+  ap:
+    ssid: "JKBMS-Gateway-Hotspot"  
+
+# Настройка MQTT (подставьте данные вашего брокера)
+mqtt:    
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password  
+  port: 1883
+  topic_prefix: jkbms
+  #level: NONE
+  #reboot_timeout: 0s
+  #keepalive: 60s
+  # Если используете HiveMQ Cloud (порт 8883), добавьте: certificate_authority: ...
+
+# Включаем логгер
+logger:
+  level: INFO
+
+# 2. Bluetooth настройки
+esp32_ble_tracker:
+  scan_parameters:
+    active: true
+
+ble_client:
+  - mac_address: ${bms_mac_address}  # ЗАМЕНИТЕ НА ВАШ MAC
+    id: jkbms_ble
+
+# 3. Подключение драйвера JK-BMS
+external_components:
+  - source: github://syssi/esphome-jk-bms@main
+
+jk_bms_ble:
+  - ble_client_id: jkbms_ble
+    id: my_bms
+    update_interval: ${bms_update_interval} 
+    protocol_version: JK02_32S
+
+# 4. СЕНСОРЫ (Телеметрия)
+sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: my_bms
+
+    # Общее напряжение: шлем если изменилось на 0.05В, но не чаще раза в 2 сек
+    total_voltage:
+      name: "BMS Total Voltage"
+      state_topic: "jkbms/voltage"
+      id: bms_v
+      filters:
+        - delta: 0.05
+        - throttle: 2s
+
+    # Ток: шлем если изменилось на 0.1А
+    current:
+      name: "BMS Current"
+      state_topic: "jkbms/current"
+      id: bms_a
+      filters:
+        - delta: 0.1
+        - throttle: 2s
+
+    # Заряд в %: шлем только если изменился на 1% или раз в 30 секунд
+    capacity_remaining:
+      name: "BMS SoC"
+      state_topic: "jkbms/soc"
+      id: bms_ah
+      on_value:
+        then:
+          # Если емкость упала ниже ${soc_low_limit} Ah
+          - if:
+              condition:
+                lambda: 'return x < ${soc_low_limit};'
+              then:
+                - switch.turn_on: bms_relay                
+          # Если емкость поднялась до ${soc_high_limit} Ah и выше
+          - if:
+              condition:
+                lambda: 'return x >= ${soc_high_limit};'
+              then:
+                - switch.turn_off: bms_relay                
+      filters:
+        - delta: 0.01
+        - throttle: 2s
+
+    # Мощность (Вт)
+    power:
+      name: "BMS Power"
+      state_topic: "jkbms/power"
+      filters:
+        - delta: 5.0
+        - throttle: 2s
+
+    # Температуры: шлем если изменились на 0.5 градуса или раз в минуту
+    temperature_sensor_1:
+      name: "BMS Temp 1"
+      state_topic: "jkbms/t1"
+      filters: &temp_filter
+        - delta: 0.5
+        - throttle: 15s
+    temperature_sensor_2:
+      name: "BMS Temp 2"
+      state_topic: "jkbms/t2"
+      filters: *temp_filter    
+
+    # Ячейки: самое важное. Шлем если изменилось на 0.01В
+    # Здесь пример для 8 ячеек. Если у вас 16 — просто добавьте по аналогии.
+    min_cell_voltage:
+      name: "Min Cell"
+      state_topic: "jkbms/min_c_v"
+      filters:
+        - delta: 0.01
+        - throttle: 5s
+        
+    max_cell_voltage:
+      name: "Max Cell"
+      state_topic: "jkbms/max_c_v"
+      filters:
+        - delta: 0.01
+        - throttle: 5s
+
+    # Разбаланс (Delta)
+    delta_cell_voltage:
+      name: "BMS Cell Delta"
+      state_topic: "jkbms/delta"
+      filters:
+        - delta: 0.002
+        - throttle: 5s
+        
+        # Уровень сигнала Wi-Fi
+  - platform: wifi_signal
+    name: "WiFi Signal RSSI"
+    id: wifi_rssi
+    update_interval: 15s
+    state_topic: "jkbms/wifi_rssi" # Отдельный топик
+    force_update: true
+
+  # Уровень сигнала Bluetooth (BLE) от БМС
+  - platform: ble_rssi
+    mac_address: ${bms_mac_address} # Твой MAC адрес БМС
+    name: "BMS BLE RSSI"
+    id: ble_rssi_val    
+    state_topic: "jkbms/ble_rssi" # Отдельный топик
+    force_update: true
+    filters:
+      - throttle: 15s # Пропускать значение не чаще раза в 60 секунд
+
+# 5. СТАТУСЫ (Binary Sensors)
+binary_sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: my_bms
+    charging:
+      name: "BMS Charging State"
+      state_topic: "jkbms/status/charging"
+    discharging:
+      name: "BMS Discharging State"
+      state_topic: "jkbms/status/discharging"
+    balancing:
+      name: "BMS Balancing State"
+      state_topic: "jkbms/status/balancing"
+      
+      #GPIO Кнопка
+  - platform: gpio
+    pin:
+      number: 0
+      inverted: true
+      mode: INPUT_PULLUP
+    id: wake_button
+    on_press:
+      - script.execute: display_timer
+
+# 6. УПРАВЛЕНИЕ (Выключатели)
+# Позволяют включать/выключать заряд/разряд через MQTT
+switch:
+# Силовое реле на ${relay_control_pin} пине
+  - platform: gpio
+    pin: ${relay_control_pin}
+    name: "BMS Control Relay"
+    id: bms_relay
+    restore_mode: ALWAYS_OFF # При старте реле всегда выключено
+      # MQTT настройки:
+    state_topic: "jkbms/relay/state"      # Тут телефон будет видеть статус
+    command_topic: "jkbms/relay/set"    # Сюда телефон будет слать ON/OFF    
+    # Привязываем синий светодиод к состоянию реле
+    on_turn_on:
+      - output.turn_on: blue_led_out
+    on_turn_off:
+      - output.turn_off: blue_led_out
+    
+  # JKBMS Switches
+  - platform: jk_bms_ble
+    jk_bms_ble_id: my_bms
+    charging:
+      name: "BMS Charging Switch"
+      state_topic: "jkbms/switch/charge/state"
+      command_topic: "jkbms/switch/charge/set"
+    discharging:
+      name: "BMS Discharging Switch"
+      state_topic: "jkbms/switch/discharge/state"
+      command_topic: "jkbms/switch/discharge/set"
+    balancer:
+      name: "BMS Balancer Switch"
+      state_topic: "jkbms/switch/balance/state"
+      command_topic: "jkbms/switch/balance/set"
+      
+# Светодиод опишем как простой выход (output), чтобы не плодить лишние кнопки в MQTT
+output:
+  - platform: gpio
+    pin: 2
+    id: blue_led_out
+
+# 7. ДИАГНОСТИКА
+text_sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: my_bms
+    errors:
+      name: "BMS Errors"
+      state_topic: "jkbms/errors"
+      
+      # 1. Скрипт таймера (управляет временем свечения)
+script:
+  - id: display_timer
+    mode: restart # Если нажать кнопку снова, таймер сбросится на начало
+    then:
+      - lambda: 'id(my_display).turn_on();'
+      - delay: 30s # Сколько времени экран будет светиться
+      - lambda: 'id(my_display).turn_off();'
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 12
+  - file: "gfonts://Roboto"
+    id: font_medium
+    size: 16
+  - file: "gfonts://Roboto"
+    id: font_large
+    size: 22
+
+i2c:
+  sda: 21
+  scl: 22
+  scan: true # Включаем сканер, он покажет адрес в логах
+
+# 3. Доработка блока дисплея (добавляем ID)
+display:
+  - platform: ssd1306_i2c
+    id: my_display # <--- ОБЯЗАТЕЛЬНО ДОБАВЬ ЭТОТ ID
+    model: "SSD1306 128x64"
+    address: 0x3C
+    # Экран будет выключен при старте до первого нажатия
+    setup_priority: -100 
+    lambda: |-
+      // Тот же код отрисовки, что мы писали выше
+      it.printf(0, 0, id(font_small), "JK-BMS MONITOR");
+      it.line(0, 13, 128, 13);
+      if (id(bms_v).has_state()) {
+        it.printf(0, 15, id(font_large), "%.2f V", id(bms_v).state);
+      }
+      if (id(bms_a).has_state()) {
+        it.printf(0, 38, id(font_small), "Current: %.2f A", id(bms_a).state);
+      }
+      if (id(bms_ah).has_state()) {
+        it.printf(0, 50, id(font_small), "Cap: %.1f Ah", id(bms_ah).state);
+      }
