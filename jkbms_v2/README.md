@@ -1,5 +1,3 @@
----
-
 # JK-BMS to MQTT Bridge with ESP32 & OLED Display
 
 This project provides a robust solution for monitoring a **JK-BMS (Jikong)** using an **ESP32**. It retrieves data via Bluetooth (BLE) and transmits it to a local **Mosquitto MQTT** broker. The device features an integrated **OLED display** with power-saving logic and a **physical relay** control based on State of Charge (SoC).
