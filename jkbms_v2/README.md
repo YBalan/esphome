@@ -48,6 +48,62 @@ password_file C:/mosquitto/passwords.txt
 *   **File Permissions:** Right-click the `C:\mosquitto\passwords.txt` file -> Properties -> Security -> Edit -> Add. Type `SYSTEM` and `NETWORK_SERVICE` and grant "Full Control" to ensure the service can read the password file.
 *   **Restart Service:** Open `services.msc`, find **Mosquitto Broker**, and restart it.
 
+Here is the **Compilation & Installation** section to be added to your `README.md`. It includes the specific advice about the Python version to avoid the errors we encountered.
+
+---
+
+## 🔨 Installation & Compilation
+
+To compile this project and flash it to your ESP32, you will need to set up an ESPHome environment on your Windows PC.
+
+### 1. Install Python
+*   **Recommended Version:** [Python 3.12.x](https://www.python.org/downloads/windows/) (Stable).
+*   **Warning:** Avoid Python 3.13 for now, as it has compatibility issues with the `littlefs` library used in this project.
+*   **Important:** During installation, make sure to check the box **"Add Python to PATH"**.
+
+### 2. Install ESPHome
+Open **Command Prompt (CMD)** and run the following command:
+```cmd
+pip install esphome
+```
+
+### 3. Prepare the Project Folder
+1. Create a folder (e.g., `C:\esp_jkbms`).
+2. Place your `jkbms.yaml` and `secrets.yaml` files inside this folder.
+3. If you previously tried to compile with an incorrect Python version, delete the hidden folder `C:\Users\YourUser\.platformio` to ensure a clean build environment.
+
+### 4. Compile and Flash
+1. Connect your ESP32 to the PC via USB.
+2. In the Command Prompt, navigate to your folder:
+   ```cmd
+   cd C:\esp_jkbms
+   ```
+3. Run the compilation and flash command:
+   ```cmd
+   esphome run jkbms.yaml
+   ```
+
+### What happens during this process:
+*   **First Run:** ESPHome will download the required toolchains, the `esp-idf` framework, and the JK-BMS external components from GitHub. This can take **5–15 minutes** depending on your internet speed and CPU.
+*   **Subsequent Runs:** Only changes are compiled, making the process much faster (under 1 minute).
+*   **OTA (Over-The-Air):** After the first successful flash via USB, you can update the device over Wi-Fi. ESPHome will automatically detect the device on your network and offer to flash it wirelessly.
+
+### Logs Monitoring
+Once flashing is complete, the console will automatically switch to **Log View**. You can also view logs at any time without reflashing by running:
+```cmd
+esphome logs jkbms.yaml
+```
+Look for `[I][mqtt:339]: Connected` to confirm the link to your Mosquitto broker is active.
+
+---
+
+### Suggested Project Folder Structure:
+```text
+C:\esp_jkbms\
+├── jkbms.yaml      <-- Main configuration
+└── secrets.yaml    <-- WiFi, MQTT, and Telegram credentials
+```
+
 ---
 
 ## ⚙️ ESPHome Configuration
