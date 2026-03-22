@@ -61,7 +61,7 @@ wifi_ssid: "Your_SSID"
 wifi_password: "Your_WiFi_Password"
 mqtt_username: "yura"
 mqtt_password: "Your_MQTT_Password"
-mqtt_brocker: "192.168.1.50"
+mqtt_broker: "192.168.1.50"
 ```
 
 ### 2. Main YAML Highlights
@@ -69,13 +69,14 @@ Use `substitutions` at the top of your file for easy hardware management:
 
 ```yaml
 substitutions:
-  device_name: jkbms-gateway
+  device_name: jkbms-gateway-v2
   bms_mac_address: "C8:47:80:28:71:3E"
   relay_control_pin: "14"
+  display_on_time: "30s"
+  bms_update_interval: "5s"
+  total_capacity: "314.0"
   soc_low_limit: "200.0"
   soc_high_limit: "300.0"
-  total_battery_capacity: "314.0"
-  display_on_time: "30s"
 
 esphome:
   name: ${device_name}
@@ -93,17 +94,17 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   manual_ip: #optional
-    static_ip: 192.16.1.253
-    gateway: 192.16.1.1
+    static_ip: 192.168.1.253
+    gateway: 192.168.1.1
     subnet: 255.255.255.0
     dns1: 8.8.8.8 # Fixes DNS Resolve Errors
 
 mqtt:
-  broker: ${mqtt_brocker} # Your PC IP Address
+  broker: !secret mqtt_broker # Your PC IP Address
   username: !secret mqtt_username
   password: !secret mqtt_password
+  port: 1883
   topic_prefix: jkbms
-  reboot_timeout: 0s
 
 i2c:
   sda: 21 # Change to 5 if using older Ideaspark boards
@@ -115,14 +116,56 @@ i2c:
 
 ## 📊 MQTT Topic Map
 Configure your mobile app (MQTT Dash / Home Assistant) using these topics:
-*   `jkbms/voltage` — Total battery voltage.
-*   `jkbms/current` — Current in Amps (+ for charging, - for discharging).
-*   `jkbms/soc` — Remaining capacity in Ah.
-*   `jkbms/relay/state` — Current relay status (ON/OFF).
-*   `jkbms/relay/set` — **Command topic** to manually toggle the relay.
-*   `jkbms/charging_time_human` — Estimated time until full charge.
-*   `jkbms/wifi_rssi` — Wi-Fi signal strength in dBm.
-*   `jkbms/ble_rssi` — Bluetooth signal strength from BMS.
+
+### Telemetry Sensors
+| Topic | Description |
+|---|---|
+| `jkbms/voltage` | Total battery voltage (V) |
+| `jkbms/current` | Pack current in Amps (+ charging, − discharging) |
+| `jkbms/soc` | Remaining capacity (Ah) |
+| `jkbms/power` | Pack power (W) |
+| `jkbms/t1` | Temperature sensor 1 (°C) |
+| `jkbms/t2` | Temperature sensor 2 (°C) |
+| `jkbms/min_c_v` | Minimum cell voltage (V) |
+| `jkbms/max_c_v` | Maximum cell voltage (V) |
+| `jkbms/delta` | Cell delta voltage (V) |
+| `jkbms/wifi_rssi` | Wi-Fi signal strength (dBm) |
+| `jkbms/ble_rssi` | BLE signal strength from BMS (dBm) |
+| `jkbms/charging_time_hours` | Estimated time until full charge (hours, numeric) |
+
+### Binary / Status
+| Topic | Description |
+|---|---|
+| `jkbms/status/charging` | Charging active (true/false) |
+| `jkbms/status/discharging` | Discharging active (true/false) |
+| `jkbms/status/balancing` | Balancer active (true/false) |
+
+### Relay Control
+| Topic | Description |
+|---|---|
+| `jkbms/relay/state` | Current relay status (ON/OFF) |
+| `jkbms/relay/set` | **Command topic** — send ON/OFF to toggle relay |
+
+### JK BMS Switches
+| State Topic | Command Topic | Description |
+|---|---|---|
+| `jkbms/switch/charge/state` | `jkbms/switch/charge/set` | Charging enabled |
+| `jkbms/switch/discharge/state` | `jkbms/switch/discharge/set` | Discharging enabled |
+| `jkbms/switch/balance/state` | `jkbms/switch/balance/set` | Balancer enabled |
+
+### Text Sensors / Diagnostics
+| Topic | Description |
+|---|---|
+| `jkbms/errors` | BMS error codes / text |
+| `jkbms/charging_time_human` | Formatted charging time (e.g. "2h 15m" or "NA") |
+
+---
+
+## 📷 Images
+
+![Hardware photo 1](images/photo_2026-03-22_11-06-48.jpg)
+
+![Hardware photo 2](images/photo_2026-03-22_11-06-55.jpg)
 
 ---
 
