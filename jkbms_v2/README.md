@@ -48,8 +48,6 @@ password_file C:/mosquitto/passwords.txt
 *   **File Permissions:** Right-click the `C:\mosquitto\passwords.txt` file -> Properties -> Security -> Edit -> Add. Type `SYSTEM` and `NETWORK_SERVICE` and grant "Full Control" to ensure the service can read the password file.
 *   **Restart Service:** Open `services.msc`, find **Mosquitto Broker**, and restart it.
 
-Here is the **Compilation & Installation** section to be added to your `README.md`. It includes the specific advice about the Python version to avoid the errors we encountered.
-
 ---
 
 ## 🔨 Installation & Compilation
@@ -186,6 +184,7 @@ Configure your mobile app (MQTT Dash / Home Assistant) using these topics:
 | `jkbms/wifi_rssi` | Wi-Fi signal strength (dBm) |
 | `jkbms/ble_rssi` | BLE signal strength from BMS (dBm) |
 | `jkbms/charging_time_hours` | Estimated time until full charge (hours, numeric) |
+| `jkbms/cycles` | BMS Charging Cycles |
 
 ### Binary / Status
 | Topic | Description |

@@ -12,8 +12,8 @@ substitutions:
   
   # relay limits
   total_capacity: "314.0"
-  soc_low_limit: "200.0"
-  soc_high_limit: "300.0"
+  soc_low_limit: "250.0"
+  soc_high_limit: "310.0"
 
 esphome:
   name: ${device_name}
@@ -27,6 +27,9 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
+    
+ota:
+  - platform: esphome
 
 # 1. Connection settings
 wifi:
@@ -158,6 +161,15 @@ sensor:
       state_topic: "jkbms/delta"
       filters:
         - delta: 0.002
+        - throttle: 5s
+        
+    # BMS Charging Cycles
+    charging_cycles:
+      name: "BMS Charging Cycles"
+      id: bms_cycles
+      state_topic: "jkbms/cycles"      
+      filters:
+        - delta: 1
         - throttle: 5s
         
     # Wi-Fi signal level
