@@ -21,6 +21,108 @@ This project provides a robust solution for monitoring a **JK-BMS (Jikong)** usi
 
 ---
 
+## 🐍 Installation & Build
+
+This section explains how to install **Python 3.12.x**, set up a virtual environment, install **ESPHome**, and compile the firmware for your ESP32.
+
+### 1. Install Python 3.12.x
+
+#### Linux — Ubuntu / Debian
+```bash
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv python3.12-dev
+```
+
+#### Linux — Fedora / RHEL / CentOS
+```bash
+sudo dnf install -y python3.12
+```
+
+#### macOS — Homebrew
+```bash
+brew install python@3.12
+```
+
+#### Windows
+
+**Option A — Official installer (recommended):**
+1. Download the Python 3.12.x installer from [python.org/downloads](https://www.python.org/downloads/).
+2. Run the installer, tick **"Add Python 3.12 to PATH"**, then click **Install Now**.
+
+**Option B — pyenv-win:**
+```powershell
+pyenv install 3.12.10
+pyenv global 3.12.10
+```
+
+---
+
+### 2. Create a Virtual Environment
+
+Using a virtual environment keeps ESPHome and its dependencies isolated from your system Python.
+
+```bash
+# Create the environment (run once, inside the jkbms_v2/ directory)
+python3.12 -m venv .venv
+```
+
+Activate it before every session:
+
+| Platform | Command |
+|---|---|
+| Linux / macOS | `source .venv/bin/activate` |
+| Windows PowerShell | `.venv\Scripts\Activate.ps1` |
+| Windows CMD | `.venv\Scripts\activate.bat` |
+
+> **Tip:** Your shell prompt will change to show `(.venv)` when the environment is active.
+
+---
+
+### 3. Install ESPHome
+
+With the virtual environment active, install ESPHome via pip:
+
+```bash
+pip install esphome
+```
+
+Verify the installation:
+
+```bash
+esphome version
+```
+
+> ESPHome automatically pulls in **PlatformIO** (the underlying build system) as a dependency — no separate installation is required.
+
+---
+
+### 4. Compile the Firmware
+
+1. Make sure your virtual environment is active (see [step 2](#2-create-a-virtual-environment)).
+2. Create your `secrets.yaml` in the `jkbms_v2/` directory (see the **ESPHome Configuration** section below) and fill in your credentials.
+3. From the `jkbms_v2/` directory, run:
+
+```bash
+esphome compile jkbms_v2.yaml
+```
+
+ESPHome will download the required PlatformIO toolchains and the ESP-IDF framework on the first run — this may take several minutes. Subsequent builds are much faster.
+
+**Output binary location:**
+```
+jkbms_v2/.esphome/build/jkbms-gateway-v2/.pioenvs/jkbms-gateway-v2/firmware.bin
+```
+
+4. *(Optional)* To compile **and** flash in one step (ESP32 connected via USB):
+
+```bash
+esphome run jkbms_v2.yaml
+```
+
+> **Note:** The first build downloads approximately 300 MB of toolchain data. Keep a stable internet connection during the initial compile.
+
+---
+
 ## 🖥 Mosquitto MQTT Broker Setup (Windows)
 
 To keep the system local and fast, Mosquitto is installed on a Windows PC.
