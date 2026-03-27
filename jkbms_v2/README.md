@@ -176,8 +176,6 @@ Configure your mobile app (MQTT Dash / Home Assistant) using these topics:
 | `jkbms/current` | Pack current in Amps (+ charging, − discharging) |
 | `jkbms/soc` | Remaining capacity (Ah) |
 | `jkbms/power` | Pack power (W) |
-| `jkbms/t1` | Temperature sensor 1 (°C) |
-| `jkbms/t2` | Temperature sensor 2 (°C) |
 | `jkbms/min_c_v` | Minimum cell voltage (V) |
 | `jkbms/max_c_v` | Maximum cell voltage (V) |
 | `jkbms/delta` | Cell delta voltage (V) |
@@ -185,6 +183,10 @@ Configure your mobile app (MQTT Dash / Home Assistant) using these topics:
 | `jkbms/ble_rssi` | BLE signal strength from BMS (dBm) |
 | `jkbms/charging_time_hours` | Estimated time until full charge (hours, numeric) |
 | `jkbms/cycles` | BMS Charging Cycles |
+| `jkbms/cycle_capacity` | BMS Cycle Capacity |
+| `jkbms/mos_temp` | BMS MOSFET Temperature |
+| `jkbms/t1` | Temperature sensor 1 (°C) |
+| `jkbms/t2` | Temperature sensor 2 (°C) |
 
 ### Binary / Status
 | Topic | Description |

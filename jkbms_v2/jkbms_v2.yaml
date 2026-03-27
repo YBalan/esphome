@@ -119,6 +119,13 @@ sensor:
       filters:
         - delta: 0.01
         - throttle: 2s
+        
+    total_charging_cycle_capacity:
+      name: "BMS Cycle Capacity"      
+      state_topic: "jkbms/cycle_capacity"
+      filters:
+        - delta: 1
+        - throttle: 60s
 
     # Power (W)
     power:
@@ -138,7 +145,11 @@ sensor:
     temperature_sensor_2:
       name: "BMS Temp 2"
       state_topic: "jkbms/t2"
-      filters: *temp_filter    
+      filters: *temp_filter  
+    temperature_sensor_5:
+      name: "BMS MOSFET Temperature"      
+      state_topic: "jkbms/mos_temp"
+      filters: *temp_filter
 
     # Cells: the most important part. Publish if it changed by 0.01V
     min_cell_voltage:
