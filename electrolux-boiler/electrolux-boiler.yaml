@@ -1,0 +1,272 @@
+substitutions:
+  # Device name
+  device_name: electrolux-boiler
+  
+esphome:
+  name: ${device_name}  
+  on_boot:    
+    - priority: 800
+      then:
+        - logger.log: "ON_BOOT IS WORKING"
+        
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf  #arduino #esp-idf 
+      
+ota:
+  - platform: esphome
+
+# 1. Connection settings
+wifi:
+  #ssid: !secret wifi_ssid
+  #password: !secret wifi_password
+  # Fallback access point if WiFi disappears
+  ap:
+    ssid: "AP-Boiler"
+    password: "password"
+    
+  # Allow saving new credentials to flash memory
+  fast_connect: true
+
+# Enables the web interface when in AP mode
+captive_portal:
+
+# Simple web server to change settings if already connected
+web_server:
+  port: 80
+
+api: #For Home Assistant
+
+# MQTT configuration
+mqtt:    
+  broker: !secret mqtt_broker
+  client_id: esp32_electrolux_boiler_client
+  username: !secret mqtt_username
+  password: !secret mqtt_password  
+  port: 1883
+  topic_prefix: boiler 
+  reboot_timeout: 0s
+  # Discovery allows Home Assistant to find the device automatically via MQTT
+  discovery: true
+
+globals:
+  - id: boiler_power_on
+    type: bool
+    initial_value: 'true'
+  - id: boiler_target_temp
+    type: int
+    initial_value: '70'
+  - id: boiler_power_level
+    type: int
+    initial_value: '2' # 1=700, 2=1300, 3=2000
+
+logger:
+  level: DEBUG
+  baud_rate: 0
+
+# --- THE REST OF YOUR BOILER CONFIG ---
+uart:  
+  id: heatuart
+  tx_pin: GPIO17 # На Boiler RX (1.7V) White/Blue
+  rx_pin: GPIO16 # На Boiler TX (5.0V) Green
+  baud_rate: 9600
+  debug:
+    direction: RX
+    dummy_receiver: true 
+    after:
+      bytes: 13
+    sequence:
+      - lambda: |-
+          // 1. Logging raw hex for manual inspection
+          UARTDebug::log_hex(direction, bytes, ':');
+
+          // 2. Check header (0xAA) and packet size (13 bytes)
+          if (bytes.size() >= 13 && bytes[0] == 0xAA && bytes[2] == 0x09) {
+            
+            // 3. Calculate Checksum (Sum of bytes index 0 to 11)
+            uint8_t checksum = 0;
+            for (int i = 0; i < 12; i++) {
+              checksum += bytes[i];
+            }
+            
+            // 4. Verify Checksum
+            if (checksum == bytes[12]) {
+              // Temperatures (Bytes 4 and 5)
+              float cur_t = bytes[4];
+              float tar_t = bytes[5];
+              id(current_temp).publish_state(cur_t);
+              id(target_temp).publish_state(tar_t);
+              
+              id(boiler_target_temp) = (tar_t);
+              id(boiler_power_on) = (bytes[3] > 0x00 && bytes[3] <= 0x05);
+              id(boiler_switch).publish_state(id(boiler_power_on));
+
+              // Power Mode (Byte 3)
+              if (bytes[3] == 0x01) {
+                id(power_str).publish_state("700W (Low)");
+                id(boiler_power_level) = 1;
+              } else if (bytes[3] == 0x02) {
+                id(power_str).publish_state("1300W (Medium)");
+                id(boiler_power_level) = 2;
+              } else if (bytes[3] == 0x03) {
+                id(power_str).publish_state("2000W (High)");
+                id(boiler_power_level) = 3;
+              } else if (bytes[3] == 0x05) {
+                id(power_str).publish_state("No Frost 5°C");
+                id(boiler_power_level) = 5;
+              } else {
+                id(power_str).publish_state("Power OFF / Unknown");
+              }
+
+              // 3. Bacteria Stop Technology (Byte 11)
+              id(bst_active).publish_state(bytes[11] == 0x01);
+              
+              // 6. Smart Heating Detector              
+              // if Target > Current 
+              id(is_heating).publish_state(cur_t <= (tar_t - 2));
+
+              // Uptime Calculation (Byte 6=Hours, Byte 7=Minutes)
+              int total_uptime_min = (bytes[6] * 60) + bytes[7];
+              id(uptime_min).publish_state(total_uptime_min);
+
+              // 5. Timer (Byte 8: Hours, Byte 9: Minutes)
+              int timer_total = (bytes[8] * 60) + bytes[9];
+              id(timer_val).publish_state(timer_total);
+
+            } else {
+              ESP_LOGW("boiler", "Checksum Error! Expected %02X, got %02X", checksum, bytes[12]);
+            }
+          }
+
+sensor:
+  - platform: template
+    name: "Boiler Current Temp"
+    id: current_temp
+    unit_of_measurement: "°C"
+    device_class: temperature
+  - platform: template
+    name: "Boiler Target Temp"
+    id: target_temp
+    unit_of_measurement: "°C"
+    device_class: temperature
+  - platform: template
+    name: "Boiler Total Uptime"
+    id: uptime_min
+    unit_of_measurement: "min"
+    icon: "mdi:clock-outline"
+
+  - platform: template
+    name: "Boiler Timer Set"
+    id: timer_val
+    unit_of_measurement: "min"
+    icon: "mdi:timer-sand"
+    
+  - platform: wifi_signal
+    name: "WiFi Signal Sensor"
+    update_interval: 30s
+
+binary_sensor:
+  - platform: template
+    name: "Boiler Heating"
+    id: is_heating
+    device_class: heat
+  - platform: template
+    name: "Boiler BST Mode"
+    id: bst_active
+    icon: "mdi:bacteria-outline"
+
+text_sensor:
+  - platform: template
+    name: "Boiler Power Mode"
+    id: power_str
+
+button:    
+  - platform: template
+    name: "Handshake"
+    on_press:
+      then:
+        - uart.write: [0xBB, 0x00, 0x01, 0x00, 0x02] 
+
+# 1. Переключатель питания (On/Off)
+switch:
+  - platform: template
+    name: "Boiler Main Power"
+    id: boiler_switch
+    icon: "mdi:power"
+    lambda: "return id(boiler_power_on);"
+    turn_on_action:
+      - globals.set:
+          id: boiler_power_on
+          value: 'true'
+      - script.execute: send_boiler_command
+    turn_off_action:
+      - globals.set:
+          id: boiler_power_on
+          value: 'false'
+      - script.execute: send_boiler_command
+
+# 2. Выбор мощности (700/1300/2000)
+select:
+  - platform: template
+    name: "Boiler Power Mode Set"
+    options:
+      - "700W (Low)"
+      - "1300W (Medium)"
+      - "2000W (High)"
+    initial_option: "1300W (Medium)"
+    set_action:
+      - lambda: |-
+          if (x == "700W (Low)") id(boiler_power_level) = 1;
+          else if (x == "1300W (Medium)") id(boiler_power_level) = 2;
+          else if (x == "2000W (High)") id(boiler_power_level) = 3;
+      - script.execute: send_boiler_command
+
+# 3. Установка температуры (Слайдер)
+number:
+  - platform: template
+    name: "Boiler Target Temp Set"
+    min_value: 35
+    max_value: 75
+    step: 1
+    unit_of_measurement: "°C"
+    mode: slider
+    lambda: "return id(boiler_target_temp);"
+    set_action:
+      - globals.set:
+          id: boiler_target_temp
+          value: !lambda "return (int)x;"
+      - script.execute: send_boiler_command
+
+script:
+  - id: send_boiler_command
+    then:
+      - uart.write: !lambda |-
+          // Создаем вектор из 13 байт
+          std::vector<uint8_t> pkt;
+          pkt.push_back(0xAA); // 0: Header
+          pkt.push_back(0x0A); // 1: Length
+          pkt.push_back(0x03); // 2: Command Type (Write)
+          
+          uint8_t mode = (uint8_t)id(boiler_power_level); 
+          uint8_t temp = (uint8_t)id(boiler_target_temp);
+          uint8_t pwr  = id(boiler_power_on) ? 0x01 : 0x00;
+
+          pkt.push_back(mode); // 3: Power Level (1,2,3)
+          pkt.push_back(0x00); // 4: Cur Temp
+          pkt.push_back(temp); // 5: Target Temp          
+          
+          // Zeros for bytes 6-10
+          for(int i=0; i<5; i++) pkt.push_back(0x00);
+          
+          pkt.push_back(0x01); // 11: Power ON flag
+          
+          // Байт 12: Контрольная сумма (сумма всех байтов от 0 до 11)
+          uint8_t cs = 0;
+          for(int i=0; i<12; i++) {
+            cs += pkt[i];
+          }
+          pkt.push_back(cs);
+
+          ESP_LOGI("boiler_tx", "Sending Command: %s", format_hex_pretty(pkt).c_str());
+          return pkt;
