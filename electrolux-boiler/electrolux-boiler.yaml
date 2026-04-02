@@ -62,14 +62,14 @@ globals:
     initial_value: '2' # 1=700, 2=1300, 3=2000
 
 logger:
-  level: DEBUG
+  level: INFO
   baud_rate: 0
 
 # --- THE REST OF YOUR BOILER CONFIG ---
 uart:  
   id: heatuart
-  tx_pin: GPIO17 # На Boiler RX (1.7V) White/Blue
-  rx_pin: GPIO16 # На Boiler TX (5.0V) Green
+  tx_pin: GPIO17 # На Boiler RX (1.7V) White/Blue USB-
+  rx_pin: GPIO16 # На Boiler TX (5.0V) Green      USB+
   baud_rate: 9600
   debug:
     direction: RX
@@ -133,6 +133,23 @@ uart:
               // 5. Timer (Byte 8: Hours, Byte 9: Minutes)
               int timer_total = (bytes[8] * 60) + bytes[9];
               id(timer_val).publish_state(timer_total);
+              
+              // --- 2. ФОРМАТИРУЕМ ВРЕМЯ КРАСИВО (ЧЧ:ММ) ---
+              char time_buf[10];
+              sprintf(time_buf, "%02d:%02d", bytes[6], bytes[7]);
+              id(uptime_human).publish_state(time_buf);
+
+              sprintf(time_buf, "%02d:%02d", bytes[8], bytes[9]);
+              id(timer_human).publish_state(time_buf);
+
+              // --- 3. СОХРАНЯЕМ ВЕСЬ ПАКЕТ В ВИДЕ СТРОКИ (170:10:9...) ---
+              std::string raw_string = "";
+              for (size_t i = 0; i < bytes.size(); i++) {
+                raw_string += std::to_string(bytes[i]);
+                if (i < bytes.size() - 1) raw_string += ":";
+              }
+              id(raw_packet_history).publish_state(raw_string);
+              ESP_LOGI("boiler", raw_string.c_str());
 
             } else {
               ESP_LOGW("boiler", "Checksum Error! Expected %02X, got %02X", checksum, bytes[12]);
@@ -154,12 +171,13 @@ sensor:
     name: "Boiler Total Uptime"
     id: uptime_min
     unit_of_measurement: "min"
+    device_class: duration
     icon: "mdi:clock-outline"
-
   - platform: template
     name: "Boiler Timer Set"
     id: timer_val
     unit_of_measurement: "min"
+    device_class: duration
     icon: "mdi:timer-sand"
     
   - platform: wifi_signal
@@ -180,6 +198,23 @@ text_sensor:
   - platform: template
     name: "Boiler Power Mode"
     id: power_str
+  # История пакетов для отладки
+  - platform: template
+    name: "Boiler Raw Packet Dec"
+    id: raw_packet_history
+    icon: "mdi:file-code-outline"
+
+  # Аптайм в виде ЧЧ:ММ
+  - platform: template
+    name: "Boiler Uptime Human"
+    id: uptime_human
+    icon: "mdi:clock-outline"
+
+  # Таймер в виде ЧЧ:ММ
+  - platform: template
+    name: "Boiler Timer Human"
+    id: timer_human
+    icon: "mdi:timer-sand"
 
 button:    
   - platform: template
