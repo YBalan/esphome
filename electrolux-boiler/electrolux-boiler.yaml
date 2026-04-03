@@ -83,6 +83,8 @@ uart:
 
           // 2. Check header (0xAA) and packet size (13 bytes)
           if (bytes.size() >= 13 && bytes[0] == 0xAA && bytes[2] == 0x09) {
+          
+            id(blink_led_script).execute();
             
             // 3. Calculate Checksum (Sum of bytes index 0 to 11)
             uint8_t checksum = 0;
@@ -168,7 +170,7 @@ sensor:
     unit_of_measurement: "°C"
     device_class: temperature
   - platform: template
-    name: "Boiler Total Uptime"
+    name: "Boiler Time"
     id: uptime_min
     unit_of_measurement: "min"
     device_class: duration
@@ -206,7 +208,7 @@ text_sensor:
 
   # Аптайм в виде ЧЧ:ММ
   - platform: template
-    name: "Boiler Uptime Human"
+    name: "Boiler Time Human"
     id: uptime_human
     icon: "mdi:clock-outline"
 
@@ -222,6 +224,16 @@ button:
     on_press:
       then:
         - uart.write: [0xBB, 0x00, 0x01, 0x00, 0x02] 
+        # WiFi Reset Button
+  - platform: factory_reset
+    name: "Reset Device WiFi"
+    id: reset_wifi_btn
+    icon: "mdi:wifi-reset"
+
+output:
+  - platform: gpio
+    pin: GPIO2
+    id: blue_led
 
 # 1. Переключатель питания (On/Off)
 switch:
@@ -274,6 +286,12 @@ number:
       - script.execute: send_boiler_command
 
 script:
+  - id: blink_led_script
+    mode: restart
+    then:
+      - output.turn_on: blue_led
+      - delay: 700ms # Very short pulse
+      - output.turn_off: blue_led
   - id: send_boiler_command
     then:
       - uart.write: !lambda |-
