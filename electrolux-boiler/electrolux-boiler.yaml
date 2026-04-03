@@ -29,6 +29,18 @@ wifi:
   # Allow saving new credentials to flash memory
   fast_connect: true
 
+  on_wifi_mode:
+    - condition:
+        wifi.mode: AP
+      then:
+        - script.execute: ap_blink_led
+    - condition:
+        not:
+          wifi.mode: AP
+      then:
+        - script.stop: ap_blink_led
+        - output.turn_off: blue_led
+
 # Enables the web interface when in AP mode
 captive_portal:
 
@@ -286,6 +298,17 @@ number:
       - script.execute: send_boiler_command
 
 script:
+  - id: ap_blink_led
+    mode: restart
+    then:
+      - while:
+          condition:
+            wifi.mode: AP
+          then:
+            - output.turn_on: blue_led
+            - delay: 300ms
+            - output.turn_off: blue_led
+            - delay: 1700ms
   - id: blink_led_script
     mode: restart
     then:
