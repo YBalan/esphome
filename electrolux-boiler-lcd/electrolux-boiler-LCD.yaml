@@ -3,6 +3,11 @@ substitutions:
 
 esphome:
   name: ${device_name}
+  on_boot:    
+    - priority: 800
+      then:
+        - logger.log: "ON_BOOT IS WORKING"
+        - script.execute: wake_screen_script
 
 esp32:
   board: esp32dev
@@ -32,7 +37,7 @@ mqtt:
   username: !secret mqtt_username
   password: !secret mqtt_password
   port: 1883
-  topic_prefix: boiler
+  topic_prefix: boiler/lcd
   discovery: true
   on_message:
     - topic: "boiler/debug" # Если у бойлера включен log_topic
@@ -103,6 +108,7 @@ number:
               - light.turn_on:
                   id: display_backlight
                   brightness: !lambda "return x;"
+        - script.execute: wake_screen_script
 
 # --- MQTT SUBSCRIPTIONS ---
 text_sensor:
@@ -246,7 +252,7 @@ display:
     cs_pin: 5
     dc_pin: 16
     reset_pin: 23
-    update_interval: 10s
+    update_interval: 60s
     lambda: |-          
 
       // --- CHECK IF ONLINE ---
@@ -362,6 +368,9 @@ light:
     id: display_backlight
     #internal: true
     restore_mode: ALWAYS_ON
+    on_state:
+      then:
+        - script.execute: wake_screen_script
 
 # 5. КНОПКИ И СКРИПТ (Автовыключение)
 script:
