@@ -16,6 +16,11 @@ esp32:
       
 ota:
   - platform: esphome
+  
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "Europe/Kyiv"
 
 # 1. Connection settings
 wifi:
@@ -132,7 +137,7 @@ uart:
               
               // 6. Smart Heating Detector              
               // if Target > Current 
-              id(is_heating).publish_state(cur_t <= (tar_t - 2));
+              id(is_heating).publish_state(cur_t <= (tar_t - 2) && id(boiler_power_on) == true);
 
               // Uptime Calculation (Byte 6=Hours, Byte 7=Minutes)
               int total_uptime_min = (bytes[6] * 60) + bytes[7];
@@ -142,7 +147,7 @@ uart:
               int timer_total = (bytes[8] * 60) + bytes[9];
               id(timer_val).publish_state(timer_total);
               
-              // --- 2. ФОРМАТИРУЕМ ВРЕМЯ КРАСИВО (ЧЧ:ММ) ---
+              // Human Time format
               char time_buf[10];
               sprintf(time_buf, "%02d:%02d", bytes[6], bytes[7]);
               id(uptime_human).publish_state(time_buf);
@@ -150,17 +155,19 @@ uart:
               sprintf(time_buf, "%02d:%02d", bytes[8], bytes[9]);
               id(timer_human).publish_state(time_buf);
 
-              // --- 3. СОХРАНЯЕМ ВЕСЬ ПАКЕТ В ВИДЕ СТРОКИ (170:10:9...) ---
+              // Store packet to string like: (170:10:9...) ---
               std::string raw_string = "";
               for (size_t i = 0; i < bytes.size(); i++) {
                 raw_string += std::to_string(bytes[i]);
                 if (i < bytes.size() - 1) raw_string += ":";
               }              
-              ESP_LOGI("boiler", raw_string.c_str());
+              
+              ESP_LOGI("boiler_rx", "HEX <<< %s, CS: %02X", format_hex_pretty(bytes).c_str(), bytes[12]);
+              ESP_LOGI("boiler_rx", "DEC <<< %s, CS: %d == %d", raw_string.c_str(), bytes[12], checksum);
               id(raw_packet_history).publish_state(raw_string);
 
             } else {
-              ESP_LOGW("boiler", "Checksum Error! Expected %02X, got %02X", checksum, bytes[12]);
+              ESP_LOGW("boiler_rx", "Checksum Error! Expected %02X (%d), got %02X (%d)", checksum, checksum, bytes[12], bytes[12]);
             }
           }
 
@@ -220,35 +227,41 @@ text_sensor:
   - platform: template
     name: "Boiler Power Mode"
     id: power_str
-  # История пакетов для отладки
+  
   - platform: template
+    internal: true
     name: "Boiler Raw Packet Dec"
     id: raw_packet_history
     icon: "mdi:file-code-outline"
-
-  # Аптайм в виде ЧЧ:ММ
+    
   - platform: template
     name: "Boiler Time Human"
     id: uptime_human
     icon: "mdi:clock-outline"
-
-  # Таймер в виде ЧЧ:ММ
+  
   - platform: template
     name: "Boiler Timer Human"
     id: timer_human
     icon: "mdi:timer-sand"
 
-button:    
+button:  
   - platform: template
-    name: "Handshake"
+    name: "Sync Boiler Clock"
+    id: sync_clock_btn
+    icon: "mdi:clock-sync"
     on_press:
       then:
-        - uart.write: [0xBB, 0x00, 0x01, 0x00, 0x02] 
-        # WiFi Reset Button
+        - script.execute: sync_boiler_time
+    # WiFi Reset Button
   - platform: factory_reset
     name: "Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
+    
+interval:  
+  - interval: 24h
+    then:
+      - script.execute: sync_boiler_time
 
 output:
   - platform: gpio
@@ -272,6 +285,24 @@ switch:
           id: boiler_power_on
           value: 'false'
       - script.execute: send_boiler_command
+      
+  - platform: template
+    name: "Boiler BST Mode"
+    id: bst_switch
+    icon: "mdi:bacteria"
+    # Этот блок заставляет переключатель в HA показывать реальное состояние из байта 11
+    lambda: |-
+      return id(bst_active).state;
+    
+    # Действие при включении в приложении
+    turn_on_action:
+      - uart.write: [170, 3, 10, 3, 1, 187] # AA:03:0A:03:01 + CS:BB
+      - logger.log: "MQTT/HA: BST Turned ON"
+
+    # Действие при выключении в приложении
+    turn_off_action:
+      - uart.write: [170, 3, 10, 3, 0, 186] # AA:03:0A:03:00 + CS:BA
+      - logger.log: "MQTT/HA: BST Turned OFF"
 
 # 2. Выбор мощности (700/1300/2000)
 select:
@@ -324,42 +355,119 @@ script:
   - id: send_boiler_command
     then:
       - uart.write: !lambda |-
-          // Создаем вектор из 13 байт
+          
           std::vector<uint8_t> pkt;
-          pkt.push_back(0xBB); // 0: Header
-          pkt.push_back(0x0E); // 1: Length 14
-          pkt.push_back(0x03); // 2: Command Type (Write)
+          pkt.push_back(170); // 0: Header
+          pkt.push_back(4); // 1: Length 4
+          pkt.push_back(10); // 2: Command Type (Write)
           
-          pkt.push_back(0); //Reserved
+          pkt.push_back(0); //Sub command: 0 - Power Mode 1 - Time 2 - Timer 3 - BST
           
-          uint8_t mode = (uint8_t)id(boiler_power_level); 
-          uint8_t temp = (uint8_t)id(boiler_target_temp);
-          uint8_t pwr  = id(boiler_power_on) ? 0x01 : 0x00;
+          uint8_t mode = id(boiler_power_on) == false ? 0 : (uint8_t)id(boiler_power_level); 
+          uint8_t temp = (uint8_t)id(boiler_target_temp);          
 
-          pkt.push_back(mode); // 3: Power Level (1,2,3)
-          pkt.push_back(0x00); // 4: Cur Temp
-          pkt.push_back(temp); // 5: Target Temp          
+          pkt.push_back(mode); // 3: Power Level (1,2,3,5) 0 - Off         
+          pkt.push_back(temp); // 5: Target Temp
           
-          // Zeros for bytes 6-10
-          for(int i=0; i<5; i++) pkt.push_back(0x00);
-          
-          pkt.push_back(0x01); // 11: Power ON flag
-          
-          // Байт 12: Контрольная сумма (сумма всех байтов от 0 до 11)
+          // 3. Calculate Checksum (Sum of bytes index 0 to 11)
           uint8_t cs = 0;
           for(int i=0; i<pkt.size(); i++) {
             cs += pkt[i];
           }
           pkt.push_back(cs);
 
-          // --- 3. СОХРАНЯЕМ ВЕСЬ ПАКЕТ В ВИДЕ СТРОКИ (170:10:9...) ---
+          // Packet to string like - (170:10:9...) ---
           std::string raw_string = "";
           for (size_t i = 0; i < pkt.size(); i++) {
             raw_string += std::to_string(pkt[i]);
             if (i < pkt.size() - 1) raw_string += ":";
-          }              
-          ESP_LOGI("boiler", raw_string.c_str());
+          }                        
 
-          ESP_LOGI("boiler_tx", "HEX Sending Command: %s", format_hex_pretty(pkt).c_str());
-          ESP_LOGI("boiler_tx", "DEC Sending Command: %s", raw_string.c_str());
+          ESP_LOGW("boiler_tx", "HEX >>> %s, CS: %02X", format_hex_pretty(pkt).c_str(), cs);
+          ESP_LOGW("boiler_tx", "DEC >>> %s, CS: %d", raw_string.c_str(), cs);
           return pkt;
+  - id: sync_boiler_time
+    then:
+      - lambda: |-
+          auto now = id(sntp_time).now();
+          if (now.is_valid()) {
+            uint8_t hh = now.hour;
+            uint8_t mm = now.minute;
+            
+            // Пакет: AA(170) : 04 : 10 : 01 : HH : MM
+            std::vector<uint8_t> pkt = {170, 4, 10, 1, hh, mm};
+            
+            // Расчет контрольной суммы (сумма всех 6 байт)
+            uint8_t cs = 0;
+            for (uint8_t b : pkt) cs += b;
+            pkt.push_back(cs);
+
+            // Отправка (IDF синтаксис)
+            id(heatuart).write_array(pkt.data(), pkt.size());
+            ESP_LOGI("clock_sync", "Boiler time synced to %02d:%02d", hh, mm);
+          } else {
+            ESP_LOGW("clock_sync", "Time not valid yet, skipping sync...");
+          }
+ 
+text:
+  - platform: template
+    name: "Boiler Raw Command"
+    id: raw_cmd_input
+    mode: text
+    optimistic: true
+    set_action:
+      then:
+        - lambda: |-
+            // 1. Get new value from 'x'
+            std::string input = x;
+            if (input.empty()) return;
+
+            // 2. Publish state immediately to sync HA/MQTT
+            id(raw_cmd_input).publish_state(x);
+          
+            ESP_LOGW("boiler_tx", "RAW Inp: %s", input.c_str());
+          
+            bool add_checksum = false;
+            // Если строка начинается с C: или c:
+            if (input.size() >= 2 && (input.substr(0, 2) == "C:" || input.substr(0, 2) == "c:")) {
+              add_checksum = true;
+              input = input.substr(2); // Отрезаем префикс
+            }
+
+            std::vector<uint8_t> payload;
+            char *str = strdup(input.c_str());
+            char *token = strtok(str, ":");
+          
+            // 1. Convert string "170:10:..." to bytes
+            while (token != NULL) {
+              payload.push_back((uint8_t)atoi(token));
+              token = strtok(NULL, ":");
+            }
+            free(str);
+
+            // 2. Logic for Checksum (Optional but helpful)
+            // If you entered 12 bytes, we calculate the 13th as Sum(0..11)
+            uint8_t cs = 0;
+            if (add_checksum) {              
+              //for (uint8_t b : payload) cs += b;
+              for (int i = 0; i < payload.size(); i++) {
+                cs += payload[i];
+              }
+              payload.push_back(cs);
+              //ESP_LOGI("boiler_tx", "Added checksum: %02X (%d)", cs, cs);
+            }
+          
+            std::string raw_string = "";
+            for (size_t i = 0; i < payload.size(); i++) {
+              raw_string += std::to_string(payload[i]);
+              if (i < payload.size() - 1) raw_string += ":";
+            }    
+
+            // 3. Send to Boiler
+            if (payload.size() > 0) {
+              id(heatuart).write_array(payload.data(), payload.size());            
+              ESP_LOGW("boiler_tx", "HEX >>> %s, CS: %02X", format_hex_pretty(payload).c_str(), cs);
+              ESP_LOGW("boiler_tx", "DEC >>> %s, CS: %d", raw_string.c_str(), cs);
+            } else {
+              ESP_LOGW("boiler_tx", "Invalid input format! Use dec:dec:dec");
+            }            
