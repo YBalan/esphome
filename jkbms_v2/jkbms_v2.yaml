@@ -46,6 +46,7 @@ mqtt:
   password: !secret mqtt_password  
   port: 1883
   topic_prefix: jkbms
+  discovery: true
   #level: NONE
   #reboot_timeout: 0s
   #keepalive: 60s
@@ -131,9 +132,10 @@ sensor:
     power:
       name: "BMS Power"
       state_topic: "jkbms/power"
+      id: bms_power
       filters:
         - delta: 5.0
-        - throttle: 2s
+        - throttle: 2s    
 
     # Temperatures: publish if they changed by 0.5 degrees or once per minute
     temperature_sensor_1:
@@ -221,6 +223,63 @@ sensor:
       } else {
         return 0; // Not charging
       }
+      
+  # Split: Positive values for Charging
+  - platform: template
+    name: "Power Charging"
+    id: power_in
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    lambda: |-
+      if (id(bms_power).state > 0) {
+        return id(bms_power).state;
+      } else {
+        return 0;
+      }
+
+  # Split: Absolute values for Discharging
+  - platform: template
+    name: "Power Discharging"
+    id: power_out
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    lambda: |-
+      if (id(bms_power).state < 0) {
+        return id(bms_power).state * -1.0;
+      } else {
+        return 0;
+      }
+   # Total Energy Charged (kWh)
+  - platform: integration
+    name: "Battery Energy In"
+    sensor: power_in
+    time_unit: h
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing    
+    accuracy_decimals: 3
+    state_topic: "jkbms/energy_in"
+    filters:
+      # Divide by 1000 to convert Wh to kWh
+      - multiply: 0.001
+
+  # Total Energy Discharged (kWh)
+  - platform: integration
+    name: "Battery Energy Out"
+    sensor: power_out
+    time_unit: h
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing    
+    accuracy_decimals: 3
+    state_topic: "jkbms/energy_out"
+    filters:
+      # Divide by 1000 to convert Wh to kWh
+      - multiply: 0.001
       
 # 5. STATUSES (Binary Sensors)
 binary_sensor:

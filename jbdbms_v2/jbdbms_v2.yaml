@@ -48,6 +48,7 @@ mqtt:
   port: 1883
   topic_prefix: jbdbms # Changed prefix for JBD
   reboot_timeout: 0s
+  discovery: true
 
 # Enable logger
 logger:
@@ -119,8 +120,9 @@ sensor:
         
     # Power (W)
     power:
-      name: "BMS Power"
+      name: "JBD Power"
       state_topic: "jbdbms/power"
+      id: bms_power
       filters:
         - delta: 5.0
         - throttle: 2s
@@ -162,7 +164,7 @@ sensor:
         
     # Imbalance (Delta)
     delta_cell_voltage:
-      name: "BMS Cell Delta"
+      name: "JBD Cell Delta"
       state_topic: "jbdbms/delta"
       filters:
         - delta: 0.002
@@ -170,7 +172,7 @@ sensor:
 
   # Wi-Fi signal level
   - platform: wifi_signal
-    name: "WiFi Signal RSSI"
+    name: "JBD WiFi Signal RSSI"
     id: wifi_rssi
     update_interval: 15s
     state_topic: "jbdbms/wifi_rssi"
@@ -206,6 +208,63 @@ sensor:
         return 0;
       }
       
+   # Split: Positive values for Charging
+  - platform: template
+    name: "JBD Power Charging"
+    id: power_in
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    lambda: |-
+      if (id(bms_power).state > 0) {
+        return id(bms_power).state;
+      } else {
+        return 0;
+      }
+
+  # Split: Absolute values for Discharging
+  - platform: template
+    name: "JBD Power Discharging"
+    id: power_out
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    lambda: |-
+      if (id(bms_power).state < 0) {
+        return id(bms_power).state * -1.0;
+      } else {
+        return 0;
+      }
+   # Total Energy Charged (kWh)
+  - platform: integration
+    name: "JBD Battery Energy In"
+    sensor: power_in
+    time_unit: h
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing    
+    accuracy_decimals: 3
+    state_topic: "jbdbms/energy_in"
+    filters:
+      # Divide by 1000 to convert Wh to kWh
+      - multiply: 0.001
+
+  # Total Energy Discharged (kWh)
+  - platform: integration
+    name: "JBD Battery Energy Out"
+    sensor: power_out
+    time_unit: h
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing    
+    accuracy_decimals: 3
+    state_topic: "jbdbms/energy_out"
+    filters:
+      # Divide by 1000 to convert Wh to kWh
+      - multiply: 0.001
+            
 # 5. STATUSES (Binary Sensors)
 binary_sensor:
   - platform: jbd_bms_ble
@@ -233,7 +292,7 @@ switch:
   # Physical relay on pin 14
   - platform: gpio
     pin: ${relay_control_pin}
-    name: "System Relay"
+    name: "JBD System Relay"
     id: bms_relay
     restore_mode: ALWAYS_OFF
     state_topic: "jbdbms/relay/state"
