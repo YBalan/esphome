@@ -110,7 +110,9 @@ uart:
               id(boiler_power_on) = (bytes[3] > 0x00 && bytes[3] <= 0x05);              
 
               // Power Mode (Byte 3)
-              if (bytes[3] == 0x01) {
+              if (bytes[3] == 0x00) {
+                id(power_str).publish_state("Power OFF");
+              } else if (bytes[3] == 0x01) {
                 id(power_str).publish_state("700W (Low)");
                 id(boiler_power_level) = 1;
                 id(boiler_mode_switch).publish_state((uint8_t)0);
@@ -122,12 +124,14 @@ uart:
                 id(power_str).publish_state("2000W (High)");
                 id(boiler_power_level) = 3;
                 id(boiler_mode_switch).publish_state((uint8_t)2);
+              } else if (bytes[3] == 0x04) {
+                id(power_str).publish_state("Timer");
               } else if (bytes[3] == 0x05) {
                 id(power_str).publish_state("No Frost 5°C");
                 id(boiler_power_level) = 5;
                 id(boiler_mode_switch).publish_state((uint8_t)3);
               } else {
-                id(power_str).publish_state("Power OFF / Unknown");
+                id(power_str).publish_state("Unknown");
               }
               
               id(boiler_switch).publish_state(id(boiler_power_on));              
@@ -219,9 +223,9 @@ binary_sensor:
             condition:
               binary_sensor.is_off: online_status
             then:
-              - output.turn_on: blue_led  # Горим постоянно в режиме AP/Error
+              - output.turn_on: blue_led 
             else:
-              - output.turn_off: blue_led # Гаснем, когда всё в порядке
+              - output.turn_off: blue_led
 
 text_sensor:
   - platform: template
@@ -268,13 +272,14 @@ output:
     pin: GPIO2
     id: blue_led
 
-# 1. Переключатель питания (On/Off)
+# 1. Power switch (On/Off)
 switch:
   - platform: template
     name: "Boiler Main Power"
     id: boiler_switch
     icon: "mdi:power"
     lambda: "return id(boiler_power_on);"
+    optimistic: true
     turn_on_action:
       - globals.set:
           id: boiler_power_on
@@ -290,21 +295,17 @@ switch:
     name: "Boiler BST Mode"
     id: bst_switch
     icon: "mdi:bacteria"
-    # Этот блок заставляет переключатель в HA показывать реальное состояние из байта 11
+    optimistic: true    
     lambda: |-
       return id(bst_active).state;
-    
-    # Действие при включении в приложении
     turn_on_action:
       - uart.write: [170, 3, 10, 3, 1, 187] # AA:03:0A:03:01 + CS:BB
-      - logger.log: "MQTT/HA: BST Turned ON"
-
-    # Действие при выключении в приложении
+      - logger.log: "MQTT/HA: BST Turned ON"    
     turn_off_action:
       - uart.write: [170, 3, 10, 3, 0, 186] # AA:03:0A:03:00 + CS:BA
       - logger.log: "MQTT/HA: BST Turned OFF"
 
-# 2. Выбор мощности (700/1300/2000)
+# 2. Power Selector (700/1300/2000)
 select:
   - platform: template
     id: boiler_mode_switch
@@ -315,6 +316,7 @@ select:
       - "2000W (High)"
       - "No Frost 5°C"
     initial_option: "1300W (Medium)"
+    optimistic: true
     set_action:
       - lambda: |-
           if (x == "700W (Low)") id(boiler_power_level) = 1;
@@ -323,7 +325,7 @@ select:
           else if (x == "No Frost 5°C") id(boiler_power_level) = 5;
       - script.execute: send_boiler_command
 
-# 3. Установка температуры (Слайдер)
+# 3. Temperature slider
 number:
   - platform: template
     name: "Boiler Target Temp Set"
@@ -333,6 +335,7 @@ number:
     step: 1
     unit_of_measurement: "°C"
     mode: slider
+    #optimistic: true
     lambda: "return id(boiler_target_temp);"
     set_action:
       - globals.set:
@@ -361,7 +364,7 @@ script:
           pkt.push_back(4); // 1: Length 4
           pkt.push_back(10); // 2: Command Type (Write)
           
-          pkt.push_back(0); //Sub command: 0 - Power Mode 1 - Time 2 - Timer 3 - BST
+          pkt.push_back(0); //Sub command: 0 - Power Mode, 1 - Time, 2 - Timer, 3 - BST
           
           uint8_t mode = id(boiler_power_on) == false ? 0 : (uint8_t)id(boiler_power_level); 
           uint8_t temp = (uint8_t)id(boiler_target_temp);          
@@ -394,15 +397,13 @@ script:
             uint8_t hh = now.hour;
             uint8_t mm = now.minute;
             
-            // Пакет: AA(170) : 04 : 10 : 01 : HH : MM
-            std::vector<uint8_t> pkt = {170, 4, 10, 1, hh, mm};
+            // Packet: AA(170) : 04 : 10 : 01 : HH : MM
+            std::vector<uint8_t> pkt = {170, 4, 10, 1, hh, mm};            
             
-            // Расчет контрольной суммы (сумма всех 6 байт)
             uint8_t cs = 0;
             for (uint8_t b : pkt) cs += b;
             pkt.push_back(cs);
-
-            // Отправка (IDF синтаксис)
+            
             id(heatuart).write_array(pkt.data(), pkt.size());
             ESP_LOGI("clock_sync", "Boiler time synced to %02d:%02d", hh, mm);
           } else {
@@ -428,7 +429,7 @@ text:
             ESP_LOGW("boiler_tx", "RAW Inp: %s", input.c_str());
           
             bool add_checksum = false;
-            // Если строка начинается с C: или c:
+            
             if (input.size() >= 2 && (input.substr(0, 2) == "C:" || input.substr(0, 2) == "c:")) {
               add_checksum = true;
               input = input.substr(2); // Отрезаем префикс
