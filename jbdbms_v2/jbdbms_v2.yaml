@@ -118,6 +118,18 @@ sensor:
         - delta: 0.01
         - throttle: 2s
         
+    # Remaining capacity in percentage (%)
+    state_of_charge:
+      name: "JBD SoC Percentage"
+      id: bms_soc_pct
+      state_topic: "jbdbms/soc_percent"
+      unit_of_measurement: "%"
+      device_class: battery
+      accuracy_decimals: 0
+      filters:
+        - delta: 1
+        - throttle: 2s
+        
     # Power (W)
     power:
       name: "JBD Power"

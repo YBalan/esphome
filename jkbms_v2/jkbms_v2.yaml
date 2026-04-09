@@ -121,6 +121,18 @@ sensor:
         - delta: 0.01
         - throttle: 2s
         
+    # Remaining capacity in percentage (%)
+    state_of_charge:
+      name: "BMS SoC Percentage"
+      id: bms_soc_pct
+      state_topic: "jkbms/soc_percent"
+      unit_of_measurement: "%"
+      device_class: battery
+      accuracy_decimals: 0
+      filters:
+        - delta: 1
+        - throttle: 2s
+        
     total_charging_cycle_capacity:
       name: "BMS Cycle Capacity"      
       state_topic: "jkbms/cycle_capacity"
@@ -293,7 +305,7 @@ binary_sensor:
       state_topic: "jkbms/status/discharging"
     balancing:
       name: "BMS Balancing State"
-      state_topic: "jkbms/status/balancing"
+      state_topic: "jkbms/status/balancing"    
       
     # GPIO button 0 (Buiktin button "Boot" to wake dislay)
   - platform: gpio
