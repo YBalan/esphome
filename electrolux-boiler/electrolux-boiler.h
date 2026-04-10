@@ -67,6 +67,23 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     id(current_temp).publish_state(cur_t);
     id(target_temp).publish_state(tar_t);
 
+    // Temperature trend: ring buffer of BOILER_TREND_MAX_SAMPLES readings.
+    // Once MIN_SAMPLES filled, publish "Up", "Down", or "Stable" by comparing oldest to newest.
+    static float trend_buf[BOILER_TREND_MAX_SAMPLES] = {};
+    static uint8_t trend_pos = 0;
+    static uint8_t trend_count = 0;
+    trend_buf[trend_pos] = cur_t;
+    trend_pos = (trend_pos + 1) % BOILER_TREND_MAX_SAMPLES;
+    if (trend_count < BOILER_TREND_MAX_SAMPLES) trend_count++;
+    if (trend_count >= BOILER_TREND_MIN_SAMPLES) {
+        // oldest entry is at trend_pos when buffer is full, or index 0 when still filling
+        uint8_t oldest_idx = (trend_count < BOILER_TREND_MAX_SAMPLES) ? 0 : trend_pos;
+        float oldest = trend_buf[oldest_idx];
+        float newest = trend_buf[(trend_pos + BOILER_TREND_MAX_SAMPLES - 1) % BOILER_TREND_MAX_SAMPLES];
+        const char* trend = (newest > oldest) ? "Up" : (newest < oldest) ? "Down" : "Stable";
+        id(temp_trend).publish_state(trend);
+    }
+
     id(global_boiler_target_temp) = (int)tar_t;
     id(boiler_target_temp_set).publish_state(tar_t);
     id(global_boiler_power_on) = (bytes[BOILER_RX_IDX_MODE] > BOILER_MODE_OFF &&
@@ -116,6 +133,13 @@ void boiler_set_power_level(const std::string& x) {
     }
 }
 
+// Return the nominal power (W) for the current global_boiler_power_level.
+// The level value equals the RX mode byte, which is the map key.
+static int boiler_get_power_watts() {
+    auto it = BOILER_MODE_MAP.find((uint8_t)id(global_boiler_power_level));
+    return (it != BOILER_MODE_MAP.end()) ? it->second.power_w : 0;
+}
+
 std::vector<uint8_t> boiler_build_tx_packet() {
     std::vector<uint8_t> pkt = {
         BOILER_HEADER,
@@ -157,7 +181,7 @@ std::vector<uint8_t> boiler_build_timer_packet() {
         BOILER_SUBCMD_TIMER,
         (uint8_t)id(global_timer_hours),
         (uint8_t)id(global_timer_minutes),
-        (uint8_t)id(global_boiler_power_level),  // heating mode to use when timer fires
+        BOILER_MODE_LOW, //Only BOILER_MODE_LOW for timer, Power level not supported: (uint8_t)id(global_boiler_power_level),  // heating mode to use when timer fires
         (uint8_t)id(global_boiler_target_temp),  // target temperature when timer fires
     };
     boiler_append_checksum(pkt);

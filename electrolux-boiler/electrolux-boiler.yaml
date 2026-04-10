@@ -35,6 +35,7 @@ substitutions:
   blink_duration: 700ms    # LED pulse length on packet receive
   wifi_rssi_interval: 30s  # How often WiFi signal strength is sampled
   clock_sync_interval: 24h # How often the boiler clock is re-synced to NTP
+  energy_interval: 30s     # Energy accumulation cadence — should match boiler update rate (~30 s)
 
   # Timer defaults — scheduled clock time (HH:MM) at which the boiler will begin heating
   default_timer_hours: "23"   # Start hour (0–23)
@@ -112,6 +113,11 @@ globals:
   - id: global_timer_minutes
     type: int
     initial_value: '${default_timer_minutes}'
+  # Accumulated energy in Wh; restored across reboots so the total is never lost.
+  - id: global_total_energy_wh
+    type: float
+    restore_value: true
+    initial_value: '0.0'
 
 logger:
   level: INFO
@@ -162,6 +168,26 @@ sensor:
     update_interval: ${wifi_rssi_interval}
     state_topic: "boiler/wifi_rssi"
 
+  # Current power draw in W — 0 when not heating, nominal element power when heating.
+  - platform: template
+    name: "Boiler Power"
+    id: boiler_power_w
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    lambda: "return id(is_heating).state ? (float)boiler_get_power_watts() : 0.0f;"
+
+  # Total energy consumed — state_class: total_increasing lets HA use this in the Energy dashboard.
+  - platform: template
+    name: "Boiler Total Energy"
+    id: boiler_total_energy
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 3
+    lambda: "return id(global_total_energy_wh) / 1000.0f;"
+
 binary_sensor:
   - platform: template
     name: "Boiler Heating"
@@ -185,6 +211,11 @@ binary_sensor:
               - output.turn_off: blue_led
 
 text_sensor:
+  - platform: template
+    name: "Boiler Temp Trend"
+    id: temp_trend
+    icon: "mdi:thermometer-chevron-up"
+  
   - platform: template
     name: "Boiler Power Mode"
     id: power_str
@@ -231,6 +262,17 @@ interval:
     then:
       - script.execute: sync_boiler_time
 
+  # Accumulate energy every energy_interval when the boiler is actively heating.
+  - interval: ${energy_interval}
+    then:
+      - lambda: |-
+          if (id(is_heating).state) {
+            // Wh added = power_W × (interval_s / 3600)
+            id(global_total_energy_wh) += boiler_get_power_watts() * (30.0f / 3600.0f);
+          }
+          id(boiler_power_w).publish_state(id(is_heating).state ? (float)boiler_get_power_watts() : 0.0f);
+          id(boiler_total_energy).publish_state(id(global_total_energy_wh) / 1000.0f);
+
 output:
   - platform: gpio
     pin: ${led_pin}
@@ -271,7 +313,7 @@ switch:
           return boiler_build_bst_packet(false);
       - logger.log: "MQTT/HA: BST Turned OFF"
 
-# 2. Power Selector (700/1300/2000)
+# 2. Power Selector (700/1300/2000/No Frost/Timer)
 select:
   - platform: template
     id: boiler_mode_switch
@@ -280,13 +322,18 @@ select:
       - "700W (Low)"
       - "1300W (Medium)"
       - "2000W (High)"
-      - "No Frost 5°C"
+      - "Timer"
+      - "No Frost 5°C"      
     initial_option: "1300W (Medium)"
     optimistic: true
     set_action:
       - lambda: |-
-          boiler_set_power_level(x);
-      - script.execute: send_boiler_command
+          if (x == "Timer") {
+            id(send_boiler_timer).execute();            
+          } else {
+            boiler_set_power_level(x);
+            id(send_boiler_command).execute();
+          }
 
 # 3. Temperature slider
 number:
@@ -367,9 +414,9 @@ script:
       - uart.write: !lambda |-
           return boiler_build_timer_packet();
       # Request state immediately to confirm the boiler accepted and entered timer mode (state=4).
-      - delay: 200ms
-      - uart.write: !lambda |-
-          return boiler_build_state_request();
+      #- delay: 200ms
+      #- uart.write: !lambda |-
+          #return boiler_build_state_request();
  
 text:
   - platform: template

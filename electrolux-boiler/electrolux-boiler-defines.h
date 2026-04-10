@@ -44,7 +44,7 @@
 #define BOILER_MODE_LOW         0x01  // 700 W — low-power heating
 #define BOILER_MODE_MEDIUM      0x02  // 1300 W — medium-power heating
 #define BOILER_MODE_HIGH        0x03  // 2000 W — full-power heating
-#define BOILER_MODE_TIMER       0x04  // Timer-controlled mode (read-only from boiler)
+#define BOILER_MODE_TIMER       0x04  // Timer-controlled mode — boiler is idle until scheduled start time, then heats at 700W
 #define BOILER_MODE_NO_FROST    0x05  // Anti-frost mode — maintains 5 °C
 
 // ─── Protocol: BST Byte Values ───────────────────────────────────────────────
@@ -52,7 +52,11 @@
 #define BOILER_BST_INACTIVE     0x00  // BST mode is off
 
 // ─── Internal: Heating Detection Threshold ───────────────────────────────────
-#define BOILER_HEAT_THRESHOLD   1     // °C below target at which active heating is reported
+#define BOILER_HEAT_THRESHOLD       1  // °C below target at which active heating is reported
+
+// ─── Internal: Temperature Trend Samples ─────────────────────────────────────
+#define BOILER_TREND_MIN_SAMPLES    2  // Minimum readings before a trend is reported
+#define BOILER_TREND_MAX_SAMPLES    4  // Ring-buffer capacity (oldest sample is compared to newest)
 
 // ─── Log Tags ────────────────────────────────────────────────────────────────
 #define TAG_RX      "boiler_rx"   // UART receive: packet parsing and sensor updates
@@ -62,22 +66,23 @@
 // ─── Mode Map ─────────────────────────────────────────────────────────────────
 // Holds all per-mode data in one place: display label, internal power level,
 // and select-component option index.
-// level == -1  → mode has no selectable power level (OFF, Timer)
+// level == -1  → mode has no selectable power level (OFF only)
 // sel_idx == -1 → mode does not appear in the select component
 struct BoilerModeInfo {
     const char* label;  // Human-readable string published to HA
     int level;          // Value written to global_boiler_power_level global; -1 = not applicable
     int sel_idx;        // boiler_mode_switch option index; -1 = not in the select list
+    int power_w;        // Nominal power draw in watts when heating; 0 = not applicable
 };
 
 // Fallback label for any mode byte not present in the map
 #define BOILER_STR_UNKNOWN  "Unknown"
 
 static const std::map<uint8_t, BoilerModeInfo> BOILER_MODE_MAP = {
-    { BOILER_MODE_OFF,      { "Power OFF",      -1,  -1 } },  // boiler is off
-    { BOILER_MODE_LOW,      { "700W (Low)",       1,   0 } },  // 700 W,  level=1, sel=0
-    { BOILER_MODE_MEDIUM,   { "1300W (Medium)",   2,   1 } },  // 1300 W, level=2, sel=1
-    { BOILER_MODE_HIGH,     { "2000W (High)",     3,   2 } },  // 2000 W, level=3, sel=2
-    { BOILER_MODE_TIMER,    { "Timer",           -1,  -1 } },  // timer: read-only, not in select
-    { BOILER_MODE_NO_FROST, { "No Frost 5°C",    5,   3 } },  // anti-frost 5 °C, TX mode byte=5 (BOILER_MODE_NO_FROST)
+    { BOILER_MODE_OFF,      { "Power OFF",      -1,  -1,    0 } },  // off — no consumption
+    { BOILER_MODE_LOW,      { "700W (Low)",       0x01,   0,  700 } },  // 700 W
+    { BOILER_MODE_MEDIUM,   { "1300W (Medium)",   0x02,   1, 1300 } },  // 1300 W
+    { BOILER_MODE_HIGH,     { "2000W (High)",     0x03,   2, 2000 } },  // 2000 W
+    { BOILER_MODE_TIMER,    { "Timer",            0x04,   3,  700 } },  // timer mode: RX state=4, TX via subcmd 0x02
+    { BOILER_MODE_NO_FROST, { "No Frost 5°C",    0x04,   4,  700 } },  // intermittent 700W to hold 5°C
 };
