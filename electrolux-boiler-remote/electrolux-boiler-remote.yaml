@@ -1,0 +1,255 @@
+substitutions:
+  device_name: electrolux-boiler-remote
+
+esphome:
+  name: ${device_name}
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# --- GLOBALS ---
+globals:
+  - id: is_awake
+    type: bool
+    initial_value: 'false'
+  - id: manual_target_temp
+    type: int
+    initial_value: '70'
+  - id: current_brightness
+    type: float
+    initial_value: '0.8'
+  - id: local_power_mode_idx
+    type: int
+    initial_value: '2' # 0:Off, 1:700W, 2:1300W, 3:2000W
+
+# --- COLOR & FONT ---
+color:
+  - id: white_c
+    red: 100%, green: 100%, blue: 100%
+  - id: black_c
+    red: 0%, green: 0%, blue: 0%
+  - id: red_c
+    red: 100%, green: 0%, blue: 0%
+  - id: green_c
+    red: 0%, green: 100%, blue: 0%
+  - id: blue_c
+    red: 0%, green: 60%, blue: 100%
+  - id: yellow_c
+    red: 100%, green: 80%, blue: 0%
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_huge
+    size: 100
+  - file: "gfonts://Roboto"
+    id: font_med
+    size: 26
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 16
+
+# --- BACKLIGHT ---
+output:
+  - platform: ledc
+    pin: GPIO4
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    id: display_backlight
+    internal: true
+
+# --- INPUT DEVICES ---
+sensor:
+  - platform: rotary_encoder
+    id: encoder_knob
+    pin_a: GPIO32
+    pin_b: GPIO33
+    on_clockwise:
+      - if:
+          condition:
+            lambda: 'return id(is_awake);'
+          then:
+            - lambda: |-
+                id(manual_target_temp)++;
+                if (id(manual_target_temp) > 75) id(manual_target_temp) = 75;
+          else:
+            - script.execute: wake_screen_script
+    on_anticlockwise:
+      - if:
+          condition:
+            lambda: 'return id(is_awake);'
+          then:
+            - lambda: |-
+                id(manual_target_temp)--;
+                if (id(manual_target_temp) < 30) id(manual_target_temp) = 30;
+          else:
+            - script.execute: wake_screen_script
+
+binary_sensor:
+  # ENCODER PUSH BUTTON (GPIO 27)
+  - platform: gpio
+    pin: { number: 27, inverted: true, mode: INPUT_PULLUP }
+    id: encoder_push
+    on_multi_click:
+      # Short Press: Wake or Apply
+      - timing: ["ON for at most 0.8s", "OFF for at least 0.1s"]
+        then:
+          - if:
+              condition:
+                lambda: 'return id(is_awake);'
+              then:
+                - script.execute: apply_temp_script
+              else:
+                - script.execute: wake_screen_script
+      # Long Press: Boiler ON/OFF
+      - timing: ["ON for at least 1.5s"]
+        then:
+          - script.execute: toggle_boiler_power_script
+          - script.execute: wake_screen_script
+
+  # SIMPLE BUTTON K0 (GPIO 14)
+  - platform: gpio
+    pin: { number: 14, inverted: true, mode: INPUT_PULLUP }
+    id: button_k0
+    on_multi_click:
+      # Single Click: Cycle Power Mode (Off -> 700 -> 1300 -> 2000)
+      - timing: ["ON for at most 0.6s", "OFF for at least 0.1s"]
+        then:
+          - if:
+              condition:
+                lambda: 'return id(is_awake);'
+              then:
+                - lambda: |-
+                    id(local_power_mode_idx)++;
+                    if (id(local_power_mode_idx) > 3) id(local_power_mode_idx) = 0;
+                - script.execute: apply_mode_script
+              else:
+                - script.execute: wake_screen_script
+      # Double Click: Toggle BST
+      - timing: ["ON for at most 0.4s", "OFF for at most 0.4s", "ON for at most 0.4s"]
+        then:
+          - script.execute: toggle_bst_script
+          - script.execute: wake_screen_script
+
+# --- MQTT & SYNC ---
+mqtt:
+  broker: 172.16.1.212
+  topic_prefix: boiler_remote_pro
+
+text_sensor:
+  - platform: mqtt_subscribe
+    id: mqtt_raw_temp
+    topic: "boiler/sensor/boiler_current_temp/state"
+    on_value:
+      then:
+        - component.update: my_display
+  - platform: mqtt_subscribe
+    id: mqtt_raw_uptime
+    topic: "boiler/text_sensor/boiler_uptime_human/state"
+  - platform: mqtt_subscribe
+    id: mqtt_raw_heating
+    topic: "boiler/binary_sensor/boiler_heating/state"
+
+# --- SCRIPTS (Logic) ---
+script:
+  - id: wake_screen_script
+    mode: restart
+    then:
+      - lambda: 'id(is_awake) = true;'
+      - light.turn_on:
+          id: display_backlight
+          brightness: !lambda "return id(current_brightness);"
+      - delay: 60s
+      - light.turn_off: display_backlight
+      - lambda: 'id(is_awake) = false;'
+
+  - id: apply_temp_script
+    then:
+      - mqtt.publish:
+          topic: "boiler/number/boiler_target_temp_set/command"
+          payload: !lambda 'return std::to_string(id(manual_target_temp));'
+
+  - id: apply_mode_script
+    then:
+      - lambda: |-
+          std::string modes[] = {"Power OFF", "700W (Low)", "1300W (Medium)", "2000W (High)"};
+          id(mqtt_pub_mode).publish_state(modes[id(local_power_mode_idx)]);
+      - mqtt.publish:
+          topic: "boiler/select/boiler_power_mode_set/command"
+          payload: !lambda |-
+            std::string cmd[] = {"Off", "700W (Low)", "1300W (Medium)", "2000W (High)"};
+            return cmd[id(local_power_mode_idx)];
+
+  - id: toggle_bst_script
+    then:
+      - mqtt.publish:
+          topic: "boiler/switch/boiler_bst_mode/command"
+          payload: "TOGGLE"
+
+  - id: toggle_boiler_power_script
+    then:
+      - mqtt.publish:
+          topic: "boiler/switch/boiler_main_power/command"
+          payload: "TOGGLE"
+
+# --- DISPLAY (320x240) ---
+spi:
+  clk_pin: 18
+  mosi_pin: 23
+
+display:
+  - platform: st7789v
+    id: my_display
+    model: Custom
+    height: 240
+    width: 320
+    offset_height: 0
+    offset_width: 0
+    rotation: 90
+    cs_pin: 5
+    dc_pin: 16
+    reset_pin: 17
+    lambda: |-
+      it.fill(id(black_c));
+      int w = 320, h = 240, cx = 160, cy = 260, r = 220;
+
+      // Draw Arc (Gauge)
+      auto draw_arc = [&](int s, int e, Color col) {
+        for (int tr = 0; tr < 15; tr++) {
+          int cr = r - tr;
+          for (int a = s; a < e; a++) {
+            float r1 = a * M_PI / 180.0, r2 = (a + 1) * M_PI / 180.0;
+            it.line(cx + cr * cos(r1), cy + cr * sin(r1), cx + cr * cos(r2), cy + cr * sin(r2), col);
+          }
+        }
+      };
+      draw_arc(210, 240, id(blue_c)); draw_arc(240, 300, id(green_c));
+      draw_arc(300, 320, id(yellow_c)); draw_arc(320, 330, id(red_c));
+
+      // Main Temp from MQTT
+      it.printf(cx, 130, id(font_huge), id(white_c), TextAlign::CENTER, "%s°", id(mqtt_raw_temp).state.c_str());
+
+      // Labels
+      it.print(15, 10, id(font_med), id(white_c), "BOILER");
+      if (id(mqtt_raw_heating).state == "ON") {
+        it.print(w-15, 10, id(font_med), id(red_c), TextAlign::TOP_RIGHT, "HEATING");
+      }
+
+      // Manual Settings Preview
+      it.printf(15, h-40, id(font_med), id(yellow_c), "SET: %d°", id(manual_target_temp));
+      
+      // Power Mode Preview
+      std::string mode_names[] = {"OFF", "700W", "1300W", "2000W"};
+      it.printf(160, h-40, id(font_med), id(white_c), TextAlign::CENTER, "MODE: %s", mode_names[id(local_power_mode_idx)].c_str());
+
+      it.print(w-15, h-35, id(font_small), id(white_c), TextAlign::BOTTOM_RIGHT, id(mqtt_raw_uptime).state.c_str());
+
+# Dummy text sensor for UI feedback
+text_sensor:
+  - platform: template
+    id: mqtt_pub_mode
+    name: "Remote Last Mode Sent"
