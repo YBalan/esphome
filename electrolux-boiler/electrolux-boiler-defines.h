@@ -52,7 +52,7 @@
 #define BOILER_BST_INACTIVE     0x00  // BST mode is off
 
 // ─── Internal: Heating Detection Threshold ───────────────────────────────────
-#define BOILER_HEAT_THRESHOLD       1  // °C below target at which active heating is reported
+#define BOILER_HEAT_THRESHOLD       2  // °C below target at which active heating is reported
 
 // ─── Internal: Temperature Trend Samples ─────────────────────────────────────
 #define BOILER_TREND_MIN_SAMPLES    2  // Minimum readings before a trend is reported
