@@ -38,6 +38,12 @@ static void boiler_log_tx(const std::vector<uint8_t>& pkt, uint8_t cs) {
     ESP_LOGW(TAG_TX, "DEC >>> %s, CS: %d",   boiler_bytes_to_dec_str(pkt).c_str(), cs);
 }
 
+// Log a received packet on TAG_RX in both HEX and decimal formats, including the checksum byte.
+static void boiler_log_rx(const std::vector<uint8_t>& pkt, uint8_t cs) {
+    ESP_LOGI(TAG_RX, "HEX <<< %s, CS: %02X", format_hex_pretty(pkt).c_str(), cs);
+    ESP_LOGI(TAG_RX, "DEC <<< %s, CS: %d",   boiler_bytes_to_dec_str(pkt).c_str(), cs);
+}
+
 // ─── Main Functions ───────────────────────────────────────────────────────────
 
 void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<uint8_t>& bytes) {
@@ -96,7 +102,7 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
 
     std::string raw_string = boiler_bytes_to_dec_str(bytes);
     
-    boiler_log_tx(bytes, bytes[BOILER_RX_IDX_CS]);  // Log RX packet on TX tag for easy comparison with outgoing packets
+    boiler_log_rx(bytes, bytes[BOILER_RX_IDX_CS]);  // Log RX packet on RX tag for easy comparison with outgoing packets
     id(raw_packet_history).publish_state(raw_string);
 }
 
@@ -124,6 +130,7 @@ std::vector<uint8_t> boiler_build_tx_packet() {
     return pkt;
 }
 
+
 std::vector<uint8_t> boiler_build_bst_packet(bool on) {
     std::vector<uint8_t> pkt = {
         BOILER_HEADER,
@@ -131,6 +138,27 @@ std::vector<uint8_t> boiler_build_bst_packet(bool on) {
         BOILER_TX_CMD_WRITE,
         BOILER_SUBCMD_BST,
         (uint8_t)(on ? BOILER_BST_ACTIVE : BOILER_BST_INACTIVE),
+    };
+    boiler_append_checksum(pkt);
+    boiler_log_tx(pkt, pkt.back());
+    return pkt;
+}
+
+// Build the timer packet: arms the boiler to start heating at the specified clock time (HH:MM).
+// The boiler compares HH:MM against its internal clock (synced via boiler_build_clock_packet).
+// ref: https://github.com/dentra/esphome-ewh/blob/master/reverse.md — subcmd 0x02
+// ref: https://github.com/dentra/esphome-ewh/blob/master/components/ewh/ewh_data.h — ewh_timer_t
+// Format: AA [len=6] 0A 02 [HH] [MM] [MODE] [TEMP] [CS]
+std::vector<uint8_t> boiler_build_timer_packet() {
+    std::vector<uint8_t> pkt = {
+        BOILER_HEADER,
+        BOILER_TX_LEN_TIMER,
+        BOILER_TX_CMD_WRITE,
+        BOILER_SUBCMD_TIMER,
+        (uint8_t)id(global_timer_hours),
+        (uint8_t)id(global_timer_minutes),
+        (uint8_t)id(global_boiler_power_level),  // heating mode to use when timer fires
+        (uint8_t)id(global_boiler_target_temp),  // target temperature to use when timer fires
     };
     boiler_append_checksum(pkt);
     boiler_log_tx(pkt, pkt.back());

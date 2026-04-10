@@ -29,11 +29,12 @@
 #define BOILER_TX_LEN_POWER     4     // Length field value for power/temperature packets
 #define BOILER_TX_LEN_BST       3     // Length field value for BST on/off packets
 #define BOILER_TX_LEN_TIME      4     // Length field value for clock-sync packets
+#define BOILER_TX_LEN_TIMER     6     // Length field value for timer packets (HH + MM + MODE + TEMP)
 
 // TX sub-command values (byte index 3 of every TX packet)
 #define BOILER_SUBCMD_POWER     0     // Set power mode and target temperature
 #define BOILER_SUBCMD_TIME      1     // Set the boiler's internal clock
-#define BOILER_SUBCMD_TIMER     2     // Set the countdown timer
+#define BOILER_SUBCMD_TIMER     2     // Set the timer
 #define BOILER_SUBCMD_BST       3     // Toggle Bacteria Stop Technology
 
 // ─── Protocol: Power Mode Byte Values (RX byte 3 / TX byte 4) ────────────────

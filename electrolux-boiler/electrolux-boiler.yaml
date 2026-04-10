@@ -35,6 +35,10 @@ substitutions:
   blink_duration: 700ms    # LED pulse length on packet receive
   wifi_rssi_interval: 30s  # How often WiFi signal strength is sampled
   clock_sync_interval: 24h # How often the boiler clock is re-synced to NTP
+
+  # Timer defaults
+  default_timer_hours: "0"    # Initial countdown hours (0 = timer off)
+  default_timer_minutes: "0"  # Initial countdown minutes
   
 esphome:
   name: ${device_name}
@@ -102,6 +106,12 @@ globals:
   - id: global_boiler_power_level
     type: int
     initial_value: '${default_power_level}' # 1=700, 2=1300, 3=2000
+  - id: global_timer_hours
+    type: int
+    initial_value: '${default_timer_hours}'
+  - id: global_timer_minutes
+    type: int
+    initial_value: '${default_timer_minutes}'
 
 logger:
   level: INFO
@@ -191,7 +201,7 @@ text_sensor:
     icon: "mdi:clock-outline"
   
   - platform: template
-    name: "Boiler Timer Human"
+    name: "Boiler Timer Start Time"
     id: timer_human
     icon: "mdi:timer-sand"
 
@@ -203,6 +213,13 @@ button:
     on_press:
       then:
         - script.execute: sync_boiler_time
+  - platform: template
+    name: "Run Boiler Timer"
+    id: set_timer_btn
+    icon: "mdi:timer-play-outline"
+    on_press:
+      then:
+        - script.execute: send_boiler_timer
     # WiFi Reset Button
   - platform: factory_reset
     name: "Reset Device WiFi"
@@ -289,6 +306,39 @@ number:
           value: !lambda "return (int)x;"
       - script.execute: send_boiler_command
 
+  # Scheduled start hour: the clock hour (0–23) at which the boiler will begin heating.
+  # The boiler fires at this time according to its internal clock (set via Sync Boiler Clock).
+  - platform: template
+    name: "Boiler Timer Start Hour"
+    id: boiler_timer_hours_set
+    min_value: 0
+    max_value: 23
+    step: 1
+    unit_of_measurement: "h"
+    mode: box
+    #optimistic: true
+    lambda: "return id(global_timer_hours);"
+    set_action:
+      - globals.set:
+          id: global_timer_hours
+          value: !lambda "return (int)x;"
+
+  # Scheduled start minute: clock minute (0–55, step 5) at which the boiler will begin heating.
+  - platform: template
+    name: "Boiler Timer Start Minute"
+    id: boiler_timer_minutes_set
+    min_value: 0
+    max_value: 55
+    step: 5
+    unit_of_measurement: "min"
+    mode: box
+    #optimistic: true
+    lambda: "return id(global_timer_minutes);"
+    set_action:
+      - globals.set:
+          id: global_timer_minutes
+          value: !lambda "return (int)x;"
+
 script:
   - id: blink_led_script
     mode: restart
@@ -309,6 +359,13 @@ script:
     then:
       - uart.write: !lambda |-
           return boiler_build_clock_packet();
+  - id: send_boiler_timer
+    then:
+      # Sync clock first so the boiler knows the current time before the timer is armed.
+      - script.execute: sync_boiler_time
+      - delay: 200ms
+      - uart.write: !lambda |-
+          return boiler_build_timer_packet();
  
 text:
   - platform: template
