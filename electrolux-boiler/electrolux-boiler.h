@@ -158,7 +158,23 @@ std::vector<uint8_t> boiler_build_timer_packet() {
         (uint8_t)id(global_timer_hours),
         (uint8_t)id(global_timer_minutes),
         (uint8_t)id(global_boiler_power_level),  // heating mode to use when timer fires
-        (uint8_t)id(global_boiler_target_temp),  // target temperature to use when timer fires
+        (uint8_t)id(global_boiler_target_temp),  // target temperature when timer fires
+    };
+    boiler_append_checksum(pkt);
+    boiler_log_tx(pkt, pkt.back());
+    return pkt;
+}
+
+// Request the boiler's current state immediately (response: RX state packet cmd=0x09/0x88).
+// Useful to confirm that a write command (timer, mode, etc.) was accepted.
+// ref: https://github.com/dentra/esphome-ewh/blob/master/reverse.md — cmd 0x08
+// Format: AA [len=3] 08 10 04 [CS]
+std::vector<uint8_t> boiler_build_state_request() {
+    std::vector<uint8_t> pkt = {
+        BOILER_HEADER,
+        BOILER_TX_LEN_STATE_REQ,
+        BOILER_TX_CMD_STATE_REQ,
+        0x10, 0x04,  // fixed payload from reverse.md
     };
     boiler_append_checksum(pkt);
     boiler_log_tx(pkt, pkt.back());

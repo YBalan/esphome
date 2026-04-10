@@ -19,17 +19,19 @@
 #define BOILER_RX_IDX_TAR_T     5     // Target water temperature (°C)
 #define BOILER_RX_IDX_UP_H      6     // Uptime hours
 #define BOILER_RX_IDX_UP_M      7     // Uptime minutes
-#define BOILER_RX_IDX_TMR_H     8     // Countdown timer hours
-#define BOILER_RX_IDX_TMR_M     9     // Countdown timer minutes
+#define BOILER_RX_IDX_TMR_H     8     // Scheduled timer start hour (set by subcmd 0x02)
+#define BOILER_RX_IDX_TMR_M     9     // Scheduled timer start minute (set by subcmd 0x02)
 #define BOILER_RX_IDX_BST       11    // Bacteria Stop Technology active flag
 #define BOILER_RX_IDX_CS        12    // Packet checksum
 
 // ─── Protocol: TX Packet ─────────────────────────────────────────────────────
 #define BOILER_TX_CMD_WRITE     10    // Command type for all write packets (0x0A)
+#define BOILER_TX_CMD_STATE_REQ 0x08  // Command type for requesting current device state
 #define BOILER_TX_LEN_POWER     4     // Length field value for power/temperature packets
 #define BOILER_TX_LEN_BST       3     // Length field value for BST on/off packets
 #define BOILER_TX_LEN_TIME      4     // Length field value for clock-sync packets
 #define BOILER_TX_LEN_TIMER     6     // Length field value for timer packets (HH + MM + MODE + TEMP)
+#define BOILER_TX_LEN_STATE_REQ 3     // Length field value for state-request packet (cmd + 2 fixed bytes)
 
 // TX sub-command values (byte index 3 of every TX packet)
 #define BOILER_SUBCMD_POWER     0     // Set power mode and target temperature
@@ -50,7 +52,7 @@
 #define BOILER_BST_INACTIVE     0x00  // BST mode is off
 
 // ─── Internal: Heating Detection Threshold ───────────────────────────────────
-#define BOILER_HEAT_THRESHOLD   2     // °C below target at which active heating is reported
+#define BOILER_HEAT_THRESHOLD   1     // °C below target at which active heating is reported
 
 // ─── Log Tags ────────────────────────────────────────────────────────────────
 #define TAG_RX      "boiler_rx"   // UART receive: packet parsing and sensor updates
@@ -77,5 +79,5 @@ static const std::map<uint8_t, BoilerModeInfo> BOILER_MODE_MAP = {
     { BOILER_MODE_MEDIUM,   { "1300W (Medium)",   2,   1 } },  // 1300 W, level=2, sel=1
     { BOILER_MODE_HIGH,     { "2000W (High)",     3,   2 } },  // 2000 W, level=3, sel=2
     { BOILER_MODE_TIMER,    { "Timer",           -1,  -1 } },  // timer: read-only, not in select
-    { BOILER_MODE_NO_FROST, { "No Frost 5°C",    5,   3 } },  // anti-frost 5 °C, level=5, sel=3
+    { BOILER_MODE_NO_FROST, { "No Frost 5°C",    5,   3 } },  // anti-frost 5 °C, TX mode byte=5 (BOILER_MODE_NO_FROST)
 };

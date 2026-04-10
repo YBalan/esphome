@@ -36,9 +36,9 @@ substitutions:
   wifi_rssi_interval: 30s  # How often WiFi signal strength is sampled
   clock_sync_interval: 24h # How often the boiler clock is re-synced to NTP
 
-  # Timer defaults
-  default_timer_hours: "0"    # Initial countdown hours (0 = timer off)
-  default_timer_minutes: "0"  # Initial countdown minutes
+  # Timer defaults — scheduled clock time (HH:MM) at which the boiler will begin heating
+  default_timer_hours: "23"   # Start hour (0–23)
+  default_timer_minutes: "0"  # Start minute (0, 5, 10 … 55)
   
 esphome:
   name: ${device_name}
@@ -366,6 +366,10 @@ script:
       - delay: 200ms
       - uart.write: !lambda |-
           return boiler_build_timer_packet();
+      # Request state immediately to confirm the boiler accepted and entered timer mode (state=4).
+      - delay: 200ms
+      - uart.write: !lambda |-
+          return boiler_build_state_request();
  
 text:
   - platform: template
