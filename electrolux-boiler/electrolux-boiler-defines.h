@@ -17,8 +17,8 @@
 #define BOILER_RX_IDX_MODE      3     // Active power mode
 #define BOILER_RX_IDX_CUR_T     4     // Current water temperature (°C)
 #define BOILER_RX_IDX_TAR_T     5     // Target water temperature (°C)
-#define BOILER_RX_IDX_UP_H      6     // Uptime hours
-#define BOILER_RX_IDX_UP_M      7     // Uptime minutes
+#define BOILER_RX_IDX_UP_H      6     // Boiler clock hours
+#define BOILER_RX_IDX_UP_M      7     // Boiler clock minutes
 #define BOILER_RX_IDX_TMR_H     8     // Scheduled timer start hour (set by subcmd 0x02)
 #define BOILER_RX_IDX_TMR_M     9     // Scheduled timer start minute (set by subcmd 0x02)
 #define BOILER_RX_IDX_BST       11    // Bacteria Stop Technology active flag

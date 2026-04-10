@@ -149,19 +149,6 @@ sensor:
     id: target_temp
     unit_of_measurement: "°C"
     device_class: temperature
-  - platform: template
-    name: "Boiler Time"
-    id: uptime_min
-    unit_of_measurement: "min"
-    device_class: duration
-    icon: "mdi:clock-outline"
-  - platform: template
-    name: "Boiler Timer Set"
-    id: timer_val
-    unit_of_measurement: "min"
-    device_class: duration
-    icon: "mdi:timer-sand"
-    
   - platform: wifi_signal
     name: "WiFi Signal Sensor"
     id: wifi_rssi
@@ -227,8 +214,8 @@ text_sensor:
     icon: "mdi:file-code-outline"
     
   - platform: template
-    name: "Boiler Time Human"
-    id: uptime_human
+    name: "Boiler Clock"
+    id: boiler_clock
     icon: "mdi:clock-outline"
   
   - platform: template

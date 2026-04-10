@@ -106,14 +106,16 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     // Smart Heating Detector: heating when cur_t is below tar_t by threshold
     id(is_heating).publish_state(cur_t <= (tar_t - BOILER_HEAT_THRESHOLD) && id(global_boiler_power_on) == true);
 
-    // Uptime and timer (hours + minutes → total minutes)
-    id(uptime_min).publish_state((bytes[BOILER_RX_IDX_UP_H]  * 60) + bytes[BOILER_RX_IDX_UP_M]);
-    id(timer_val).publish_state( (bytes[BOILER_RX_IDX_TMR_H] * 60) + bytes[BOILER_RX_IDX_TMR_M]);
+    // Boiler internal clock as human-readable HH:MM string
+    char time_buf[6];
+    sprintf(time_buf, "%02d:%02d", bytes[BOILER_RX_IDX_UP_H], bytes[BOILER_RX_IDX_UP_M]);
+    id(boiler_clock).publish_state(time_buf);
 
-    // Human-readable time strings
-    char time_buf[10];
-    sprintf(time_buf, "%02d:%02d", bytes[BOILER_RX_IDX_UP_H],  bytes[BOILER_RX_IDX_UP_M]);
-    id(uptime_human).publish_state(time_buf);
+    // Sync timer start time from boiler state and update the number inputs in HA.
+    id(global_timer_hours)   = bytes[BOILER_RX_IDX_TMR_H];
+    id(global_timer_minutes) = bytes[BOILER_RX_IDX_TMR_M];
+    id(boiler_timer_hours_set).publish_state(bytes[BOILER_RX_IDX_TMR_H]);
+    id(boiler_timer_minutes_set).publish_state(bytes[BOILER_RX_IDX_TMR_M]);
     sprintf(time_buf, "%02d:%02d", bytes[BOILER_RX_IDX_TMR_H], bytes[BOILER_RX_IDX_TMR_M]);
     id(timer_human).publish_state(time_buf);
 
