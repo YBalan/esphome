@@ -1,9 +1,51 @@
 substitutions:
-  # Device name
+  # Device
   device_name: electrolux-boiler
+
+  # Hardware pins
+  uart_tx_pin: GPIO17      # Boiler RX line (1.7 V) — White/Blue, USB-
+  uart_rx_pin: GPIO16      # Boiler TX line (5.0 V) — Green, USB+
+  led_pin: GPIO2           # Onboard blue LED
+
+  # UART
+  uart_baud_rate: "9600"
+  uart_packet_size: "13"   # Expected RX packet length in bytes
+
+  # WiFi AP fallback
+  ap_ssid: "AP-Boiler"
+  ap_password: "password"
+
+  # MQTT
+  mqtt_client_id: esp32_electrolux_boiler_client
+  mqtt_topic_prefix: boiler
+  mqtt_port: "1883"
+
+  # Timezone
+  timezone: "Europe/Kyiv"
+
+  # Boiler defaults
+  default_target_temp: "70"   # °C — initial target temperature
+  default_power_level: "2"    # 1=700 W, 2=1300 W, 3=2000 W
+
+  # Temperature slider limits
+  temp_min: "35"   # °C
+  temp_max: "75"   # °C
+
+  # Timing
+  blink_duration: 700ms    # LED pulse length on packet receive
+  wifi_rssi_interval: 30s  # How often WiFi signal strength is sampled
+  clock_sync_interval: 24h # How often the boiler clock is re-synced to NTP
+  energy_interval: 30s     # Energy accumulation cadence — should match boiler update rate (~30 s)
+
+  # Timer defaults — scheduled clock time (HH:MM) at which the boiler will begin heating
+  default_timer_hours: "23"   # Start hour (0–23)
+  default_timer_minutes: "0"  # Start minute (0, 5, 10 … 55)
   
 esphome:
-  name: ${device_name}  
+  name: ${device_name}
+  includes:
+    - electrolux-boiler-defines.h
+    - electrolux-boiler.h
   on_boot:    
     - priority: 800
       then:
@@ -20,7 +62,7 @@ ota:
 time:
   - platform: sntp
     id: sntp_time
-    timezone: "Europe/Kyiv"
+    timezone: ${timezone}
 
 # 1. Connection settings
 wifi:
@@ -28,8 +70,8 @@ wifi:
   #password: !secret wifi_password
   # Fallback access point if WiFi disappears
   ap:
-    ssid: "AP-Boiler"
-    password: "password"
+    ssid: ${ap_ssid}
+    password: ${ap_password}
     
   # Allow saving new credentials to flash memory
   fast_connect: true
@@ -46,25 +88,36 @@ api: #For Home Assistant
 # MQTT configuration
 mqtt:    
   broker: !secret mqtt_broker
-  client_id: esp32_electrolux_boiler_client
+  client_id: ${mqtt_client_id}
   username: !secret mqtt_username
   password: !secret mqtt_password  
-  port: 1883
-  topic_prefix: boiler 
+  port: ${mqtt_port}
+  topic_prefix: ${mqtt_topic_prefix}
   reboot_timeout: 0s
   # Discovery allows Home Assistant to find the device automatically via MQTT
   discovery: true
 
 globals:
-  - id: boiler_power_on
+  - id: global_boiler_power_on
     type: bool
     initial_value: 'true'
-  - id: boiler_target_temp
+  - id: global_boiler_target_temp
     type: int
-    initial_value: '70'
-  - id: boiler_power_level
+    initial_value: '${default_target_temp}'
+  - id: global_boiler_power_level
     type: int
-    initial_value: '2' # 1=700, 2=1300, 3=2000
+    initial_value: '${default_power_level}' # 1=700, 2=1300, 3=2000
+  - id: global_timer_hours
+    type: int
+    initial_value: '${default_timer_hours}'
+  - id: global_timer_minutes
+    type: int
+    initial_value: '${default_timer_minutes}'
+  # Accumulated energy in Wh; restored across reboots so the total is never lost.
+  - id: global_total_energy_wh
+    type: float
+    restore_value: true
+    initial_value: '0.0'
 
 logger:
   level: INFO
@@ -73,107 +126,17 @@ logger:
 # --- THE REST OF YOUR BOILER CONFIG ---
 uart:  
   id: heatuart
-  tx_pin: GPIO17 # На Boiler RX (1.7V) White/Blue USB-
-  rx_pin: GPIO16 # На Boiler TX (5.0V) Green      USB+
-  baud_rate: 9600
+  tx_pin: ${uart_tx_pin}
+  rx_pin: ${uart_rx_pin}
+  baud_rate: ${uart_baud_rate}
   debug:
     direction: RX
     dummy_receiver: true 
     after:
-      bytes: 13
+      bytes: ${uart_packet_size}
     sequence:
       - lambda: |-
-          // 1. Logging raw hex for manual inspection
-          UARTDebug::log_hex(direction, bytes, ':');
-
-          // 2. Check header (0xAA) and packet size (13 bytes)
-          if (bytes.size() >= 13 && bytes[0] == 0xAA && bytes[2] == 0x09) {
-          
-            id(blink_led_script).execute();
-            
-            // 3. Calculate Checksum (Sum of bytes index 0 to 11)
-            uint8_t checksum = 0;
-            for (int i = 0; i < 12; i++) {
-              checksum += bytes[i];
-            }
-            
-            // 4. Verify Checksum
-            if (checksum == bytes[12]) {
-              // Temperatures (Bytes 4 and 5)
-              float cur_t = bytes[4];
-              float tar_t = bytes[5];
-              id(current_temp).publish_state(cur_t);
-              id(target_temp).publish_state(tar_t);
-              
-              id(boiler_target_temp) = (tar_t);
-              id(boiler_target_temp_set).publish_state(tar_t);
-              id(boiler_power_on) = (bytes[3] > 0x00 && bytes[3] <= 0x05);              
-
-              // Power Mode (Byte 3)
-              if (bytes[3] == 0x00) {
-                id(power_str).publish_state("Power OFF");
-              } else if (bytes[3] == 0x01) {
-                id(power_str).publish_state("700W (Low)");
-                id(boiler_power_level) = 1;
-                id(boiler_mode_switch).publish_state((uint8_t)0);
-              } else if (bytes[3] == 0x02) {
-                id(power_str).publish_state("1300W (Medium)");
-                id(boiler_power_level) = 2;
-                id(boiler_mode_switch).publish_state((uint8_t)1);
-              } else if (bytes[3] == 0x03) {
-                id(power_str).publish_state("2000W (High)");
-                id(boiler_power_level) = 3;
-                id(boiler_mode_switch).publish_state((uint8_t)2);
-              } else if (bytes[3] == 0x04) {
-                id(power_str).publish_state("Timer");
-              } else if (bytes[3] == 0x05) {
-                id(power_str).publish_state("No Frost 5°C");
-                id(boiler_power_level) = 5;
-                id(boiler_mode_switch).publish_state((uint8_t)3);
-              } else {
-                id(power_str).publish_state("Unknown");
-              }
-              
-              id(boiler_switch).publish_state(id(boiler_power_on));              
-
-              // 3. Bacteria Stop Technology (Byte 11)
-              id(bst_active).publish_state(bytes[11] == 0x01);
-              
-              // 6. Smart Heating Detector              
-              // if Target > Current 
-              id(is_heating).publish_state(cur_t <= (tar_t - 2) && id(boiler_power_on) == true);
-
-              // Uptime Calculation (Byte 6=Hours, Byte 7=Minutes)
-              int total_uptime_min = (bytes[6] * 60) + bytes[7];
-              id(uptime_min).publish_state(total_uptime_min);
-
-              // 5. Timer (Byte 8: Hours, Byte 9: Minutes)
-              int timer_total = (bytes[8] * 60) + bytes[9];
-              id(timer_val).publish_state(timer_total);
-              
-              // Human Time format
-              char time_buf[10];
-              sprintf(time_buf, "%02d:%02d", bytes[6], bytes[7]);
-              id(uptime_human).publish_state(time_buf);
-
-              sprintf(time_buf, "%02d:%02d", bytes[8], bytes[9]);
-              id(timer_human).publish_state(time_buf);
-
-              // Store packet to string like: (170:10:9...) ---
-              std::string raw_string = "";
-              for (size_t i = 0; i < bytes.size(); i++) {
-                raw_string += std::to_string(bytes[i]);
-                if (i < bytes.size() - 1) raw_string += ":";
-              }              
-              
-              ESP_LOGI("boiler_rx", "HEX <<< %s, CS: %02X", format_hex_pretty(bytes).c_str(), bytes[12]);
-              ESP_LOGI("boiler_rx", "DEC <<< %s, CS: %d == %d", raw_string.c_str(), bytes[12], checksum);
-              id(raw_packet_history).publish_state(raw_string);
-
-            } else {
-              ESP_LOGW("boiler_rx", "Checksum Error! Expected %02X (%d), got %02X (%d)", checksum, checksum, bytes[12], bytes[12]);
-            }
-          }
+          boiler_parse_rx_packet(direction, bytes);
 
 sensor:
   - platform: template
@@ -186,24 +149,31 @@ sensor:
     id: target_temp
     unit_of_measurement: "°C"
     device_class: temperature
-  - platform: template
-    name: "Boiler Time"
-    id: uptime_min
-    unit_of_measurement: "min"
-    device_class: duration
-    icon: "mdi:clock-outline"
-  - platform: template
-    name: "Boiler Timer Set"
-    id: timer_val
-    unit_of_measurement: "min"
-    device_class: duration
-    icon: "mdi:timer-sand"
-    
   - platform: wifi_signal
     name: "WiFi Signal Sensor"
     id: wifi_rssi
-    update_interval: 30s
+    update_interval: ${wifi_rssi_interval}
     state_topic: "boiler/wifi_rssi"
+
+  # Current power draw in W — 0 when not heating, nominal element power when heating.
+  - platform: template
+    name: "Boiler Power"
+    id: boiler_power_w
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    lambda: "return id(is_heating).state ? (float)boiler_get_power_watts() : 0.0f;"
+
+  # Total energy consumed — state_class: total_increasing lets HA use this in the Energy dashboard.
+  - platform: template
+    name: "Boiler Total Energy"
+    id: boiler_total_energy
+    unit_of_measurement: "kWh"
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 3
+    lambda: "return id(global_total_energy_wh) / 1000.0f;"
 
 binary_sensor:
   - platform: template
@@ -229,6 +199,11 @@ binary_sensor:
 
 text_sensor:
   - platform: template
+    name: "Boiler Temp Trend"
+    id: temp_trend
+    icon: "mdi:thermometer-chevron-up"
+  
+  - platform: template
     name: "Boiler Power Mode"
     id: power_str
   
@@ -239,12 +214,12 @@ text_sensor:
     icon: "mdi:file-code-outline"
     
   - platform: template
-    name: "Boiler Time Human"
-    id: uptime_human
+    name: "Boiler Clock"
+    id: boiler_clock
     icon: "mdi:clock-outline"
   
   - platform: template
-    name: "Boiler Timer Human"
+    name: "Boiler Timer Start Time"
     id: timer_human
     icon: "mdi:timer-sand"
 
@@ -256,6 +231,13 @@ button:
     on_press:
       then:
         - script.execute: sync_boiler_time
+  - platform: template
+    name: "Run Boiler Timer"
+    id: set_timer_btn
+    icon: "mdi:timer-play-outline"
+    on_press:
+      then:
+        - script.execute: send_boiler_timer
     # WiFi Reset Button
   - platform: factory_reset
     name: "Reset Device WiFi"
@@ -263,13 +245,24 @@ button:
     icon: "mdi:wifi-reset"
     
 interval:  
-  - interval: 24h
+  - interval: ${clock_sync_interval}
     then:
       - script.execute: sync_boiler_time
 
+  # Accumulate energy every energy_interval when the boiler is actively heating.
+  - interval: ${energy_interval}
+    then:
+      - lambda: |-
+          if (id(is_heating).state) {
+            // Wh added = power_W × (interval_s / 3600)
+            id(global_total_energy_wh) += boiler_get_power_watts() * (30.0f / 3600.0f);
+          }
+          id(boiler_power_w).publish_state(id(is_heating).state ? (float)boiler_get_power_watts() : 0.0f);
+          id(boiler_total_energy).publish_state(id(global_total_energy_wh) / 1000.0f);
+
 output:
   - platform: gpio
-    pin: GPIO2
+    pin: ${led_pin}
     id: blue_led
 
 # 1. Power switch (On/Off)
@@ -278,16 +271,16 @@ switch:
     name: "Boiler Main Power"
     id: boiler_switch
     icon: "mdi:power"
-    lambda: "return id(boiler_power_on);"
+    lambda: "return id(global_boiler_power_on);"
     optimistic: true
     turn_on_action:
       - globals.set:
-          id: boiler_power_on
+          id: global_boiler_power_on
           value: 'true'
       - script.execute: send_boiler_command
     turn_off_action:
       - globals.set:
-          id: boiler_power_on
+          id: global_boiler_power_on
           value: 'false'
       - script.execute: send_boiler_command
       
@@ -299,13 +292,15 @@ switch:
     lambda: |-
       return id(bst_active).state;
     turn_on_action:
-      - uart.write: [170, 3, 10, 3, 1, 187] # AA:03:0A:03:01 + CS:BB
+      - uart.write: !lambda |-
+          return boiler_build_bst_packet(true);
       - logger.log: "MQTT/HA: BST Turned ON"    
     turn_off_action:
-      - uart.write: [170, 3, 10, 3, 0, 186] # AA:03:0A:03:00 + CS:BA
+      - uart.write: !lambda |-
+          return boiler_build_bst_packet(false);
       - logger.log: "MQTT/HA: BST Turned OFF"
 
-# 2. Power Selector (700/1300/2000)
+# 2. Power Selector (700/1300/2000/No Frost/Timer)
 select:
   - platform: template
     id: boiler_mode_switch
@@ -314,41 +309,76 @@ select:
       - "700W (Low)"
       - "1300W (Medium)"
       - "2000W (High)"
-      - "No Frost 5°C"
+      - "Timer"
+      - "No Frost 5°C"      
     initial_option: "1300W (Medium)"
     optimistic: true
     set_action:
       - lambda: |-
-          if (x == "700W (Low)") id(boiler_power_level) = 1;
-          else if (x == "1300W (Medium)") id(boiler_power_level) = 2;
-          else if (x == "2000W (High)") id(boiler_power_level) = 3;
-          else if (x == "No Frost 5°C") id(boiler_power_level) = 5;
-      - script.execute: send_boiler_command
+          if (x == "Timer") {
+            id(send_boiler_timer).execute();            
+          } else {
+            boiler_set_power_level(x);
+            id(send_boiler_command).execute();
+          }
 
 # 3. Temperature slider
 number:
   - platform: template
     name: "Boiler Target Temp Set"
     id: boiler_target_temp_set
-    min_value: 35
-    max_value: 75
+    min_value: ${temp_min}
+    max_value: ${temp_max}
     step: 1
     unit_of_measurement: "°C"
     mode: slider
     #optimistic: true
-    lambda: "return id(boiler_target_temp);"
+    lambda: "return id(global_boiler_target_temp);"
     set_action:
       - globals.set:
-          id: boiler_target_temp
+          id: global_boiler_target_temp
           value: !lambda "return (int)x;"
       - script.execute: send_boiler_command
+
+  # Scheduled start hour: the clock hour (0–23) at which the boiler will begin heating.
+  # The boiler fires at this time according to its internal clock (set via Sync Boiler Clock).
+  - platform: template
+    name: "Boiler Timer Start Hour"
+    id: boiler_timer_hours_set
+    min_value: 0
+    max_value: 23
+    step: 1
+    unit_of_measurement: "h"
+    mode: box
+    #optimistic: true
+    lambda: "return id(global_timer_hours);"
+    set_action:
+      - globals.set:
+          id: global_timer_hours
+          value: !lambda "return (int)x;"
+
+  # Scheduled start minute: clock minute (0–55, step 5) at which the boiler will begin heating.
+  - platform: template
+    name: "Boiler Timer Start Minute"
+    id: boiler_timer_minutes_set
+    min_value: 0
+    max_value: 55
+    step: 5
+    unit_of_measurement: "min"
+    mode: box
+    #optimistic: true
+    lambda: "return id(global_timer_minutes);"
+    set_action:
+      - globals.set:
+          id: global_timer_minutes
+          value: !lambda "return (int)x;"
 
 script:
   - id: blink_led_script
     mode: restart
     then:
       - output.turn_on: blue_led
-      - delay: 700ms # Very short pulse
+      - delay: ${blink_duration}
       - output.turn_off: blue_led
       - if:
           condition:
@@ -358,57 +388,22 @@ script:
   - id: send_boiler_command
     then:
       - uart.write: !lambda |-
-          
-          std::vector<uint8_t> pkt;
-          pkt.push_back(170); // 0: Header
-          pkt.push_back(4); // 1: Length 4
-          pkt.push_back(10); // 2: Command Type (Write)
-          
-          pkt.push_back(0); //Sub command: 0 - Power Mode, 1 - Time, 2 - Timer, 3 - BST
-          
-          uint8_t mode = id(boiler_power_on) == false ? 0 : (uint8_t)id(boiler_power_level); 
-          uint8_t temp = (uint8_t)id(boiler_target_temp);          
-
-          pkt.push_back(mode); // 3: Power Level (1,2,3,5) 0 - Off         
-          pkt.push_back(temp); // 5: Target Temp
-          
-          // 3. Calculate Checksum (Sum of bytes index 0 to 11)
-          uint8_t cs = 0;
-          for(int i=0; i<pkt.size(); i++) {
-            cs += pkt[i];
-          }
-          pkt.push_back(cs);
-
-          // Packet to string like - (170:10:9...) ---
-          std::string raw_string = "";
-          for (size_t i = 0; i < pkt.size(); i++) {
-            raw_string += std::to_string(pkt[i]);
-            if (i < pkt.size() - 1) raw_string += ":";
-          }                        
-
-          ESP_LOGW("boiler_tx", "HEX >>> %s, CS: %02X", format_hex_pretty(pkt).c_str(), cs);
-          ESP_LOGW("boiler_tx", "DEC >>> %s, CS: %d", raw_string.c_str(), cs);
-          return pkt;
+          return boiler_build_tx_packet();
   - id: sync_boiler_time
     then:
-      - lambda: |-
-          auto now = id(sntp_time).now();
-          if (now.is_valid()) {
-            uint8_t hh = now.hour;
-            uint8_t mm = now.minute;
-            
-            // Packet: AA(170) : 04 : 10 : 01 : HH : MM
-            std::vector<uint8_t> pkt = {170, 4, 10, 1, hh, mm};            
-            
-            uint8_t cs = 0;
-            for (uint8_t b : pkt) cs += b;
-            pkt.push_back(cs);
-            
-            id(heatuart).write_array(pkt.data(), pkt.size());
-            ESP_LOGI("clock_sync", "Boiler time synced to %02d:%02d", hh, mm);
-          } else {
-            ESP_LOGW("clock_sync", "Time not valid yet, skipping sync...");
-          }
+      - uart.write: !lambda |-
+          return boiler_build_clock_packet();
+  - id: send_boiler_timer
+    then:
+      # Sync clock first so the boiler knows the current time before the timer is armed.
+      - script.execute: sync_boiler_time
+      - delay: 200ms
+      - uart.write: !lambda |-
+          return boiler_build_timer_packet();
+      # Request state immediately to confirm the boiler accepted and entered timer mode (state=4).
+      #- delay: 200ms
+      #- uart.write: !lambda |-
+          #return boiler_build_state_request();
  
 text:
   - platform: template
@@ -418,57 +413,5 @@ text:
     optimistic: true
     set_action:
       then:
-        - lambda: |-
-            // 1. Get new value from 'x'
-            std::string input = x;
-            if (input.empty()) return;
-
-            // 2. Publish state immediately to sync HA/MQTT
-            id(raw_cmd_input).publish_state(x);
-          
-            ESP_LOGW("boiler_tx", "RAW Inp: %s", input.c_str());
-          
-            bool add_checksum = false;
-            
-            if (input.size() >= 2 && (input.substr(0, 2) == "C:" || input.substr(0, 2) == "c:")) {
-              add_checksum = true;
-              input = input.substr(2); // Отрезаем префикс
-            }
-
-            std::vector<uint8_t> payload;
-            char *str = strdup(input.c_str());
-            char *token = strtok(str, ":");
-          
-            // 1. Convert string "170:10:..." to bytes
-            while (token != NULL) {
-              payload.push_back((uint8_t)atoi(token));
-              token = strtok(NULL, ":");
-            }
-            free(str);
-
-            // 2. Logic for Checksum (Optional but helpful)
-            // If you entered 12 bytes, we calculate the 13th as Sum(0..11)
-            uint8_t cs = 0;
-            if (add_checksum) {              
-              //for (uint8_t b : payload) cs += b;
-              for (int i = 0; i < payload.size(); i++) {
-                cs += payload[i];
-              }
-              payload.push_back(cs);
-              //ESP_LOGI("boiler_tx", "Added checksum: %02X (%d)", cs, cs);
-            }
-          
-            std::string raw_string = "";
-            for (size_t i = 0; i < payload.size(); i++) {
-              raw_string += std::to_string(payload[i]);
-              if (i < payload.size() - 1) raw_string += ":";
-            }    
-
-            // 3. Send to Boiler
-            if (payload.size() > 0) {
-              id(heatuart).write_array(payload.data(), payload.size());            
-              ESP_LOGW("boiler_tx", "HEX >>> %s, CS: %02X", format_hex_pretty(payload).c_str(), cs);
-              ESP_LOGW("boiler_tx", "DEC >>> %s, CS: %d", raw_string.c_str(), cs);
-            } else {
-              ESP_LOGW("boiler_tx", "Invalid input format! Use dec:dec:dec");
-            }            
+        - uart.write: !lambda |-
+            return boiler_build_raw_payload(x);
