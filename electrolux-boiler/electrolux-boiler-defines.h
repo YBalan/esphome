@@ -124,6 +124,6 @@ static const std::map<uint8_t, BoilerModeInfo> BOILER_MODE_MAP = {
     { BOILER_MODE_LOW,      { BOILER_STR_MODE_LOW,         0x01,   0,      700,    0.00f } },  // 700 W — slow heating rate
     { BOILER_MODE_MEDIUM,   { BOILER_STR_MODE_MEDIUM,      0x02,   1,     1300,    0.00f } },  // 1300 W — moderate heating rate
     { BOILER_MODE_HIGH,     { BOILER_STR_MODE_HIGH,        0x03,   2,     2000,    0.00f } },  // 2000 W — fast heating rate
-    { BOILER_MODE_TIMER,    { BOILER_STR_MODE_TIMER,       0x04,   3,      700,    0.00f } },  // timer mode: heats at 700 W when active; TX via subcmd 0x02
+    { BOILER_MODE_TIMER,    { BOILER_STR_MODE_TIMER,       0x04,   3,        0,    0.00f } },  // timer mode: heats at 700 W when active; TX via subcmd 0x02
     { BOILER_MODE_NO_FROST, { BOILER_STR_MODE_NO_FROST,    0x04,   4,      700,    0.00f } },  // intermittent 700 W to hold 5 °C; very slow rise expected
 };
