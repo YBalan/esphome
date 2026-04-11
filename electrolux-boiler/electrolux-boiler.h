@@ -44,6 +44,59 @@ static void boiler_log_rx(const std::vector<uint8_t>& pkt, uint8_t cs) {
     ESP_LOGI(TAG_RX, "DEC <<< %s, CS: %d",   boiler_bytes_to_dec_str(pkt).c_str(), cs);
 }
 
+// ─── Temperature Trend ────────────────────────────────────────────────────────
+
+// Push `cur_t` into a ring buffer and return "Up", "Down", or "Stable" using a
+// linear-regression slope over the buffered samples.
+// Returns nullptr until BOILER_TREND_MIN_SAMPLES readings have been collected.
+// Up threshold varies by mode (faster heating → steeper slope expected).
+// Down threshold is fixed — cooling rate is always passive and gradual.
+static const char* boiler_calc_temp_trend(float cur_t, uint8_t mode) {
+    static float buf[BOILER_TREND_MAX_SAMPLES] = {};
+    static uint8_t pos   = 0;
+    static uint8_t count = 0;
+
+    buf[pos] = cur_t;
+    pos = (pos + 1) % BOILER_TREND_MAX_SAMPLES;
+    if (count < BOILER_TREND_MAX_SAMPLES) count++;
+
+    if (count < BOILER_TREND_MIN_SAMPLES) return nullptr;
+
+    // Reconstruct chronological order and compute least-squares slope.
+    // x = sample index (0 = oldest), y = temperature value.
+    float n = count;
+    float sum_x = 0, sum_y = 0, sum_xy = 0, sum_xx = 0;
+    for (uint8_t i = 0; i < count; i++) {
+        float x = i;
+        float y = buf[(pos - count + i + BOILER_TREND_MAX_SAMPLES) % BOILER_TREND_MAX_SAMPLES];
+        sum_x  += x;
+        sum_y  += y;
+        sum_xy += x * y;
+        sum_xx += x * x;
+    }
+    float denom = n * sum_xx - sum_x * sum_x;
+    if (denom == 0) return BOILER_TREND_STR_STABLE;
+    float slope = (n * sum_xy - sum_x * sum_y) / denom;
+
+    const char* trend;
+    auto it = BOILER_MODE_MAP.find(mode);
+    float up_slope = (it != BOILER_MODE_MAP.end()) ? it->second.up_slope : BOILER_TREND_SLOPE_UP_LOW;
+    if      (slope >  up_slope)                trend = BOILER_TREND_STR_UP;
+    else if (slope < -BOILER_TREND_SLOPE_DOWN) trend = BOILER_TREND_STR_DOWN;
+    else                                       trend = BOILER_TREND_STR_STABLE;
+
+    // Build chronological buffer string for logging
+    char buf_str[BOILER_TREND_MAX_SAMPLES * 8] = {};
+    char* p = buf_str;
+    for (uint8_t i = 0; i < count; i++) {
+        float y = buf[(pos - count + i + BOILER_TREND_MAX_SAMPLES) % BOILER_TREND_MAX_SAMPLES];
+        p += sprintf(p, i ? " %.1f" : "%.1f", y);
+    }
+    ESP_LOGW(TAG_TREND, "buf=[%s] slope=%.3f up_thr=%.2f down_thr=%.2f samples=%d trend=%s",
+             buf_str, slope, up_slope, BOILER_TREND_SLOPE_DOWN, count, trend);
+    return trend;
+}
+
 // ─── Main Functions ───────────────────────────────────────────────────────────
 
 void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<uint8_t>& bytes) {
@@ -67,23 +120,6 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     id(current_temp).publish_state(cur_t);
     id(target_temp).publish_state(tar_t);
 
-    // Temperature trend: ring buffer of BOILER_TREND_MAX_SAMPLES readings.
-    // Once MIN_SAMPLES filled, publish "Up", "Down", or "Stable" by comparing oldest to newest.
-    static float trend_buf[BOILER_TREND_MAX_SAMPLES] = {};
-    static uint8_t trend_pos = 0;
-    static uint8_t trend_count = 0;
-    trend_buf[trend_pos] = cur_t;
-    trend_pos = (trend_pos + 1) % BOILER_TREND_MAX_SAMPLES;
-    if (trend_count < BOILER_TREND_MAX_SAMPLES) trend_count++;
-    if (trend_count >= BOILER_TREND_MIN_SAMPLES) {
-        // oldest entry is at trend_pos when buffer is full, or index 0 when still filling
-        uint8_t oldest_idx = (trend_count < BOILER_TREND_MAX_SAMPLES) ? 0 : trend_pos;
-        float oldest = trend_buf[oldest_idx];
-        float newest = trend_buf[(trend_pos + BOILER_TREND_MAX_SAMPLES - 1) % BOILER_TREND_MAX_SAMPLES];
-        const char* trend = (newest > oldest) ? "Up" : (newest < oldest) ? "Down" : "Stable";
-        id(temp_trend).publish_state(trend);
-    }
-
     id(global_boiler_target_temp) = (int)tar_t;
     id(boiler_target_temp_set).publish_state(tar_t);
     id(global_boiler_power_on) = (bytes[BOILER_RX_IDX_MODE] > BOILER_MODE_OFF &&
@@ -97,6 +133,12 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
         id(global_boiler_power_level) = it->second.level;
         id(boiler_mode_switch).publish_state((uint8_t)it->second.sel_idx);
     }
+
+    // Trend uses global_boiler_power_level (last known commanded level) rather than the
+    // raw RX mode byte, because the boiler can report 0x00 in its status packet even
+    // while actively heating (e.g. mid-cycle). The global is already updated above.
+    const char* trend = boiler_calc_temp_trend(cur_t, (uint8_t)id(global_boiler_power_level));
+    if (trend) id(temp_trend).publish_state(trend);
 
     id(boiler_switch).publish_state(id(global_boiler_power_on));
 
