@@ -54,6 +54,11 @@
 // ─── Internal: Heating Detection Threshold ───────────────────────────────────
 #define BOILER_HEAT_THRESHOLD           2       // °C below target at which active heating is reported
 
+// ─── Internal: Energy Accumulation ───────────────────────────────────────────
+#define BOILER_ENERGY_INTERVAL_S        30.0f   // Accumulation cadence in seconds — must match energy_interval substitution in YAML
+#define BOILER_WH_PER_INTERVAL(w)       ((w) * (BOILER_ENERGY_INTERVAL_S / 3600.0f))  // Wh added per tick at power w
+#define BOILER_WH_TO_KWH                1000.0f // Divisor to convert Wh accumulator to kWh for publishing
+
 // ─── Internal: Temperature Trend Labels ──────────────────────────────────────
 #define BOILER_TREND_STR_UP     "Up"
 #define BOILER_TREND_STR_DOWN   "Down"
@@ -61,18 +66,18 @@
 
 // ─── Internal: Temperature Trend Samples ─────────────────────────────────────
 #define BOILER_TREND_MIN_SAMPLES        2       // Minimum readings before a trend is reported
-#define BOILER_TREND_MAX_SAMPLES        4       // Ring-buffer capacity for linear regression
+#define BOILER_TREND_MAX_SAMPLES        10       // Ring-buffer capacity for linear regression
 #define BOILER_TREND_SLOPE_DOWN         0.10f   // °C/sample — slope threshold to classify Down (cooling is always gradual)
-#define BOILER_TREND_SLOPE_UP_PASSIVE   0.10f   // °C/sample Up threshold for OFF / No Frost — no active or intermittent heating
+// #define BOILER_TREND_SLOPE_UP_PASSIVE   0.10f   // °C/sample Up threshold for OFF / No Frost — no active or intermittent heating
 #define BOILER_TREND_SLOPE_UP_LOW       0.20f   // °C/sample Up threshold for 700 W — slow heating rate
-#define BOILER_TREND_SLOPE_UP_MEDIUM    0.35f   // °C/sample Up threshold for 1300 W — moderate heating rate
-#define BOILER_TREND_SLOPE_UP_HIGH      0.50f   // °C/sample Up threshold for 2000 W — fast heating rate
+// #define BOILER_TREND_SLOPE_UP_MEDIUM    0.35f   // °C/sample Up threshold for 1300 W — moderate heating rate
+// #define BOILER_TREND_SLOPE_UP_HIGH      0.50f   // °C/sample Up threshold for 2000 W — fast heating rate
 
-// ─── Internal: Nominal Power Draw per Mode ────────────────────────────────────
-#define BOILER_POWER_W_OFF              0       // Watts consumed when off
-#define BOILER_POWER_W_LOW              700     // Watts consumed in Low mode
-#define BOILER_POWER_W_MEDIUM           1300    // Watts consumed in Medium mode
-#define BOILER_POWER_W_HIGH             2000    // Watts consumed in High mode
+// // ─── Internal: Nominal Power Draw per Mode ────────────────────────────────────
+// #define BOILER_POWER_W_OFF              0       // Watts consumed when off
+// #define BOILER_POWER_W_LOW              700     // Watts consumed in Low mode
+// #define BOILER_POWER_W_MEDIUM           1300    // Watts consumed in Medium mode
+// #define BOILER_POWER_W_HIGH             2000    // Watts consumed in High mode
 
 // ─── Internal: Mode Display Labels ───────────────────────────────────────────
 #define BOILER_STR_MODE_OFF             "Power OFF"
@@ -115,10 +120,10 @@ struct BoilerModeInfo {
 
 static const std::map<uint8_t, BoilerModeInfo> BOILER_MODE_MAP = {
     //                           label               level  sel_idx  power_w  up_slope
-    { BOILER_MODE_OFF,      { BOILER_STR_MODE_OFF,         -1,    -1,        0,    0.10f } },  // off — no active heating; treat any tiny slope as stable
-    { BOILER_MODE_LOW,      { BOILER_STR_MODE_LOW,         0x01,   0,      700,    0.20f } },  // 700 W — slow heating rate
-    { BOILER_MODE_MEDIUM,   { BOILER_STR_MODE_MEDIUM,      0x02,   1,     1300,    0.25f } },  // 1300 W — moderate heating rate
-    { BOILER_MODE_HIGH,     { BOILER_STR_MODE_HIGH,        0x03,   2,     2000,    0.30f } },  // 2000 W — fast heating rate
-    { BOILER_MODE_TIMER,    { BOILER_STR_MODE_TIMER,       0x04,   3,      700,    0.20f } },  // timer mode: heats at 700 W when active; TX via subcmd 0x02
-    { BOILER_MODE_NO_FROST, { BOILER_STR_MODE_NO_FROST,    0x04,   4,      700,    0.10f } },  // intermittent 700 W to hold 5 °C; very slow rise expected
+    { BOILER_MODE_OFF,      { BOILER_STR_MODE_OFF,         -1,    -1,        0,    0.00f } },  // off — no active heating; treat any tiny slope as stable
+    { BOILER_MODE_LOW,      { BOILER_STR_MODE_LOW,         0x01,   0,      700,    0.00f } },  // 700 W — slow heating rate
+    { BOILER_MODE_MEDIUM,   { BOILER_STR_MODE_MEDIUM,      0x02,   1,     1300,    0.00f } },  // 1300 W — moderate heating rate
+    { BOILER_MODE_HIGH,     { BOILER_STR_MODE_HIGH,        0x03,   2,     2000,    0.00f } },  // 2000 W — fast heating rate
+    { BOILER_MODE_TIMER,    { BOILER_STR_MODE_TIMER,       0x04,   3,      700,    0.00f } },  // timer mode: heats at 700 W when active; TX via subcmd 0x02
+    { BOILER_MODE_NO_FROST, { BOILER_STR_MODE_NO_FROST,    0x04,   4,      700,    0.00f } },  // intermittent 700 W to hold 5 °C; very slow rise expected
 };

@@ -27,6 +27,13 @@ substitutions:
   default_target_temp: "70"   # °C — initial target temperature
   default_power_level: "2"    # 1=700 W, 2=1300 W, 3=2000 W
 
+  # Boiler mode labels — must exactly match BOILER_STR_MODE_* defines in electrolux-boiler-defines.h
+  mode_low:      "700W (Low)"
+  mode_medium:   "1300W (Medium)"
+  mode_high:     "2000W (High)"
+  mode_timer:    "Timer"
+  mode_no_frost: "No Frost 5°C"
+
   # Temperature slider limits
   temp_min: "35"   # °C
   temp_max: "75"   # °C
@@ -252,13 +259,7 @@ interval:
   # Accumulate energy every energy_interval when the boiler is actively heating.
   - interval: ${energy_interval}
     then:
-      - lambda: |-
-          if (id(is_heating).state) {
-            // Wh added = power_W × (interval_s / 3600)
-            id(global_total_energy_wh) += boiler_get_power_watts() * (30.0f / 3600.0f);
-          }
-          id(boiler_power_w).publish_state(id(is_heating).state ? (float)boiler_get_power_watts() : 0.0f);
-          id(boiler_total_energy).publish_state(id(global_total_energy_wh) / 1000.0f);
+      - lambda: 'boiler_update_energy();'
 
 output:
   - platform: gpio
@@ -306,16 +307,16 @@ select:
     id: boiler_mode_switch
     name: "Boiler Power Mode Set"
     options:
-      - "700W (Low)"
-      - "1300W (Medium)"
-      - "2000W (High)"
-      - "Timer"
-      - "No Frost 5°C"      
-    initial_option: "1300W (Medium)"
+      - ${mode_low}
+      - ${mode_medium}
+      - ${mode_high}
+      - ${mode_timer}
+      - ${mode_no_frost}
+    initial_option: ${mode_medium}
     optimistic: true
     set_action:
       - lambda: |-
-          if (x == "Timer") {
+          if (x == BOILER_STR_MODE_TIMER) {
             id(send_boiler_timer).execute();            
           } else {
             boiler_set_power_level(x);

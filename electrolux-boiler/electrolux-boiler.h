@@ -83,7 +83,7 @@ static const char* boiler_calc_temp_trend(float cur_t, uint8_t mode, bool heatin
     auto it = BOILER_MODE_MAP.find(mode);
     float up_slope = (it != BOILER_MODE_MAP.end()) ? it->second.up_slope : BOILER_TREND_SLOPE_UP_LOW;
     if      (slope >=  up_slope && heating)     trend = BOILER_TREND_STR_UP;
-    else if (slope <= -BOILER_TREND_SLOPE_DOWN) trend = BOILER_TREND_STR_DOWN;
+    else if (slope < -BOILER_TREND_SLOPE_DOWN)  trend = BOILER_TREND_STR_DOWN;
     else                                        trend = BOILER_TREND_STR_STABLE;
 
     // Build chronological buffer string for logging
@@ -139,7 +139,9 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     // raw RX mode byte, because the boiler can report 0x00 in its status packet even
     // while actively heating (e.g. mid-cycle). The global is already updated above.
     // When not heating, temperature can only be Stable or falling — Up is suppressed.
-    bool heating = cur_t <= (tar_t - BOILER_HEAT_THRESHOLD) && id(global_boiler_power_on) == true;
+    bool heating = cur_t <= (tar_t - BOILER_HEAT_THRESHOLD)
+                   && id(global_boiler_power_on)
+                   && bytes[BOILER_RX_IDX_MODE] != BOILER_MODE_TIMER;
     const char* trend = boiler_calc_temp_trend(cur_t, (uint8_t)id(global_boiler_power_level), heating);
     if (trend) id(temp_trend).publish_state(trend);
 
@@ -185,6 +187,15 @@ void boiler_set_power_level(const std::string& x) {
 static int boiler_get_power_watts() {
     auto it = BOILER_MODE_MAP.find((uint8_t)id(global_boiler_power_level));
     return (it != BOILER_MODE_MAP.end()) ? it->second.power_w : 0;
+}
+
+// Accumulate energy for one interval tick and publish power + total energy sensors.
+// Called every BOILER_ENERGY_INTERVAL_S seconds by the ESPHome interval component.
+void boiler_update_energy() {
+    if (id(is_heating).state)
+        id(global_total_energy_wh) += BOILER_WH_PER_INTERVAL(boiler_get_power_watts());
+    id(boiler_power_w).publish_state(id(is_heating).state ? (float)boiler_get_power_watts() : 0.0f);
+    id(boiler_total_energy).publish_state(id(global_total_energy_wh) / BOILER_WH_TO_KWH);
 }
 
 std::vector<uint8_t> boiler_build_tx_packet() {
