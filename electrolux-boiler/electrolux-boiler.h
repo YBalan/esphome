@@ -51,7 +51,8 @@ static void boiler_log_rx(const std::vector<uint8_t>& pkt, uint8_t cs) {
 // Returns nullptr until BOILER_TREND_MIN_SAMPLES readings have been collected.
 // Up threshold varies by mode (faster heating → steeper slope expected).
 // Down threshold is fixed — cooling rate is always passive and gradual.
-static const char* boiler_calc_temp_trend(float cur_t, uint8_t mode) {
+// When heating is false the result is clamped to Stable or Down — temperature cannot rise without active heating.
+static const char* boiler_calc_temp_trend(float cur_t, uint8_t mode, bool heating) {
     static float buf[BOILER_TREND_MAX_SAMPLES] = {};
     static uint8_t pos   = 0;
     static uint8_t count = 0;
@@ -81,7 +82,7 @@ static const char* boiler_calc_temp_trend(float cur_t, uint8_t mode) {
     const char* trend;
     auto it = BOILER_MODE_MAP.find(mode);
     float up_slope = (it != BOILER_MODE_MAP.end()) ? it->second.up_slope : BOILER_TREND_SLOPE_UP_LOW;
-    if      (slope >  up_slope)                trend = BOILER_TREND_STR_UP;
+    if      (slope >  up_slope && heating)     trend = BOILER_TREND_STR_UP;
     else if (slope < -BOILER_TREND_SLOPE_DOWN) trend = BOILER_TREND_STR_DOWN;
     else                                       trend = BOILER_TREND_STR_STABLE;
 
@@ -137,7 +138,9 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     // Trend uses global_boiler_power_level (last known commanded level) rather than the
     // raw RX mode byte, because the boiler can report 0x00 in its status packet even
     // while actively heating (e.g. mid-cycle). The global is already updated above.
-    const char* trend = boiler_calc_temp_trend(cur_t, (uint8_t)id(global_boiler_power_level));
+    // When not heating, temperature can only be Stable or falling — Up is suppressed.
+    bool heating = cur_t <= (tar_t - BOILER_HEAT_THRESHOLD) && id(global_boiler_power_on) == true;
+    const char* trend = boiler_calc_temp_trend(cur_t, (uint8_t)id(global_boiler_power_level), heating);
     if (trend) id(temp_trend).publish_state(trend);
 
     id(boiler_switch).publish_state(id(global_boiler_power_on));
@@ -146,7 +149,7 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     id(bst_active).publish_state(bytes[BOILER_RX_IDX_BST] == BOILER_BST_ACTIVE);
 
     // Smart Heating Detector: heating when cur_t is below tar_t by threshold
-    id(is_heating).publish_state(cur_t <= (tar_t - BOILER_HEAT_THRESHOLD) && id(global_boiler_power_on) == true);
+    id(is_heating).publish_state(heating);
 
     // Boiler internal clock as human-readable HH:MM string
     char time_buf[6];
