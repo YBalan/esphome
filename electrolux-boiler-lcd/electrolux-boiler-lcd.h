@@ -55,6 +55,30 @@ static void lcd_draw_thick_arc(Display& it, int cx, int cy, int r, int thickness
     }
 }
 
+// Draws a narrow trend arrow (▲/▼) or dash (–) between the HEATING label and the gauge arc.
+// Up = green ▲, Down = blue ▼, Stable = grey –.
+template<typename Display>
+static void lcd_draw_trend(Display& it, const std::string& trend) {
+    if (trend == LCD_STR_TREND_UP) {
+        it.filled_triangle(
+            LCD_TREND_CX,                LCD_TREND_Y_TOP,  // tip
+            LCD_TREND_CX - LCD_TREND_HW, LCD_TREND_Y_BOT,  // base left
+            LCD_TREND_CX + LCD_TREND_HW, LCD_TREND_Y_BOT,  // base right
+            id(green));
+    } else if (trend == LCD_STR_TREND_DOWN) {
+        it.filled_triangle(
+            LCD_TREND_CX - LCD_TREND_HW, LCD_TREND_Y_TOP,  // base left
+            LCD_TREND_CX + LCD_TREND_HW, LCD_TREND_Y_TOP,  // base right
+            LCD_TREND_CX,                LCD_TREND_Y_BOT,  // tip
+            id(blue));
+    } else {
+        it.line(
+            LCD_TREND_CX - LCD_TREND_HW, LCD_TREND_MID,
+            LCD_TREND_CX + LCD_TREND_HW, LCD_TREND_MID,
+            Color(LCD_COLOR_DIM, LCD_COLOR_DIM, LCD_COLOR_DIM));
+    }
+}
+
 // Renders the boiler LCD screen: AP-mode setup page or live gauge/info page.
 template<typename Display>
 static void lcd_draw_screen(Display& it) {
@@ -108,6 +132,9 @@ static void lcd_draw_screen(Display& it) {
 
     if (id(is_bst).state)
         it.print(LCD_MAIN_BST_X + 13, LCD_MAIN_BST_Y, &id(font_small), id(yellow), TextAlign::TOP_RIGHT, LCD_STR_BST);
+
+    // Trend arrow: ▲ Up (green), ▼ Down (blue), – Stable (grey)
+    lcd_draw_trend(it, id(mqtt_raw_trend).state);
 
     it.printf(LCD_MAIN_RSSI_X, LCD_MAIN_RSSI_Y, &id(font_small), Color(LCD_COLOR_DIM, LCD_COLOR_DIM, LCD_COLOR_DIM), "%.0f dBm", id(wifi_rssi).state);
 }

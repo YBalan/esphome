@@ -53,6 +53,15 @@
 #define LCD_MAIN_BST_X              230   // X position of BST label (bottom-right)
 #define LCD_MAIN_BST_Y              118   // Y position of BST label
 
+// ─── Trend Arrow ──────────────────────────────────────────────────────────────
+// Narrow filled-triangle arrow drawn between the HEATING label (bottom ~Y=19)
+// and the top of the gauge arc (~Y=30). Stable draws a dash (–).
+#define LCD_TREND_CX        220   // X center of trend arrow (right side, below HEATING label)
+#define LCD_TREND_Y_TOP      20   // Y top of arrow (just below HEATING/STANDBY label)
+#define LCD_TREND_Y_BOT      29   // Y bottom of arrow (just above gauge arc top)
+#define LCD_TREND_HW          3   // Half-width in pixels (total 6 px — narrow)
+#define LCD_TREND_MID        ((LCD_TREND_Y_TOP + LCD_TREND_Y_BOT) / 2)  // Vertical midpoint for dash
+
 // ─── UI Strings ───────────────────────────────────────────────────────────────
 #define LCD_STR_SETUP_TITLE         "WIFI SETUP MODE"
 #define LCD_STR_SETUP_CONNECT       "Connect to Wi-Fi:"
@@ -61,3 +70,6 @@
 #define LCD_STR_STANDBY             "STANDBY"
 #define LCD_STR_BST                 "BST"
 #define LCD_STR_HEATING_STATE_ON    "ON"    // MQTT payload for heating active
+#define LCD_STR_TREND_UP            "Up"
+#define LCD_STR_TREND_DOWN          "Down"
+#define LCD_STR_TREND_STABLE        "Stable"

@@ -159,6 +159,16 @@ text_sensor:
             args: [ 'x.c_str()' ]
        - component.update: my_display
 
+  - platform: mqtt_subscribe
+    id: mqtt_raw_trend
+    topic: "boiler/sensor/boiler_temp_trend/state"
+    on_value:
+      then:
+       - logger.log:
+            format: "MQTT Trend Received: %s"
+            args: [ 'x.c_str()' ]
+       - component.update: my_display
+
 sensor:
   - platform: template
     id: current_temp
