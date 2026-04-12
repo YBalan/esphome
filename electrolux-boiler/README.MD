@@ -60,7 +60,7 @@ ESPHome configuration and 3D-printable enclosure parts for integrating an Electr
 | Boiler Heating | Binary sensor | — | `heat` device class; true when cur_t ≤ tar_t − threshold |
 | Boiler BST Mode | Binary sensor | — | Bacteria Stop Technology active |
 | Online Status | Binary sensor | — | Connected to WiFi/MQTT |
-| Boiler Temp Trend | Text sensor | — | `Up` / `Down` / `Stable` (ring buffer, 2–4 samples) |
+| Boiler Temp Trend | Text sensor | — | `Up` / `Down` / `Stable` — linear-regression slope over 4 samples; Up threshold varies by mode; clamped to `Stable`/`Down` when not heating |
 | Boiler Power Mode | Text sensor | — | e.g. `1300W (Medium)`, `Timer`, `No Frost 5°C` |
 | Boiler Clock | Text sensor | `HH:MM` | Boiler's internal clock (synced from NTP) |
 | Boiler Timer Start Time | Text sensor | `HH:MM` | Scheduled start time echoed back from boiler |
@@ -72,7 +72,7 @@ ESPHome configuration and 3D-printable enclosure parts for integrating an Electr
 |------|------|-----------------|
 | Boiler Main Power | Switch | On / Off |
 | Boiler BST Mode | Switch | On / Off (Bacteria Stop Technology) |
-| Boiler Power Mode Set | Select | `700W (Low)` · `1300W (Medium)` · `2000W (High)` · `Timer` · `No Frost 5°C` |
+| Boiler Power Mode Set | Select | `700W (Low)` · `1300W (Medium)` · `2000W (High)` · `Timer` · `No Frost 5°C` — option strings defined as YAML substitutions and kept in sync with C defines |
 | Boiler Target Temp Set | Number (slider) | 35 °C – 75 °C, step 1 |
 | Boiler Timer Start Hour | Number (box) | 0 – 23, step 1 |
 | Boiler Timer Start Minute | Number (box) | 0 – 55, step 5 |
@@ -90,11 +90,30 @@ The timer is a **scheduled start time** (not a countdown). When activated:
 
 The boiler will start heating at the scheduled clock time using the current target temperature.
 
+> ⚠️ **Timer mode is treated as not-heating**: while the boiler reports `Timer` mode it is idle (waiting for the scheduled start), so `is_heating` is always `false`. This means no energy is accumulated and the temperature trend is clamped to `Stable` or `Down`.
+
 ### Energy Tracking
 
 - **Boiler Power** reflects the element's rated wattage (700 / 1300 / 2000 W) while `is_heating` is true
 - **Boiler Total Energy** accumulates Wh every 30 s and survives reboots (`restore_value: true`)
+- Energy is **not** accumulated in Timer mode — the boiler is idle while waiting for the scheduled start time
 - Add **Boiler Total Energy** to the HA Energy Dashboard under *Settings → Energy → Individual devices*
+
+### Temperature Trend
+
+The `Boiler Temp Trend` sensor publishes `Up`, `Down`, or `Stable` using a **least-squares linear regression** over a 4-sample ring buffer (one sample per ~30 s packet):
+
+- **Up threshold** is mode-dependent — faster heating modes require a steeper slope to avoid false positives:
+
+  | Mode | Up slope threshold |
+  |------|--------------------|
+  | 2000W (High) | 0.50 °C/sample |
+  | 1300W (Medium) | 0.35 °C/sample |
+  | 700W (Low) / Timer | 0.20 °C/sample |
+  | No Frost / Off | 0.10 °C/sample |
+
+- **Down threshold** is fixed at 0.10 °C/sample — cooling is always passive and gradual
+- When `is_heating` is `false`, the result is clamped to `Stable` or `Down` — temperature cannot rise without active heating
 
 ### Protocol Reference
 
