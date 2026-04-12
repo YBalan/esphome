@@ -1,21 +1,25 @@
 substitutions:
   device_name: electrolux-boiler-lcd
+  screen_timeout: "60s"
 
 esphome:
   name: ${device_name}
-  on_boot:    
+  includes:
+    - electrolux-boiler-lcd-defines.h
+    - electrolux-boiler-lcd.h
+  on_boot:
     - priority: 800
       then:
-        - logger.log: "ON_BOOT IS WORKING"
-        - script.execute: wake_screen_script
+        - logger.log: "ON_BOOT IS WORKING"  
+        - script.execute: wake_screen_script      
 
 esp32:
   board: esp32dev
   framework:
-    type: esp-idf  #arduino #esp-idf  # Arduino better supports some display functions
+    type: esp-idf
 
 logger:
-  level: INFO
+  level: INFO  
 
 ota:
   - platform: esphome
@@ -32,15 +36,14 @@ web_server:
 api:
 
 mqtt:
-  broker: !secret mqtt_broker
-  client_id: esp32_electrolux_boiler_lcd_client
+  broker: !secret mqtt_broker  
   username: !secret mqtt_username
   password: !secret mqtt_password
   port: 1883
   topic_prefix: boiler/lcd
   discovery: true
   on_message:
-    - topic: "boiler/debug" # Если у бойлера включен log_topic
+    - topic: "boiler/debug" # If the boiler has log_topic enabled
       then:
         - logger.log:
             format: "Boiler Log says: %s"
@@ -48,12 +51,13 @@ mqtt:
 
 globals:
   - id: current_brightness_val
-    type: float
+    type: float    
     initial_value: '0.7'
+    restore_value: true
   - id: rotation_setting
     type: int
-    initial_value: '90' # Start with USB on the Left
-    
+    initial_value: '90' # Start with USB on the Left    
+    restore_value: true
 
 button:
   # WiFi Reset Button
@@ -61,46 +65,34 @@ button:
     name: "Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
-    # This button will automatically appear in Home Assistant 
-    # and will be published to MQTT topic: boiler/button/reset_device_wifi/command
-  # 2. Toggle Landscape Rotation Button (90 and 270)
+  # Toggle Landscape Rotation Button — disabled (display off)
   - platform: template
     name: "Toggle Landscape Rotation"
     id: toggle_rot_btn
     icon: "mdi:screen-rotation"
     on_press:
       then:
-        - lambda: |-
-            // Toggle logic between 90 and 270
-            if (id(rotation_setting) == 90) id(rotation_setting) = 270;
-            else id(rotation_setting) = 90;
-
-            // Apply to the display
-            if (id(rotation_setting) == 90) id(my_display).set_rotation(DISPLAY_ROTATION_90_DEGREES);
-            else id(my_display).set_rotation(DISPLAY_ROTATION_270_DEGREES);
-            
-            id(my_display).update();
+        - lambda: 'lcd_toggle_rotation();'
         - script.execute: wake_screen_script
-        
+        - logger.log: "Rotation toggled"
+
 number:
   - platform: template
     name: "Display Brightness"
     id: brightness_slider
     icon: "mdi:brightness-6"
-    min_value: 0.1   # 10% (not 0, to keep screen visible)
-    max_value: 1.0   # 100%
+    min_value: 0.1
+    max_value: 1.0
     step: 0.1
     mode: slider
     optimistic: true
-    initial_value: 0.8
-    # This will be visible in HA and controllable via MQTT
-    # MQTT Topic: boiler_remote/number/display_brightness/command
+    restore_value: true
+    initial_value: 0.7
     on_value:
       then:
         - globals.set:
             id: current_brightness_val
             value: !lambda "return x;"
-        # Apply immediately if the screen is currently awake
         - if:
             condition:
               light.is_on: display_backlight
@@ -108,7 +100,10 @@ number:
               - light.turn_on:
                   id: display_backlight
                   brightness: !lambda "return x;"
-        - script.execute: wake_screen_script
+        #- script.execute: wake_screen_script
+        - logger.log:
+            format: "Brightness set to: %.1f"
+            args: [ 'x' ]
 
 # --- MQTT SUBSCRIPTIONS ---
 text_sensor:
@@ -121,7 +116,7 @@ text_sensor:
             format: "MQTT Received: %s"
             args: [ 'x.c_str()' ]
        - component.update: current_temp
-       - component.update: my_display       
+       - component.update: my_display
 
   - platform: mqtt_subscribe
     id: mqtt_raw_target
@@ -132,7 +127,7 @@ text_sensor:
             format: "MQTT Received: %s"
             args: [ 'x.c_str()' ]
        - component.update: target_temp
-       - component.update: my_display 
+       - component.update: my_display
 
   - platform: mqtt_subscribe
     id: mqtt_raw_heating
@@ -141,8 +136,38 @@ text_sensor:
       then:
        - logger.log: 
             format: "MQTT Received: %s"
-            args: [ 'x.c_str()' ]       
-       - component.update: my_display 
+            args: [ 'x.c_str()' ]   
+       - component.update: my_display
+
+  - platform: mqtt_subscribe
+    id: mqtt_raw_mode
+    topic: "boiler/sensor/boiler_power_mode/state"
+    on_value:
+      then:
+       - logger.log:
+            format: "MQTT Mode Received: %s"
+            args: [ 'x.c_str()' ]
+       - component.update: my_display
+
+  - platform: mqtt_subscribe
+    id: mqtt_raw_bst
+    topic: "boiler/binary_sensor/boiler_bst_mode/state"
+    on_value:
+      then:
+       - logger.log:
+            format: "MQTT BST Received: %s"
+            args: [ 'x.c_str()' ]
+       - component.update: my_display
+
+  - platform: mqtt_subscribe
+    id: mqtt_raw_trend
+    topic: "boiler/sensor/boiler_temp_trend/state"
+    on_value:
+      then:
+       - logger.log:
+            format: "MQTT Trend Received: %s"
+            args: [ 'x.c_str()' ]
+       - component.update: my_display
 
 sensor:
   - platform: template
@@ -165,20 +190,22 @@ binary_sensor:
   - platform: template
     id: is_heating
     lambda: 'return id(mqtt_raw_heating).state == "ON";'
-  # 1. Internal status sensor (ON when connected to WiFi/MQTT, OFF otherwise)
+  - platform: template
+    id: is_bst
+    lambda: 'return id(mqtt_raw_bst).state == "ON";'
   - platform: status
     id: online_status
 
-  # Physical buttons on T-Display
   - platform: gpio
     pin: { number: 0, inverted: true, mode: INPUT_PULLUP }
-    name: "Button Left"  
+    name: "Button Left"
     filters:
       - delayed_on: 50ms
     on_press:
       then:
         - script.execute: cycle_brightness_script
-        - script.execute: wake_screen_script    
+        - script.execute: wake_screen_script
+        - logger.log: "Button Left pressed"
 
   - platform: gpio
     pin: { number: 35, inverted: true }
@@ -186,24 +213,13 @@ binary_sensor:
     on_press:
       then:
         - script.execute: wake_screen_script
+        - logger.log: "Button Right pressed"
 
-# 2. Logic to keep backlight ON during AP mode
+#interval — disabled (display off)
 interval:
   - interval: 5s
     then:
-      - lambda: |-
-          if (!id(online_status).state) {
-            // Force backlight ON if not connected
-            auto call = id(display_backlight).make_call();
-            call.set_brightness(id(current_brightness_val));
-            call.set_state(true);
-            call.perform();
-          }    
-
-# --- DISPLAY CONFIG ---
-spi:
-  clk_pin: 18
-  mosi_pin: 19
+      - lambda: 'lcd_ensure_backlight_ap_mode();'
 
 font:
   - file: "gfonts://Roboto"
@@ -242,120 +258,23 @@ color:
     green: 80%
     blue: 0%
 
+#--- DISPLAY CONFIG
+spi:
+  clk_pin: 18
+  mosi_pin: 19
+
 display:
   - platform: st7789v
     id: my_display
     model: TTGO_TDISPLAY_135X240
-    # Назначаем "подсветку" на пустой пин, чтобы освободить GPIO4
-    backlight_pin: GPIO33 
+    backlight_pin: GPIO33
     rotation: 90
     cs_pin: 5
     dc_pin: 16
     reset_pin: 23
     update_interval: 60s
-    lambda: |-          
+    lambda: 'lcd_draw_screen(it);'
 
-      // --- CHECK IF ONLINE ---
-      if (!id(online_status).state) {
-        int w = it.get_width();
-        int h = it.get_height();
-        int cx = w / 2;
-        // DRAW SETUP SCREEN (AP MODE)
-        it.fill(id(black));
-        it.rectangle(0, 0, w, h, id(blue));
-        it.printf(cx, 20, id(font_medium), id(white), TextAlign::CENTER, "WIFI SETUP MODE");
-        
-        it.printf(cx, 55, id(font_small), id(white), TextAlign::CENTER, "Connect to Wi-Fi:");
-        it.printf(cx, 75, id(font_medium), id(yellow), TextAlign::CENTER, "AP-Boiler-LCD");
-        
-        //it.printf(cx, 105, id(font_small), id(white), TextAlign::CENTER, "Open browser at:");
-        //it.printf(cx, 120, id(font_small), id(white), TextAlign::CENTER, "192.168.4.1");
-        return; // Important: stop drawing boiler UI
-      }
-      
-      it.fill(black);
-
-      // --- DRAW GAUGE MANUALLY ---
-      int cx = 120; // Center X
-      int cy = 130; // Center Y (shifted down)
-      int r = 100;  // Radius
-      
-      int thickness = 10; // ТОЛЩИНА ЛИНИИ в пикселях
-
-      // Функция для рисования ЖИРНОЙ дуги
-      auto draw_thick_arc = [&](int start_angle, int end_angle, Color color) {
-        for (int t = 0; t < thickness; t++) {
-          int current_r = r - t;
-          for (int a = start_angle; a < end_angle; a++) {
-            float rad1 = a * M_PI / 180.0;
-            float rad2 = (a + 1) * M_PI / 180.0;
-            it.line(cx + current_r * cos(rad1), cy + current_r * sin(rad1), 
-                    cx + current_r * cos(rad2), cy + current_r * sin(rad2), color);
-          }
-        }
-      };
-      
-      // Helper function for drawing arcs using lines
-      auto draw_arc = [&](int start_angle, int end_angle, Color color) {
-        for (int a = start_angle; a < end_angle; a++) {
-          float rad1 = a * M_PI / 180.0;
-          float rad2 = (a + 1) * M_PI / 180.0;
-          it.line(cx + r * cos(rad1), cy + r * sin(rad1), 
-                  cx + r * cos(rad2), cy + r * sin(rad2), color);
-          // Draw a second line for thickness
-          it.line(cx + (r-1) * cos(rad1), cy + (r-1) * sin(rad1), 
-                  cx + (r-1) * cos(rad2), cy + (r-1) * sin(rad2), color);
-        }
-      };
-
-      // Draw Segments: Blue (Cold), Green (OK), Yellow (Hot), Red (Danger)
-      draw_thick_arc(180, 225, blue);
-      draw_thick_arc(225, 315, green);
-      draw_thick_arc(315, 345, yellow);
-      draw_thick_arc(345, 360, red);
-
-      // --- DRAW NEEDLE ---
-      float temp = id(current_temp).state;
-      if (std::isnan(temp) || temp < 30) temp = 30;
-      if (temp > 75) temp = 75;
-      
-      // Map 30..75 C to 180..360 degrees
-      float angle = 180.0 + (temp - 30.0) * (180.0 / 45.0);
-      float rad = angle * M_PI / 180.0;
-      
-      int px = cx + (r) * cos(rad);
-      int py = cy + (r) * sin(rad);
-      
-      // Draw needle line and head
-      //it.line(cx, cy - 25, px, py, white);
-      it.filled_circle(px, py, 6, white);
-
-      // --- DISPLAY DATA TEXT ---
-      // Big Central Temperature
-      if (id(current_temp).has_state()) {
-        it.printf(cx, 85, id(font_huge), white, TextAlign::CENTER, "%.0f°", id(current_temp).state);
-      }
-      
-      //it.printf(0, 0, id(font_small), white, "Raw: %s", id(mqtt_raw_temp).state.c_str());
-
-      // Status Labels
-      //it.print(10, 5, id(font_small), white, "BOILER");
-      it.printf(10, 5, id(font_medium), Color(200,200,200), "%.0f°", id(target_temp).state);
-      
-      if (id(is_heating).state) {
-        it.print(230, 5, id(font_small), red, TextAlign::TOP_RIGHT, "HEATING");
-      } else {
-        it.print(230, 5, id(font_small), green, TextAlign::TOP_RIGHT, "STANDBY");
-      }
-
-      // Bottom Info: 
-      it.printf(10, 118, id(font_small), Color(200,200,200), "%.0f dBm", id(wifi_rssi).state);
-      
-      //if (id(mqtt_raw_uptime).has_state()) {
-        //it.print(230, 120, id(font_small), Color(150,150,150), TextAlign::BOTTOM_RIGHT, id(mqtt_raw_uptime).state.c_str());
-      //}
-
-# 1. ОСВОБОЖДАЕМ ПИН 4 ДЛЯ ЯРКОСТИ
 output:
   - platform: ledc
     pin: GPIO4
@@ -366,31 +285,22 @@ light:
     output: backlight_pwm
     name: "Display Switch"
     id: display_backlight
-    #internal: true
-    restore_mode: ALWAYS_ON
+    restore_mode: RESTORE_AND_OFF    
     on_state:
       then:
-        - script.execute: wake_screen_script
+        - logger.log: "Display backlight turned"            
 
-# 5. КНОПКИ И СКРИПТ (Автовыключение)
 script:
   - id: cycle_brightness_script
     mode: single
     then:
-      - lambda: |-
-          // Cycle brightness value
-          id(current_brightness_val) += 0.33;
-          if (id(current_brightness_val) > 1.0) id(current_brightness_val) = 0.33;
-          
-          // SYNC the slider in Home Assistant
-          auto call = id(brightness_slider).make_call();
-          call.set_value(id(current_brightness_val));
-          call.perform();
+      - lambda: 'lcd_cycle_brightness();'
   - id: wake_screen_script
     mode: restart
     then:
       - light.turn_on:
           id: display_backlight
           brightness: !lambda "return id(current_brightness_val);"
-      - delay: 60s
+      - delay: ${screen_timeout}
       - light.turn_off: display_backlight
+      - logger.log: "Wake screen script executed"

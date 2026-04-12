@@ -1,0 +1,47 @@
+substitutions:
+  device_name: test-lcd
+
+esphome:
+  name: ${device_name}  
+  on_boot:
+    - priority: 800
+      then:
+        #- logger.log: "ON_BOOT IS WORKING"
+        #- script.execute: wake_screen_script
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf    
+
+logger:
+  level: DEBUG  
+
+ota:
+  - platform: esphome
+
+wifi:
+  ap:
+    ssid: "AP-Test-LCD"
+    password: "password"
+  fast_connect: true
+
+captive_portal:
+web_server:
+  port: 80
+api:
+
+mqtt:
+  broker: !secret mqtt_broker
+  #client_id: esp32_electrolux_boiler_lcd_client
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  port: 1883
+  topic_prefix: boiler/lcd
+  discovery: true
+  on_message:
+    - topic: "boiler/debug" # If the boiler has log_topic enabled
+      then:
+        - logger.log:
+            format: "Boiler Log says: %s"
+            args: [ 'x.c_str()' ]
