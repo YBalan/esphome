@@ -24,7 +24,7 @@ A collection of ESPHome firmware configurations for various home automation hard
 - Sends mode, temperature, clock-sync, timer and BST commands
 - **Timer mode** — schedules a start time (`HH:MM`); boiler fires at that clock time
 - **Energy tracking** — `Boiler Power` (W) + `Boiler Total Energy` (kWh, HA Energy Dashboard ready)
-- **Temperature trend** — `Up` / `Down` / `Stable` from a 4-sample ring buffer
+- **Temperature trend** — `Up` / `Down` / `Stable` via linear-regression slope over a 4-sample ring buffer; Up threshold is mode-dependent (faster heating = steeper slope required); Down threshold is fixed; only `Down` or `Stable` possible when not actively heating
 - **Standalone monitoring** — ESP32 powered from 5 V USB independently; boiler's internal controller keeps running without mains grid, temperature still reported during grid outages
 - MQTT discovery, web server, NTP clock sync, fallback AP
 
@@ -37,6 +37,7 @@ A collection of ESPHome firmware configurations for various home automation hard
 **TFT display companion** for the Electrolux boiler — subscribes to MQTT topics published by `electrolux-boiler` and renders a live dashboard.
 
 - Real-time current & target temperature, power mode, heating status
+- **Temperature trend arrow** — ▲ green (Up), ▼ blue (Down), – grey (Stable), updated live via MQTT
 - Adjustable brightness slider and landscape rotation toggle
 - Auto-wake on MQTT update; screen-off timeout to prevent burn-in
 - MQTT topic prefix: `boiler/lcd`
