@@ -288,6 +288,9 @@ binary_sensor:
     discharging:
       name: "JBD Discharging State"
       state_topic: "jbdbms/status/discharging"
+    balancing:
+      name: "BMS Balancing State"
+      state_topic: "jkbms/status/balancing"
       
   # Physical BOOT button to wake display
   - platform: gpio
