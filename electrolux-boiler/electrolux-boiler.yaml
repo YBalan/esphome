@@ -157,7 +157,7 @@ sensor:
     unit_of_measurement: "°C"
     device_class: temperature
   - platform: wifi_signal
-    name: "WiFi Signal Sensor"
+    name: "Boiler WiFi Signal Sensor"
     id: wifi_rssi
     update_interval: ${wifi_rssi_interval}
     state_topic: "boiler/wifi_rssi"
@@ -232,14 +232,14 @@ text_sensor:
 
 button:  
   - platform: template
-    name: "Sync Boiler Clock"
+    name: "Boiler Sync Clock"
     id: sync_clock_btn
     icon: "mdi:clock-sync"
     on_press:
       then:
         - script.execute: sync_boiler_time
   - platform: template
-    name: "Run Boiler Timer"
+    name: "Boiler Run Boiler Timer"
     id: set_timer_btn
     icon: "mdi:timer-play-outline"
     on_press:
@@ -247,7 +247,7 @@ button:
         - script.execute: send_boiler_timer
     # WiFi Reset Button
   - platform: factory_reset
-    name: "Reset Device WiFi"
+    name: "Boiler Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
     
