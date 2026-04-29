@@ -1,0 +1,764 @@
+substitutions:
+  # Device
+  device_name: wc-lights
+  friendly_name: WC Lights
+
+  # WiFi AP fallback
+  ap_ssid: AP-WC-Lights
+  ap_password: password
+
+  # Timezone
+  timezone: Europe/Kyiv
+
+  # Hardware pins
+  wc_light_pin: GPIO18
+  bath_light_pin: GPIO19
+  wc_door_pin: GPIO16
+  bath_door_pin: GPIO17
+  rgb_strip_pin: GPIO23
+  reset_counters_pin: GPIO4
+
+  # Door input settings (NO/NC per room)
+  wc_endstop_mode_default: "NC"
+  bath_endstop_mode_default: "NC"
+  door_debounce_on: 20ms
+  door_debounce_off: 20ms
+
+  # MOSFET PWM dimming
+  # Increase if you notice visible flicker, decrease if MOSFET gets warm.
+  led_pwm_frequency: 2000Hz
+
+  # RGB strip
+  rgb_led_count: "8"
+  rgb_order: GRB
+
+  # Night mode schedule
+  night_start_hour: "0"
+  night_start_minute: "0"
+  night_end_hour: "6"
+  night_end_minute: "0"
+
+  # Main lights brightness (%)
+  wc_day_brightness_pct: "100"
+  wc_night_brightness_pct: "30"
+  bath_day_brightness_pct: "100"
+  bath_night_brightness_pct: "30"
+
+  # Door-open timeout before next close is treated as no-entry (seconds)
+  wc_open_timeout_seconds: "10"
+  bath_open_timeout_seconds: "20"
+
+  # Post-visit flashlight duration (seconds)
+  wc_flashlight_duration_seconds: "30"
+  bath_flashlight_duration_seconds: "30"
+
+  # WC occupied indication color (%)
+  wc_inside_red_pct: "100"
+  wc_inside_green_pct: "0"
+  wc_inside_blue_pct: "0"
+
+  # WC post-visit flashlight color (%)
+  wc_flash_red_pct: "100"
+  wc_flash_green_pct: "80"
+  wc_flash_blue_pct: "0"
+
+  # Bath post-visit flashlight color (%)
+  bath_flash_red_pct: "100"
+  bath_flash_green_pct: "80"
+  bath_flash_blue_pct: "0"
+
+  # Diagnostics
+  wifi_rssi_update: 30s
+  visit_sensor_update: 1s
+  main_light_transition: 150ms
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  includes:
+    - wc-lights.h
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+  #baud_rate: 0
+
+ota:
+  - platform: esphome
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: ${timezone}
+
+wifi:  
+  ap:
+    ssid: ${ap_ssid}
+    password: ${ap_password}
+  fast_connect: true
+
+captive_portal:
+
+web_server:
+  port: 80
+
+api:
+
+globals:
+  - id: wc_user_inside_flag
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: bath_user_inside_flag
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: wc_door_open_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: bath_door_open_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: wc_entry_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: bath_entry_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+  - id: wc_last_visit_seconds
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+  - id: bath_last_visit_seconds
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+
+  - id: wc_max_visit_seconds
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+  - id: bath_max_visit_seconds
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+
+  - id: wc_flash_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: bath_flash_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  - id: wc_flash_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: bath_flash_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+script:
+  - id: update_status_strip
+    mode: restart
+    then:
+      - lambda: |-
+          const auto wc_inside_color = wc_lights::color_from_preset(id(wc_inside_color_preset).current_option());
+          const auto wc_flash_color = wc_lights::color_from_preset(id(wc_flash_color_preset).current_option());
+          const auto bath_flash_color = wc_lights::color_from_preset(id(bath_flash_color_preset).current_option());
+
+          wc_lights::update_status_strip(
+            id(status_strip),
+            id(wc_user_inside_flag),
+            id(wc_flash_active),
+            id(bath_flash_active),
+            wc_inside_color.red,
+            wc_inside_color.green,
+            wc_inside_color.blue,
+            wc_flash_color.red,
+            wc_flash_color.green,
+            wc_flash_color.blue,
+            bath_flash_color.red,
+            bath_flash_color.green,
+            bath_flash_color.blue
+          );
+
+  - id: wc_flashlight_script
+    mode: restart
+    then:
+      - lambda: |-
+          wc_lights::set_flag(id(wc_flash_active), true);
+          id(wc_flash_started_ms) = millis();
+      - script.execute: update_status_strip
+      - while:
+          condition:
+            lambda: return !wc_lights::flash_elapsed(id(wc_flash_started_ms), millis(), (int)id(num_wc_flashlight_duration).state);
+          then:
+            - delay: 250ms
+      - lambda: |-
+          wc_lights::set_flag(id(wc_flash_active), false);
+      - script.execute: update_status_strip
+
+  - id: bath_flashlight_script
+    mode: restart
+    then:
+      - lambda: |-
+          wc_lights::set_flag(id(bath_flash_active), true);
+          id(bath_flash_started_ms) = millis();
+      - script.execute: update_status_strip
+      - while:
+          condition:
+            lambda: return !wc_lights::flash_elapsed(id(bath_flash_started_ms), millis(), (int)id(num_bath_flashlight_duration).state);
+          then:
+            - delay: 250ms
+      - lambda: |-
+          wc_lights::set_flag(id(bath_flash_active), false);
+      - script.execute: update_status_strip
+
+  - id: handle_wc_door_open
+    mode: restart
+    then:
+      - lambda: |-
+          wc_lights::handle_room_door_open(id(wc_door_open_started_ms), millis(), id(wc_main_light), (int)id(num_wc_day_brightness).state);
+
+  - id: handle_wc_door_close
+    mode: restart
+    then:
+      - lambda: |-
+          wc_lights::handle_room_door_close(
+            millis(),
+            id(wc_user_inside_flag),
+            id(wc_door_open_started_ms),
+            id(wc_entry_started_ms),
+            id(wc_last_visit_seconds),
+            id(wc_max_visit_seconds),
+            id(wc_main_light),
+            id(wc_flashlight_script),
+            id(update_status_strip),
+            id(wc_user_inside),
+            id(wc_time_inside_sensor),
+            id(wc_max_time_inside_sensor),
+            id(wc_last_visit_sensor),
+            id(sntp_time).now(),
+            (int)id(num_wc_open_timeout).state,
+            (int)id(num_wc_day_brightness).state,
+            (int)id(num_wc_night_brightness).state,
+            (int)id(num_night_start_hour).state,
+            (int)id(num_night_start_minute).state,
+            (int)id(num_night_end_hour).state,
+            (int)id(num_night_end_minute).state
+          );
+
+  - id: handle_bath_door_open
+    mode: restart
+    then:
+      - lambda: |-
+          wc_lights::handle_room_door_open(id(bath_door_open_started_ms), millis(), id(bath_main_light), (int)id(num_bath_day_brightness).state);
+
+  - id: handle_bath_door_close
+    mode: restart
+    then:
+      - lambda: |-
+          wc_lights::handle_room_door_close(
+            millis(),
+            id(bath_user_inside_flag),
+            id(bath_door_open_started_ms),
+            id(bath_entry_started_ms),
+            id(bath_last_visit_seconds),
+            id(bath_max_visit_seconds),
+            id(bath_main_light),
+            id(bath_flashlight_script),
+            id(update_status_strip),
+            id(bath_user_inside),
+            id(bath_time_inside_sensor),
+            id(bath_max_time_inside_sensor),
+            id(bath_last_visit_sensor),
+            id(sntp_time).now(),
+            (int)id(num_bath_open_timeout).state,
+            (int)id(num_bath_day_brightness).state,
+            (int)id(num_bath_night_brightness).state,
+            (int)id(num_night_start_hour).state,
+            (int)id(num_night_start_minute).state,
+            (int)id(num_night_end_hour).state,
+            (int)id(num_night_end_minute).state
+          );
+
+  - id: reset_all_counters_script
+    mode: restart
+    then:
+      - lambda: |-
+          wc_lights::reset_all_visit_counters(
+            id(wc_last_visit_seconds),
+            id(bath_last_visit_seconds),
+            id(wc_max_visit_seconds),
+            id(bath_max_visit_seconds),
+            id(wc_last_visit_sensor),
+            id(bath_last_visit_sensor),
+            id(wc_max_time_inside_sensor),
+            id(bath_max_time_inside_sensor)
+          );
+
+output:
+  - platform: ledc
+    id: wc_light_output
+    pin: ${wc_light_pin}
+    frequency: ${led_pwm_frequency}
+
+  - platform: ledc
+    id: bath_light_output
+    pin: ${bath_light_pin}
+    frequency: ${led_pwm_frequency}
+
+light:
+  - platform: monochromatic
+    id: wc_main_light
+    name: WC - Light
+    output: wc_light_output
+    default_transition_length: ${main_light_transition}
+    restore_mode: ALWAYS_OFF
+
+  - platform: monochromatic
+    id: bath_main_light
+    name: Bath - Light
+    output: bath_light_output
+    default_transition_length: ${main_light_transition}
+    restore_mode: ALWAYS_OFF
+
+  - platform: esp32_rmt_led_strip
+    id: status_strip
+    name: WC - Status Strip
+    pin: ${rgb_strip_pin}
+    num_leds: ${rgb_led_count}
+    rgb_order: ${rgb_order}
+    chipset: ws2812
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 0s
+
+binary_sensor:
+  - platform: gpio
+    id: wc_door_raw
+    internal: true
+    pin:
+      number: ${wc_door_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: false
+    filters:
+      - delayed_on: ${door_debounce_on}
+      - delayed_off: ${door_debounce_off}
+
+  - platform: gpio
+    id: bath_door_raw
+    internal: true
+    pin:
+      number: ${bath_door_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: false
+    filters:
+      - delayed_on: ${door_debounce_on}
+      - delayed_off: ${door_debounce_off}
+
+  - platform: template
+    id: wc_door_sensor
+    name: WC - Door
+    device_class: door
+    lambda: |-
+      return wc_lights::resolve_endstop_state(id(wc_door_raw).state, id(wc_endstop_mode).current_option());
+    on_press:
+      then:
+        - script.execute: handle_wc_door_open
+    on_release:
+      then:
+        - script.execute: handle_wc_door_close
+
+  - platform: template
+    id: bath_door_sensor
+    name: Bath - Door
+    device_class: door
+    lambda: |-
+      return wc_lights::resolve_endstop_state(id(bath_door_raw).state, id(bath_endstop_mode).current_option());
+    on_press:
+      then:
+        - script.execute: handle_bath_door_open
+    on_release:
+      then:
+        - script.execute: handle_bath_door_close
+
+  - platform: template
+    id: wc_user_inside
+    name: WC - User Inside
+    device_class: occupancy
+    lambda: |-
+      return wc_lights::to_binary_state(id(wc_user_inside_flag));
+
+  - platform: template
+    id: bath_user_inside
+    name: Bath - User Inside
+    device_class: occupancy
+    lambda: |-
+      return wc_lights::to_binary_state(id(bath_user_inside_flag));
+
+  - platform: gpio
+    id: reset_counters_gpio
+    name: Reset Visit Counters GPIO
+    internal: true
+    pin:
+      number: ${reset_counters_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 30ms
+    on_press:
+      then:
+        - script.execute: reset_all_counters_script
+
+sensor:
+  - platform: wifi_signal
+    name: Device - WiFi RSSI
+    id: wifi_rssi
+    update_interval: ${wifi_rssi_update}
+    entity_category: diagnostic
+
+  - platform: template
+    id: wc_time_inside_sensor
+    name: WC - Time User Spent Inside
+    unit_of_measurement: s
+    accuracy_decimals: 0
+    icon: mdi:timer-outline
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::room_time_inside_seconds(id(wc_user_inside_flag), id(wc_entry_started_ms), millis());
+
+  - platform: template
+    id: bath_time_inside_sensor
+    name: Bath - Time User Spent Inside
+    unit_of_measurement: s
+    accuracy_decimals: 0
+    icon: mdi:timer-outline
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::room_time_inside_seconds(id(bath_user_inside_flag), id(bath_entry_started_ms), millis());
+
+  - platform: template
+    id: wc_max_time_inside_sensor
+    name: WC - Max Time User Inside
+    unit_of_measurement: s
+    accuracy_decimals: 0
+    icon: mdi:timer-star-outline
+    update_interval: 10s
+    lambda: |-
+      return wc_lights::to_float_seconds(id(wc_max_visit_seconds));
+
+  - platform: template
+    id: bath_max_time_inside_sensor
+    name: Bath - Max Time User Inside
+    unit_of_measurement: s
+    accuracy_decimals: 0
+    icon: mdi:timer-star-outline
+    update_interval: 10s
+    lambda: |-
+      return wc_lights::to_float_seconds(id(bath_max_visit_seconds));
+
+  - platform: template
+    id: wc_last_visit_sensor
+    name: WC - Last Visit Duration
+    unit_of_measurement: s
+    accuracy_decimals: 0
+    icon: mdi:history
+    update_interval: never
+    lambda: |-
+      return wc_lights::to_float_seconds(id(wc_last_visit_seconds));
+
+  - platform: template
+    id: bath_last_visit_sensor
+    name: Bath - Last Visit Duration
+    unit_of_measurement: s
+    accuracy_decimals: 0
+    icon: mdi:history
+    update_interval: never
+    lambda: |-
+      return wc_lights::to_float_seconds(id(bath_last_visit_seconds));
+
+button:
+  - platform: template
+    id: reset_visit_counters_button
+    name: Device - Reset Visit Counters
+    icon: mdi:counter
+    entity_category: config
+    on_press:
+      then:
+        - script.execute: reset_all_counters_script
+
+  - platform: factory_reset
+    id: reset_wifi_button
+    name: Device - Reset WiFi and Device Settings
+    icon: mdi:wifi-cog
+    entity_category: config
+
+  - platform: restart
+    id: restart_device_button
+    name: Device - Restart Device
+    icon: mdi:restart
+    entity_category: config
+
+select:
+  - platform: template
+    id: wc_endstop_mode
+    name: WC - Endstop Mode
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: ${wc_endstop_mode_default}
+    options:
+      - "NC"
+      - "NO"
+
+  - platform: template
+    id: bath_endstop_mode
+    name: Bath - Endstop Mode
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: ${bath_endstop_mode_default}
+    options:
+      - "NC"
+      - "NO"
+
+  - platform: template
+    id: wc_inside_color_preset
+    name: WC - Inside Color
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Red"
+    options:
+      - "Red"
+      - "Green"
+      - "Blue"
+      - "Yellow"
+      - "Orange"
+      - "Purple"
+      - "Cyan"
+      - "White"
+      - "Warm White"
+      - "Pink"
+
+  - platform: template
+    id: wc_flash_color_preset
+    name: WC - Flash Color
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Yellow"
+    options:
+      - "Red"
+      - "Green"
+      - "Blue"
+      - "Yellow"
+      - "Orange"
+      - "Purple"
+      - "Cyan"
+      - "White"
+      - "Warm White"
+      - "Pink"
+
+  - platform: template
+    id: bath_flash_color_preset
+    name: Bath - Flash Color
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_option: "Yellow"
+    options:
+      - "Red"
+      - "Green"
+      - "Blue"
+      - "Yellow"
+      - "Orange"
+      - "Purple"
+      - "Cyan"
+      - "White"
+      - "Warm White"
+      - "Pink"
+
+number:
+  # Night mode schedule
+  - platform: template
+    id: num_night_start_hour
+    name: Device - Night Start Hour
+    entity_category: config
+    icon: mdi:weather-night
+    unit_of_measurement: h
+    optimistic: true
+    restore_value: true
+    initial_value: ${night_start_hour}
+    min_value: 0
+    max_value: 23
+    step: 1
+
+  - platform: template
+    id: num_night_start_minute
+    name: Device - Night Start Minute
+    entity_category: config
+    icon: mdi:weather-night
+    unit_of_measurement: min
+    optimistic: true
+    restore_value: true
+    initial_value: ${night_start_minute}
+    min_value: 0
+    max_value: 59
+    step: 1
+
+  - platform: template
+    id: num_night_end_hour
+    name: Device - Night End Hour
+    entity_category: config
+    icon: mdi:weather-sunny
+    unit_of_measurement: h
+    optimistic: true
+    restore_value: true
+    initial_value: ${night_end_hour}
+    min_value: 0
+    max_value: 23
+    step: 1
+
+  - platform: template
+    id: num_night_end_minute
+    name: Device - Night End Minute
+    entity_category: config
+    icon: mdi:weather-sunny
+    unit_of_measurement: min
+    optimistic: true
+    restore_value: true
+    initial_value: ${night_end_minute}
+    min_value: 0
+    max_value: 59
+    step: 1
+
+  # WC brightness
+  - platform: template
+    id: num_wc_day_brightness
+    name: WC - Day Brightness
+    entity_category: config
+    icon: mdi:brightness-7
+    unit_of_measurement: "%"
+    optimistic: true
+    restore_value: true
+    initial_value: ${wc_day_brightness_pct}
+    min_value: 0
+    max_value: 100
+    step: 1
+
+  - platform: template
+    id: num_wc_night_brightness
+    name: WC - Night Brightness
+    entity_category: config
+    icon: mdi:brightness-3
+    unit_of_measurement: "%"
+    optimistic: true
+    restore_value: true
+    initial_value: ${wc_night_brightness_pct}
+    min_value: 0
+    max_value: 100
+    step: 1
+
+  # Bath brightness
+  - platform: template
+    id: num_bath_day_brightness
+    name: Bath - Day Brightness
+    entity_category: config
+    icon: mdi:brightness-7
+    unit_of_measurement: "%"
+    optimistic: true
+    restore_value: true
+    initial_value: ${bath_day_brightness_pct}
+    min_value: 0
+    max_value: 100
+    step: 1
+
+  - platform: template
+    id: num_bath_night_brightness
+    name: Bath - Night Brightness
+    entity_category: config
+    icon: mdi:brightness-3
+    unit_of_measurement: "%"
+    optimistic: true
+    restore_value: true
+    initial_value: ${bath_night_brightness_pct}
+    min_value: 0
+    max_value: 100
+    step: 1
+
+  # Door open timeouts
+  - platform: template
+    id: num_wc_open_timeout
+    name: WC - Door Open Timeout
+    entity_category: config
+    icon: mdi:timer-outline
+    unit_of_measurement: s
+    optimistic: true
+    restore_value: true
+    initial_value: ${wc_open_timeout_seconds}
+    min_value: 1
+    max_value: 300
+    step: 1
+
+  - platform: template
+    id: num_bath_open_timeout
+    name: Bath - Door Open Timeout
+    entity_category: config
+    icon: mdi:timer-outline
+    unit_of_measurement: s
+    optimistic: true
+    restore_value: true
+    initial_value: ${bath_open_timeout_seconds}
+    min_value: 1
+    max_value: 300
+    step: 1
+
+  # Post-visit flash durations
+  - platform: template
+    id: num_wc_flashlight_duration
+    name: WC - Post Visit Flash Duration
+    entity_category: config
+    icon: mdi:flash-outline
+    unit_of_measurement: s
+    optimistic: true
+    restore_value: true
+    initial_value: ${wc_flashlight_duration_seconds}
+    min_value: 0
+    max_value: 300
+    step: 1
+
+  - platform: template
+    id: num_bath_flashlight_duration
+    name: Bath - Post Visit Flash Duration
+    entity_category: config
+    icon: mdi:flash-outline
+    unit_of_measurement: s
+    optimistic: true
+    restore_value: true
+    initial_value: ${bath_flashlight_duration_seconds}
+    min_value: 0
+    max_value: 300
+    step: 1
+
