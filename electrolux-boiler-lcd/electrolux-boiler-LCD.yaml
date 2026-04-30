@@ -62,7 +62,7 @@ globals:
 button:
   # WiFi Reset Button
   - platform: factory_reset
-    name: "Reset Device WiFi"
+    name: "LCD Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
   # Toggle Landscape Rotation Button — disabled (display off)
@@ -181,7 +181,7 @@ sensor:
     lambda: 'return atof(id(mqtt_raw_target).state.c_str());'
     
   - platform: wifi_signal
-    name: "WiFi Signal Sensor"
+    name: "LCD WiFi Signal Sensor"
     id: wifi_rssi
     update_interval: 30s
     state_topic: "boiler/lcd/wifi_rssi"
