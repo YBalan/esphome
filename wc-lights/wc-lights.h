@@ -4,6 +4,8 @@
 #include <string>
 
 #include "esphome/core/time.h"
+#include "esphome/core/color.h"
+#include "esphome/components/light/addressable_light.h"
 #include "esphome/components/light/light_state.h"
 
 namespace wc_lights {
@@ -121,10 +123,12 @@ inline RgbPct color_from_preset(const std::string &preset) {
 }
 
 inline void update_status_strip(
-  esphome::light::LightState *strip,
+  esphome::light::AddressableLightState *strip,
   const bool wc_user_inside,
   const bool wc_flash_active,
   const bool bath_flash_active,
+  const int wc_inside_brightness_pct,
+  const int flash_brightness_pct,
   const int wc_inside_red_pct,
   const int wc_inside_green_pct,
   const int wc_inside_blue_pct,
@@ -133,34 +137,75 @@ inline void update_status_strip(
   const int wc_flash_blue_pct,
   const int bath_flash_red_pct,
   const int bath_flash_green_pct,
-  const int bath_flash_blue_pct
+  const int bath_flash_blue_pct,
+  const int active_led_count
 ) {
-  auto call = strip->turn_off();
+  auto *addr = static_cast<esphome::light::AddressableLight *>(strip->get_output());
+
+  int red_pct = 0;
+  int green_pct = 0;
+  int blue_pct = 0;
+  int brightness_pct = 100;
 
   if (wc_user_inside) {
-    call = strip->turn_on();
-    call.set_rgb(
-      pct_to_unit(wc_inside_red_pct),
-      pct_to_unit(wc_inside_green_pct),
-      pct_to_unit(wc_inside_blue_pct)
-    );
+    red_pct = wc_inside_red_pct;
+    green_pct = wc_inside_green_pct;
+    blue_pct = wc_inside_blue_pct;
+    brightness_pct = wc_inside_brightness_pct;
   } else if (wc_flash_active) {
-    call = strip->turn_on();
-    call.set_rgb(
-      pct_to_unit(wc_flash_red_pct),
-      pct_to_unit(wc_flash_green_pct),
-      pct_to_unit(wc_flash_blue_pct)
-    );
+    red_pct = wc_flash_red_pct;
+    green_pct = wc_flash_green_pct;
+    blue_pct = wc_flash_blue_pct;
+    brightness_pct = flash_brightness_pct;
   } else if (bath_flash_active) {
-    call = strip->turn_on();
-    call.set_rgb(
-      pct_to_unit(bath_flash_red_pct),
-      pct_to_unit(bath_flash_green_pct),
-      pct_to_unit(bath_flash_blue_pct)
-    );
+    red_pct = bath_flash_red_pct;
+    green_pct = bath_flash_green_pct;
+    blue_pct = bath_flash_blue_pct;
+    brightness_pct = flash_brightness_pct;
   }
 
-  call.perform();
+  if (brightness_pct < 0) {
+    brightness_pct = 0;
+  }
+  if (brightness_pct > 100) {
+    brightness_pct = 100;
+  }
+
+  const int total_leds = static_cast<int>(addr->size());
+  int active_leds = active_led_count;
+  if (active_leds < 0) {
+    active_leds = 0;
+  }
+  if (active_leds > total_leds) {
+    active_leds = total_leds;
+  }
+
+  const bool strip_should_be_on =
+    active_leds > 0 && (red_pct > 0 || green_pct > 0 || blue_pct > 0) && brightness_pct > 0;
+
+  if (!strip_should_be_on) {
+    turn_light_off(strip);
+    return;
+  }
+
+  // Set the light state with the computed color so HA reflects the correct status.
+  // ESPHome renders solid color to all LEDs; we then zero out inactive ones.
+  auto strip_call = strip->turn_on();
+  strip_call.set_effect("None");
+  strip_call.set_transition_length(0);
+  strip_call.set_red(pct_to_unit(red_pct));
+  strip_call.set_green(pct_to_unit(green_pct));
+  strip_call.set_blue(pct_to_unit(blue_pct));
+  strip_call.set_brightness(pct_to_unit(brightness_pct));
+  strip_call.perform();
+
+  // Override pixels beyond active_leds to black (partial-strip effect).
+  const esphome::Color off_color(0, 0, 0);
+  for (int i = active_leds; i < total_leds; i++) {
+    (*addr)[i] = off_color;
+  }
+
+  addr->schedule_show();
 }
 
 inline void set_flag(bool &flag, const bool value) {

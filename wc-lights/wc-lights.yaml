@@ -29,7 +29,10 @@ substitutions:
   led_pwm_frequency: 2000Hz
 
   # RGB strip
-  rgb_led_count: "8"
+  rgb_led_count: "50"
+  rgb_default_active_led_count: "26"
+  strip_wc_inside_brightness_pct: "100"
+  strip_flash_brightness_pct: "100"
   rgb_order: GRB
 
   # Night mode schedule
@@ -52,21 +55,6 @@ substitutions:
   wc_flashlight_duration_seconds: "30"
   bath_flashlight_duration_seconds: "30"
 
-  # WC occupied indication color (%)
-  wc_inside_red_pct: "100"
-  wc_inside_green_pct: "0"
-  wc_inside_blue_pct: "0"
-
-  # WC post-visit flashlight color (%)
-  wc_flash_red_pct: "100"
-  wc_flash_green_pct: "80"
-  wc_flash_blue_pct: "0"
-
-  # Bath post-visit flashlight color (%)
-  bath_flash_red_pct: "100"
-  bath_flash_green_pct: "80"
-  bath_flash_blue_pct: "0"
-
   # Diagnostics
   wifi_rssi_update: 30s
   visit_sensor_update: 1s
@@ -77,6 +65,20 @@ esphome:
   friendly_name: ${friendly_name}
   includes:
     - wc-lights.h
+  on_boot:
+    priority: 600
+    then:
+      - lambda: |-
+          id(status_strip_test_active) = true;
+      - light.turn_on:
+          id: status_strip
+          effect: Rainbow
+          brightness: 50%
+      - delay: 20s
+      - lambda: |-
+          id(status_strip_test_active) = false;
+      - light.turn_off:
+          id: status_strip
 
 esp32:
   board: esp32dev
@@ -172,11 +174,20 @@ globals:
     restore_value: no
     initial_value: "0"
 
+  - id: status_strip_test_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
 script:
   - id: update_status_strip
     mode: restart
     then:
       - lambda: |-
+          if (id(status_strip_test_active)) {
+            return;
+          }
+
           const auto wc_inside_color = wc_lights::color_from_preset(id(wc_inside_color_preset).current_option());
           const auto wc_flash_color = wc_lights::color_from_preset(id(wc_flash_color_preset).current_option());
           const auto bath_flash_color = wc_lights::color_from_preset(id(bath_flash_color_preset).current_option());
@@ -186,6 +197,8 @@ script:
             id(wc_user_inside_flag),
             id(wc_flash_active),
             id(bath_flash_active),
+            (int)id(num_strip_wc_inside_brightness).state,
+            (int)id(num_strip_flash_brightness).state,
             wc_inside_color.red,
             wc_inside_color.green,
             wc_inside_color.blue,
@@ -194,8 +207,23 @@ script:
             wc_flash_color.blue,
             bath_flash_color.red,
             bath_flash_color.green,
-            bath_flash_color.blue
+            bath_flash_color.blue,
+            (int)id(num_status_strip_length).state
           );
+
+  - id: test_status_strip_rainbow
+    mode: restart
+    then:
+      - lambda: |-
+          id(status_strip_test_active) = true;
+      - light.turn_on:
+          id: status_strip
+          effect: Rainbow
+          brightness: 100%
+      - delay: 60s
+      - lambda: |-
+          id(status_strip_test_active) = false;
+      - script.execute: update_status_strip
 
   - id: wc_flashlight_script
     mode: restart
@@ -208,7 +236,7 @@ script:
           condition:
             lambda: return !wc_lights::flash_elapsed(id(wc_flash_started_ms), millis(), (int)id(num_wc_flashlight_duration).state);
           then:
-            - delay: 250ms
+            - delay: 1000ms
       - lambda: |-
           wc_lights::set_flag(id(wc_flash_active), false);
       - script.execute: update_status_strip
@@ -224,7 +252,7 @@ script:
           condition:
             lambda: return !wc_lights::flash_elapsed(id(bath_flash_started_ms), millis(), (int)id(num_bath_flashlight_duration).state);
           then:
-            - delay: 250ms
+            - delay: 1000ms
       - lambda: |-
           wc_lights::set_flag(id(bath_flash_active), false);
       - script.execute: update_status_strip
@@ -340,13 +368,82 @@ light:
 
   - platform: esp32_rmt_led_strip
     id: status_strip
-    name: WC - Status Strip
+    name: Device - Status Strip
     pin: ${rgb_strip_pin}
     num_leds: ${rgb_led_count}
     rgb_order: ${rgb_order}
     chipset: ws2812
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+    effects:
+      - addressable_rainbow:
+          name: Rainbow
+          speed: 10
+          width: 50
+      - addressable_color_wipe:
+          name: Color Wipe
+          colors:
+            - red: 100%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 100%
+              blue: 0%
+              num_leds: 1
+            - red: 0%
+              green: 0%
+              blue: 100%
+              num_leds: 1
+            - red: 0%
+              green: 0%
+              blue: 0%
+              num_leds: 1
+          add_led_interval: 100ms
+          reverse: false
+      - addressable_scan:
+          name: Scan
+          move_interval: 100ms
+          scan_width: 1
+      - addressable_twinkle:
+          name: Twinkle
+          twinkle_probability: 5%
+          progress_interval: 4ms
+      - addressable_random_twinkle:
+          name: Random Twinkle
+          twinkle_probability: 5%
+          progress_interval: 32ms
+      - addressable_fireworks:
+          name: Fireworks
+          update_interval: 32ms
+          spark_probability: 10%
+          use_random_color: true
+          fade_out_rate: 120
+      - addressable_flicker:
+          name: Flicker
+          update_interval: 16ms
+          intensity: 5%
+      - strobe:
+          name: Strobe
+          colors:
+            - state: true
+              brightness: 100%
+              red: 100%
+              green: 100%
+              blue: 100%
+              duration: 100ms
+            - state: false
+              duration: 100ms
+      - pulse:
+          name: Pulse
+          transition_length: 1s
+          update_interval: 1s
+          min_brightness: 0%
+          max_brightness: 100%
+      - flicker:
+          name: Soft Flicker
+          alpha: 95%
+          intensity: 1.5%
 
 binary_sensor:
   - platform: gpio
@@ -508,6 +605,15 @@ button:
       then:
         - script.execute: reset_all_counters_script
 
+  - platform: template
+    id: test_status_strip_rainbow_button
+    name: Device - Test Status Strip Rainbow
+    icon: mdi:palette
+    entity_category: config
+    on_press:
+      then:
+        - script.execute: test_status_strip_rainbow
+
   - platform: factory_reset
     id: reset_wifi_button
     name: Device - Reset WiFi and Device Settings
@@ -601,6 +707,46 @@ select:
       - "Pink"
 
 number:
+  - platform: template
+    id: num_strip_wc_inside_brightness
+    name: WC - Status Strip Inside Brightness
+    entity_category: config
+    icon: mdi:brightness-6
+    unit_of_measurement: "%"
+    optimistic: true
+    restore_value: true
+    initial_value: ${strip_wc_inside_brightness_pct}
+    min_value: 0
+    max_value: 100
+    step: 1
+
+  - platform: template
+    id: num_strip_flash_brightness
+    name: Device - Status Strip Flash Brightness
+    entity_category: config
+    icon: mdi:brightness-5
+    unit_of_measurement: "%"
+    optimistic: true
+    restore_value: true
+    initial_value: ${strip_flash_brightness_pct}
+    min_value: 0
+    max_value: 100
+    step: 1
+
+  # Active strip length in HA (cannot exceed compiled physical LED count)
+  - platform: template
+    id: num_status_strip_length
+    name: Device - Status Strip Length
+    entity_category: config
+    icon: mdi:led-strip-variant
+    unit_of_measurement: leds
+    optimistic: true
+    restore_value: true
+    initial_value: ${rgb_default_active_led_count}
+    min_value: 0
+    max_value: ${rgb_led_count}
+    step: 1
+
   # Night mode schedule
   - platform: template
     id: num_night_start_hour
