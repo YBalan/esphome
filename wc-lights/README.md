@@ -4,6 +4,14 @@ An ESPHome-based smart lighting controller for WC and Bath rooms. Automatically 
 
 ---
 
+## Home Assistant Views
+
+| View 1 | View 2 | View 3 |
+|--------|--------|--------|
+| ![HA View 1](images/Screenshot%202026-05-03%20190845.png) | ![HA View 2](images/Screenshot%202026-05-03%20190853.png) | ![HA View 3](images/Screenshot%202026-05-03%20190906.png) |
+
+---
+
 ## Images
 
 | Assembly | Installed |

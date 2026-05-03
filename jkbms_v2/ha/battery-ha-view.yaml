@@ -1,0 +1,87 @@
+type: custom:stack-in-card
+cards:
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.jkbms_gateway_v2_bms_soc_percentage_2
+        name: 314Ah
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            } 
+      - type: tile
+        entity: binary_sensor.314_battery_charging_status
+        name: ""
+        state_content:
+          - last_changed_stable
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }                            
+      - type: tile
+        entity: sensor.jkbms_gateway_v2_charging_time_formatted_2
+        icon: mdi:timer
+        name: ""
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }                 
+  - type: gauge
+    entity: sensor.jkbms_gateway_v2_bms_soc_2
+    name: ""
+    min: 0
+    max: 314
+    needle: true
+    severity:
+      green: 250
+      yellow: 200
+      red: 0
+    card_mod:
+      style: |
+        ha-card {
+          border: none;
+          background: transparent;
+          margin-top: -40px; 
+          margin-bottom: -30px;
+        }
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.jkbms_gateway_v2_bms_current_2
+        name: Current
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }           
+      - type: tile
+        entity: sensor.jkbms_gateway_v2_bms_total_voltage_2
+        name: Batt V
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }           
+      - type: tile
+        entity: sensor.generatorpow_phase_a_voltage
+        name: Grid V
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }           

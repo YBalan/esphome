@@ -1,0 +1,2060 @@
+views:
+  - type: sections
+    max_columns: 2
+    path: main
+    sections:
+      - type: grid
+        cards:
+          - type: custom:stack-in-card
+            cards:
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.jkbms_gateway_v2_bms_soc_percentage_2
+                    name: 314Ah
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        } 
+                  - type: tile
+                    entity: binary_sensor.314_battery_charging_status
+                    name: ''
+                    state_content:
+                      - last_changed_stable
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }                            
+                  - type: tile
+                    entity: sensor.jkbms_gateway_v2_charging_time_formatted_2
+                    icon: mdi:timer
+                    name: ''
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }                 
+              - type: gauge
+                entity: sensor.jkbms_gateway_v2_bms_soc_2
+                name: ''
+                min: 0
+                max: 314
+                needle: true
+                severity:
+                  green: 250
+                  yellow: 200
+                  red: 0
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      background: transparent;
+                      margin-top: -40px; 
+                      margin-bottom: -30px;
+                    }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.jkbms_gateway_v2_bms_current_2
+                    name: Current
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }           
+                  - type: tile
+                    entity: sensor.jkbms_gateway_v2_bms_total_voltage_2
+                    name: Batt V
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }           
+                  - type: tile
+                    entity: sensor.generatorpow_phase_a_voltage
+                    name: Grid V
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }           
+      - type: grid
+        cards:
+          - type: custom:stack-in-card
+            cards:
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.jbdbms_gateway_v2_jbd_soc_percentage_2
+                    name: 200Ah
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }            
+                  - type: tile
+                    entity: binary_sensor.200_battery_charging_status
+                    name: ''
+                    state_content:
+                      - last_changed_stable
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;              
+                        }             
+                  - type: tile
+                    entity: sensor.jbdbms_gateway_v2_jbd_charging_time_formatted_2
+                    icon: mdi:timer
+                    name: ''
+                    card_mod:
+                      style: |
+                        ha-card {              
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }          
+              - type: gauge
+                entity: sensor.jbdbms_gateway_v2_jbd_soc_ah_2
+                name: ''
+                min: 0
+                max: 200
+                needle: true
+                severity:
+                  green: 160
+                  yellow: 100
+                  red: 0
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      background: transparent;
+                      margin-top: -40px; 
+                      margin-bottom: -30px;
+                    }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.jbdbms_gateway_v2_jbd_current_2
+                    name: Current
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }           
+                  - type: tile
+                    entity: sensor.jbdbms_gateway_v2_jbd_total_voltage_2
+                    name: Batt V
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }           
+                  - type: tile
+                    entity: sensor.generatorpow_phase_a_voltage
+                    name: Grid V
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }           
+      - type: grid
+        cards:
+          - type: custom:stack-in-card
+            cards:
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.boiler_temp_with_trend
+                    name: Trend
+                    state_content:
+                      - state
+                      - last_changed
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                        ha-tile-icon {
+                          --tile-color: {{ state_attr('sensor.boiler_temp_with_trend', 'trend_color') }} !important;
+                        }
+                        .icon-container {
+                          background-color: {{ state_attr('sensor.boiler_temp_with_trend', 'trend_color') }}15 !important;
+                        }
+                  - type: tile
+                    entity: binary_sensor.electrolux_boiler_boiler_heating_2
+                    name: Status
+                    state_content:
+                      - state
+                      - last_changed
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                        ha-tile-icon {
+                          --tile-color: {% if is_state('binary_sensor.electrolux_boiler_boiler_heating', 'on') %} red {% else %} grey {% endif %} !important;
+                        }
+                        .icon-container {
+                          background-color: {% if is_state('binary_sensor.electrolux_boiler_boiler_heating', 'on') %} red {% else %} grey {% endif %}15 !important;
+                        }
+              - type: gauge
+                entity: sensor.electrolux_boiler_boiler_current_temp
+                name: ''
+                min: 35
+                max: 75
+                needle: true
+                severity:
+                  green: 45
+                  yellow: 60
+                  red: 70
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      background: transparent;
+                      margin-top: -40px; 
+                      margin-bottom: -30px;
+                    }
+              - type: entities
+                entities:
+                  - entity: number.electrolux_boiler_boiler_target_temp_set_2
+                    name: Target
+                    icon: mdi:temperature-celsius
+                  - entity: select.electrolux_boiler_boiler_power_mode_set_2
+                    name: Mode
+                  - entity: switch.electrolux_boiler_boiler_bst_mode_2
+                    name: BST
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      background: transparent;
+                      padding-bottom: 0px;
+                    }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: switch.electrolux_boiler_boiler_main_power_2
+                    name: Power
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: switch.s1_boiler_socket_1
+                    name: Socket
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: light.electrolux_boiler_lcd_display_switch_2
+                    name: LCD
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.electrolux_boiler_boiler_clock
+                    name: Clock
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: number.electrolux_boiler_boiler_timer_start_hour
+                    name: Hours Timer
+                    icon: mdi:hours-24
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: number.electrolux_boiler_boiler_timer_start_minute
+                    name: Minutes Timer
+                    icon: mdi:timer-cog-outline
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.electrolux_boiler_boiler_total_energy
+                    name: Energy
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Fridge
+              show_states: true
+              colorize_states: true
+            graph_span: 4h
+            apex_config:
+              tooltip:
+                shared: true
+                intersect: false
+              xaxis:
+                type: datetime
+                tickAmount: 8
+              grid:
+                show: true
+                strokeDashArray: 3
+                xaxis:
+                  lines:
+                    show: true
+            yaxis:
+              - id: sensor
+                decimals: 2
+              - id: number
+                decimals: 2
+              - id: power
+                decimals: 0
+                opposite: true
+              - id: door_axis
+                show: false
+                min: 0
+                max: 1
+            series:
+              - entity: sensor.refrigerator_fridge_temperature
+                yaxis_id: sensor
+                name: Current
+                stroke_width: 5
+                fill_raw: last
+              - entity: number.refrigerator_fridge_temperature
+                yaxis_id: sensor
+                name: Settings
+                stroke_width: 1
+                fill_raw: last
+              - entity: sensor.refrigerator_power
+                yaxis_id: power
+                name: Power
+                type: area
+                stroke_width: 1
+                fill_raw: last
+                show:
+                  extremas: true
+              - entity: sensor.refrigerator_run_duration
+                name: Power Time
+                color: '#3498db'
+                show:
+                  in_chart: false
+                group_by:
+                  func: last
+                  duration: 1m
+                  fill: last
+              - entity: sensor.refrigerator_rest_duration
+                name: Rest Time
+                color: '#2ecc71'
+                show:
+                  in_chart: false
+                group_by:
+                  func: last
+                  duration: 1m
+                  fill: last
+              - entity: binary_sensor.refrigerator_fridge_door
+                yaxis_id: door_axis
+                name: Door
+                type: column
+                color: '#ffeb3b'
+                stroke_width: 3
+                transform: 'return x === ''on'' ? 1 : 0;'
+                show:
+                  legend_value: false
+                  in_header: false
+                  in_legend: true
+    icon: mdi:chart-donut-variant
+    cards: []
+    badges:
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: sensor.refrigerator_power
+        name: Fridge
+        show_entity_picture: false
+        state_content:
+          - state
+          - last_changed
+        icon: mdi:fridge
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: binary_sensor.main_grid_power_status_2
+        name: Grid
+        state_content: last_changed_stable
+        visibility:
+          - condition: state
+            entity: binary_sensor.main_grid_power_status
+            state: 'off'
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: sensor.zmai_90_ups_current
+        name: ZMAi
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: sensor.zmai_90_ups_voltage
+        name: ZMAi
+    header:
+      layout: center
+      badges_position: bottom
+      badges_wrap: scroll
+  - type: sections
+    path: ''
+    sections:
+      - type: grid
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: tile
+                entity: sensor.jkbms_gateway_v2_bms_soc_2
+                name: 314Ah
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }   
+              - type: tile
+                entity: binary_sensor.314_battery_charging_status
+                name: ''
+                state_content:
+                  - last_changed_stable
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }                            
+              - type: tile
+                entity: sensor.jkbms_gateway_v2_bms_current_2
+                name: ''
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }                            
+      - type: grid
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: tile
+                entity: sensor.jbdbms_gateway_v2_jbd_soc_ah_2
+                name: 200Ah
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }   
+              - type: tile
+                entity: binary_sensor.200_battery_charging_status
+                name: ''
+                state_content:
+                  - last_changed_stable
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }                            
+              - type: tile
+                entity: sensor.jbdbms_gateway_v2_jbd_current_2
+                name: ''
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }                            
+      - type: grid
+        cards:
+          - type: custom:stack-in-card
+            cards:
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.boiler_temp_with_trend
+                    name: Trend
+                    state_content:
+                      - state
+                      - last_changed
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                        ha-tile-icon {
+                          --tile-color: {{ state_attr('sensor.boiler_temp_with_trend', 'trend_color') }} !important;
+                        }
+                        .icon-container {
+                          background-color: {{ state_attr('sensor.boiler_temp_with_trend', 'trend_color') }}15 !important;
+                        }
+                  - type: tile
+                    entity: binary_sensor.electrolux_boiler_boiler_heating_2
+                    name: Status
+                    state_content:
+                      - state
+                      - last_changed
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                        ha-tile-icon {
+                          --tile-color: {% if is_state('binary_sensor.electrolux_boiler_boiler_heating', 'on') %} red {% else %} grey {% endif %} !important;
+                        }
+                        .icon-container {
+                          background-color: {% if is_state('binary_sensor.electrolux_boiler_boiler_heating', 'on') %} red {% else %} grey {% endif %}15 !important;
+                        }
+              - type: gauge
+                entity: sensor.electrolux_boiler_boiler_current_temp
+                name: ''
+                min: 35
+                max: 75
+                needle: true
+                severity:
+                  green: 45
+                  yellow: 60
+                  red: 70
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      background: transparent;
+                      margin-top: -40px; 
+                      margin-bottom: -30px;
+                    }
+              - type: entities
+                entities:
+                  - entity: number.electrolux_boiler_boiler_target_temp_set_2
+                    name: Target
+                    icon: mdi:temperature-celsius
+                  - entity: select.electrolux_boiler_boiler_power_mode_set_2
+                    name: Mode
+                  - entity: switch.electrolux_boiler_boiler_bst_mode_2
+                    name: BST
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none;
+                      background: transparent;
+                      padding-bottom: 0px;
+                    }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: switch.electrolux_boiler_boiler_main_power_2
+                    name: Power
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: switch.s1_boiler_socket_1
+                    name: Socket
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: light.electrolux_boiler_lcd_display_switch_2
+                    name: LCD
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.electrolux_boiler_boiler_clock
+                    name: Clock
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: number.electrolux_boiler_boiler_timer_start_hour
+                    name: Hours Timer
+                    icon: mdi:hours-24
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+                  - type: tile
+                    entity: number.electrolux_boiler_boiler_timer_start_minute
+                    name: Minutes Timer
+                    icon: mdi:timer-cog-outline
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+              - type: horizontal-stack
+                cards:
+                  - type: tile
+                    entity: sensor.electrolux_boiler_boiler_total_energy
+                    name: Energy
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border: none !important;
+                          box-shadow: none !important;
+                          background: transparent !important;
+                        }
+    max_columns: 1
+    cards: []
+    show_icon_and_title: true
+    icon: mdi:water-boiler
+    badges:
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: sensor.refrigerator_power
+        name: Fridge
+        show_entity_picture: false
+        state_content:
+          - state
+          - last_changed
+        icon: mdi:fridge
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        name: ZMAi
+        entity: sensor.zmai_90_ups_current
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: sensor.zmai_90_ups_voltage
+        name: ZMAi
+    header:
+      layout: center
+      badges_position: top
+      badges_wrap: scroll
+    footer:
+      max_width: 210
+  - type: sections
+    max_columns: 2
+    path: printers
+    icon: mdi:printer-3d-nozzle
+    show_icon_and_title: true
+    sections:
+      - type: grid
+        cards:
+          - type: custom:ha-bambulab-print_status-card
+            printer: 501ca0ea08105fc40a1de90816c996f1
+            style: simple
+            custom_humidity: sensor.a1mini_0309da4b0803312_end_time
+            grid_options:
+              columns: 12
+              rows: auto
+      - type: grid
+        cards:
+          - type: custom:ha-bambulab-print_status-card
+            printer: c962a8b618cb0ed2854ec4522dc2a77e
+            style: simple
+            grid_options:
+              rows: auto
+      - type: grid
+        cards:
+          - type: tile
+            entity: input_button.a1_3000g
+            icon: mdi:lock-reset
+            hide_state: true
+            vertical: false
+            icon_tap_action:
+              action: perform-action
+              perform_action: script.a1_filament_reset
+              target: {}
+            features_position: bottom
+          - type: tile
+            entity: input_button.a1_mini_3000g
+            icon: mdi:lock-reset
+            hide_state: true
+            vertical: false
+            icon_tap_action:
+              action: perform-action
+              perform_action: script.a1_mini_spool_to_3000g
+              target: {}
+            features_position: bottom
+    cards: []
+    badges:
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_number.a1_filamnet_odometer
+        icon: mdi:speedometer
+        name: A1 Filament
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_number.a1_mini_filament_odometer
+        icon: mdi:speedometer
+        name: A1 mini Filament
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_number.a1_filament_correction_factor
+        name: A1 Factor
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: input_number.a1_mini_filament_correction_factor
+        name: A1 mini Factor
+    header:
+      layout: center
+      badges_position: bottom
+      badges_wrap: scroll
+  - type: sections
+    max_columns: 1
+    title: Alerts
+    path: alerts
+    icon: mdi:alarm-light
+    sections:
+      - type: grid
+        grid_options:
+          columns: 12
+        cards:
+          - type: custom:stack-in-card
+            grid_options:
+              columns: 12
+            cards:
+              - type: tile
+                entity: binary_sensor.group_regions_alert_monitor
+                name: NATIONAL STATUS
+                vertical: true
+                state_content:
+                  - alert_count
+                  - regions_at_risk
+                  - state
+                  - last_changed
+                card_mod:
+                  style: |
+                    ha-card {
+                      --tile-icon-size: 80px !important; /* HUGE ICON */
+                      background: {% if is_state('binary_sensor.group_regions_alert_monitor', 'on') %} rgba(255, 0, 0, 0.2) {% else %} rgba(0, 255, 0, 0.05) {% endif %};
+                      border: 1px solid rgba(255,255,255,0.1);
+                      padding: 20px 0;
+                    }
+                    .icon-container {
+                      width: 100px !important;
+                      height: 100px !important;
+                      margin-bottom: 15px !important;
+                    }
+                    /* MAKE TEXT BIG AND BOLD */
+                    .primary {
+                      font-size: 1.5em !important;
+                      font-weight: 900 !important;
+                      text-transform: uppercase;
+                    }
+                    .secondary {
+                      font-size: 1.2em !important;
+                      color: white !important;
+                      opacity: 1 !important;
+                      font-weight: 500 !important;
+                      line-height: 1.4;
+                    }
+          - type: custom:stack-in-card
+            grid_options:
+              columns: 6
+            cards:
+              - type: tile
+                entity: binary_sensor.air_alert_monitor
+                name: ODESA
+                vertical: true
+                show_entity_picture: true
+                state_content:
+                  - region_name
+                  - active_alerts
+                  - last_changed
+                  - state
+                card_mod:
+                  style: >
+                    ha-card {
+                      --tile-icon-size: 60px !important;
+                      background: transparent;
+                      border: none;
+                    }
+
+                    .primary { font-weight: 900 !important; font-size: 1.3em
+                    !important; }
+
+                    .secondary { 
+                      font-size: 1.1em !important; 
+                      color: #ff4444 !important; /* Emergency Red */
+                      opacity: 1 !important; 
+                    }
+              - type: tile
+                entity: switch.sonoff_aca8000bf2_1
+                name: SIREN
+                icon: mdi:alarm-light
+                color: red
+                card_mod:
+                  style: |
+                    ha-card {
+                      background: rgba(255, 255, 255, 0.1);
+                      margin: 10px;
+                      border-radius: 12px;
+                    }
+          - type: custom:stack-in-card
+            grid_options:
+              columns: 6
+            cards:
+              - type: tile
+                entity: binary_sensor.massive_attack_alert
+                name: MASSIVE
+                vertical: true
+                state_content:
+                  - total_regions
+                  - alert_threshold
+                  - last_changed
+                card_mod:
+                  style: >
+                    ha-card {
+                      --tile-icon-size: 60px !important;
+                      background: transparent;
+                      border: none;
+                    }
+
+                    .primary { font-weight: 900 !important; font-size: 1.3em
+                    !important; }
+
+                    .secondary { font-size: 1.1em !important; color: white
+                    !important; opacity: 1 !important; }
+              - type: tile
+                entity: switch.sonoff_aca80008f1_1
+                name: SIREN
+                icon: mdi:skull-crossbones
+                color: red
+                card_mod:
+                  style: |
+                    ha-card {
+                      background: rgba(255, 255, 255, 0.1);
+                      margin: 10px;
+                      border-radius: 12px;
+                    }
+          - type: tile
+            entity: light.sonoff_1001ee25b7
+    cards: []
+  - type: sections
+    path: climate
+    title: Climate
+    icon: mdi:home-thermometer
+    cards: []
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Air Conditioner ❄️
+            icon: mdi:air-conditioner
+          - type: tile
+            entity: scene.air_1_on
+            name: Air Freeze On
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: scene.air_2_on
+            name: Air Freeze On
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: scene.air_1_off
+            name: Air Freeze Off
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: scene.air_2_off
+            name: Air Freeze Off
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Air Conditioner 🌞
+            icon: mdi:air-conditioner
+          - type: tile
+            entity: scene.air1_heat
+            name: Air Heat On
+            hide_state: false
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: scene.air2_heat
+            name: Air Heat On
+            hide_state: false
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: scene.heaton_air
+            name: All Air Heat On
+            hide_state: true
+            vertical: false
+            features_position: bottom
+            grid_options:
+              columns: 12
+              rows: 1
+          - type: tile
+            entity: scene.air1_heat_off
+            name: Air Heat Off
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: scene.air_2_off
+            name: Air Heat Off
+            state_content: area_name
+            vertical: false
+            features_position: bottom
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Heat 🥵
+            icon: mdi:heat-wave
+          - type: tile
+            entity: scene.heat_on_living
+            hide_state: true
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: scene.close_living
+            hide_state: true
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: switch.s4_bedroom_heater_socket_1
+          - type: tile
+            entity: switch.s6_towels_heater_socket_1
+          - type: tile
+            entity: switch.s2_kids_heater_socket_1
+          - type: tile
+            entity: switch.s5_guest_heater_socket_1
+  - type: sections
+    max_columns: 4
+    icon: mdi:lightning-bolt
+    path: ''
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Battery
+            heading_style: title
+            icon: mdi:battery-charging-medium
+          - type: tile
+            entity: sensor.jkbms_gateway_v2_battery_energy_in_2
+            name: 314Ah Charging
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.jkbms_gateway_v2_battery_energy_out_2
+            name: 314Ah Discharging
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.jbdbms_gateway_v2_jbd_battery_energy_in_2
+            name: 200Ah Charging
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.jbdbms_gateway_v2_jbd_battery_energy_out_2
+            name: 200Ah Discharging
+            vertical: false
+            features_position: bottom
+      - type: grid
+        cards:
+          - type: heading
+            heading: Power
+            heading_style: title
+          - type: tile
+            entity: switch.s9_fridge_socket_1
+          - type: tile
+            entity: sensor.s9_fridge_total_energy
+          - type: tile
+            entity: switch.s1_boiler_socket_1
+          - type: tile
+            entity: sensor.s1_boiler_total_energy
+          - type: tile
+            entity: switch.s6_towels_heater_socket_1
+          - type: tile
+            entity: sensor.s6_towels_heater_total_energy
+          - type: tile
+            entity: switch.s8_floor_bedroom_socket_1
+          - type: tile
+            entity: sensor.s8_floor_bedroom_total_energy
+          - type: tile
+            entity: switch.s4_bedroom_heater_socket_1
+          - type: tile
+            entity: sensor.s4_bedroom_heater_total_energy
+          - type: tile
+            entity: switch.s2_kids_heater_socket_1
+          - type: tile
+            entity: sensor.s2_kids_heater_total_energy
+          - type: tile
+            entity: switch.air_bedroom_socket_1
+          - type: tile
+            entity: sensor.air_bedroom_total_energy
+          - type: tile
+            entity: switch.air_hall_socket_1
+          - type: tile
+            entity: sensor.air_hall_total_energy
+      - type: grid
+        cards:
+          - type: heading
+            heading_style: title
+            heading: Energy Consumption
+          - type: tile
+            entity: sensor.consolidated_current_power
+          - type: tile
+            entity: sensor.consolidated_total_energy
+          - type: custom:auto-entities
+            card:
+              type: entities
+              title: Consolidated Energy Entities
+              show_header_toggle: false
+            filter:
+              include:
+                - domain: sensor
+                  attributes:
+                    device_class: energy
+                    unit_of_measurement: kWh
+                  options:
+                    secondary_info: last-changed
+              exclude:
+                - entity_id: '*main_meter*'
+                - entity_id: '*consolidated*'
+            sort:
+              method: name
+          - type: custom:auto-entities
+            card:
+              type: entities
+              title: Consolidated Power Entities
+              show_header_toggle: false
+            filter:
+              include:
+                - domain: sensor
+                  attributes:
+                    device_class: power
+                  options:
+                    secondary_info: last-changed
+              exclude:
+                - entity_id: '*main_meter*'
+                - entity_id: '*consolidated*'
+            sort:
+              method: name
+  - type: sections
+    max_columns: 4
+    icon: mdi:fridge
+    path: fridge
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Fridge
+            heading_style: title
+            icon: mdi:fridge
+          - type: tile
+            entity: sensor.refrigerator_fridge_temperature
+          - type: tile
+            entity: sensor.refrigerator_freezer_temperature
+          - type: tile
+            entity: binary_sensor.refrigerator_compressor_status
+          - type: tile
+            entity: sensor.refrigerator_power
+          - type: tile
+            entity: sensor.refrigerator_rest_duration
+          - type: tile
+            entity: sensor.refrigerator_run_duration
+          - type: tile
+            entity: number.refrigerator_fridge_temperature
+          - type: tile
+            entity: number.refrigerator_freezer_temperature
+          - type: tile
+            entity: switch.refrigerator_power_cool
+          - type: tile
+            entity: switch.refrigerator_power_freeze
+          - type: tile
+            entity: binary_sensor.refrigerator_fridge_door
+          - type: tile
+            entity: binary_sensor.refrigerator_freezer_door
+      - type: grid
+        cards:
+          - type: heading
+            heading: Air
+            heading_style: title
+            icon: mdi:coolant-temperature
+          - type: tile
+            entity: sensor.ir_bedroom_temperature
+          - type: tile
+            entity: sensor.ir_hall_temperature
+          - type: tile
+            entity: sensor.ir_bedroom_humidity
+          - type: tile
+            entity: sensor.ir_hall_humidity
+          - type: tile
+            entity: sensor.smart_air_box_2_temperature
+          - type: tile
+            entity: sensor.smart_air_box_temperature
+          - type: tile
+            entity: sensor.smart_air_box_2_humidity
+          - type: tile
+            entity: sensor.smart_air_box_humidity
+          - type: tile
+            entity: sensor.smart_air_box_2_carbon_dioxide
+          - type: tile
+            entity: sensor.smart_air_box_carbon_dioxide
+          - type: tile
+            entity: sensor.smart_air_box_2_formaldehyde
+          - type: tile
+            entity: sensor.smart_air_box_formaldehyde
+          - type: tile
+            entity: sensor.smart_air_box_2_volatile_organic_compounds
+          - type: tile
+            entity: sensor.smart_air_box_volatile_organic_compounds
+    cards: []
+  - type: sections
+    max_columns: 4
+    icon: mdi:flower
+    path: flowers
+    sections:
+      - type: grid
+        cards:
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: scene.new_scene
+            grid_options:
+              columns: 12
+              rows: 2
+            tap_action:
+              action: toggle
+          - type: entities
+            entities:
+              - entity: switch.4_433_switch_4
+                secondary_info: last-changed
+                icon: mdi:string-lights
+              - entity: switch.4_433_switch_3
+                secondary_info: last-changed
+                icon: mdi:cactus
+              - entity: switch.4_433_switch_2
+                secondary_info: last-changed
+                icon: mdi:spa
+              - entity: switch.4_433_switch_1
+                secondary_info: last-changed
+                icon: mdi:currency-usd
+      - type: grid
+        cards:
+          - type: heading
+            heading: New section
+          - type: tile
+            entity: vacuum.rockrobo_de_64627690_v1
+            grid_options:
+              columns: 6
+              rows: 1
+          - type: tile
+            entity: sensor.rockrobo_de_64627690_v1_battery_level_p_3_1
+          - type: tile
+            entity: sensor.rockrobo_de_64627690_v1_charging_state_p_3_2
+          - type: tile
+            entity: number.rockrobo_de_64627690_v1_speed_level_p_2_2
+    show_icon_and_title: false
+    cards: []
+  - type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: JKBMS 314Ah
+              show_states: true
+              colorize_states: true
+            graph_span: 24h
+            yaxis:
+              - id: current
+                opposite: true
+                decimals: 2
+              - id: voltage
+                decimals: 1
+            series:
+              - entity: sensor.jkbms_gateway_v2_bms_current_2
+                yaxis_id: current
+                name: A
+                fill_raw: last
+              - entity: sensor.jkbms_gateway_v2_bms_total_voltage_2
+                yaxis_id: voltage
+                name: V
+                fill_raw: last
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: JBDBMS 200Ah
+              show_states: true
+              colorize_states: true
+            graph_span: 24h
+            yaxis:
+              - id: current
+                opposite: true
+                decimals: 2
+              - id: voltage
+                decimals: 2
+            series:
+              - entity: sensor.jbdbms_gateway_v2_jbd_current_2
+                yaxis_id: current
+                name: A
+                fill_raw: last
+              - entity: sensor.jbdbms_gateway_v2_jbd_total_voltage_2
+                yaxis_id: voltage
+                name: V
+                fill_raw: last
+        column_span: 1
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Voltage
+              show_states: true
+              colorize_states: true
+            graph_span: 2h
+            series:
+              - entity: sensor.generatorpow_phase_a_voltage
+                name: Grid
+                fill_raw: last
+                show:
+                  extremas: true
+              - entity: sensor.sonoff_100179f77f_voltage
+                name: UPS
+                fill_raw: last
+                stroke_width: 2
+                show:
+                  extremas: true
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Boiler
+              show_states: true
+              colorize_states: true
+            graph_span: 6h
+            yaxis:
+              - id: temp
+                opposite: false
+                decimals: 0
+            series:
+              - entity: sensor.electrolux_boiler_boiler_current_temp
+                yaxis_id: temp
+                name: Current
+                fill_raw: last
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Fridge
+              show_states: true
+              colorize_states: true
+            graph_span: 12h
+            apex_config:
+              tooltip:
+                shared: true
+                intersect: false
+              xaxis:
+                type: datetime
+                tickAmount: 8
+              grid:
+                show: true
+                strokeDashArray: 3
+                xaxis:
+                  lines:
+                    show: true
+            yaxis:
+              - id: sensor
+                decimals: 2
+              - id: number
+                decimals: 2
+              - id: power
+                decimals: 0
+                opposite: true
+              - id: door_axis
+                show: false
+                min: 0
+                max: 1
+            series:
+              - entity: sensor.refrigerator_fridge_temperature
+                yaxis_id: sensor
+                name: Current
+                stroke_width: 5
+                fill_raw: last
+              - entity: number.refrigerator_fridge_temperature
+                yaxis_id: sensor
+                name: Settings
+                stroke_width: 1
+                fill_raw: last
+              - entity: sensor.refrigerator_power
+                yaxis_id: power
+                name: Power
+                type: area
+                stroke_width: 1
+                fill_raw: last
+                show:
+                  extremas: true
+              - entity: sensor.refrigerator_run_duration
+                name: Power Time
+                color: '#3498db'
+                show:
+                  in_chart: false
+                group_by:
+                  func: last
+                  duration: 1m
+                  fill: last
+              - entity: sensor.refrigerator_rest_duration
+                name: Rest Time
+                color: '#2ecc71'
+                show:
+                  in_chart: false
+                group_by:
+                  func: last
+                  duration: 1m
+                  fill: last
+              - entity: binary_sensor.refrigerator_fridge_door
+                yaxis_id: door_axis
+                name: Door Opened
+                type: column
+                color: '#ffeb3b'
+                stroke_width: 3
+                transform: 'return x === ''on'' ? 1 : 0;'
+                show:
+                  legend_value: false
+                  in_header: false
+                  in_legend: false
+      - type: grid
+        cards:
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              title: Freezer
+              show_states: true
+              colorize_states: true
+            graph_span: 4h
+            apex_config:
+              tooltip:
+                shared: true
+                intersect: false
+              xaxis:
+                type: datetime
+                tickAmount: 8
+              grid:
+                show: true
+                strokeDashArray: 3
+                xaxis:
+                  lines:
+                    show: true
+            yaxis:
+              - id: sensor
+                opposite: true
+                decimals: 2
+              - id: number
+                decimals: 2
+              - id: door_axis
+                show: false
+                min: -23
+                max: -15
+            series:
+              - entity: sensor.refrigerator_freezer_temperature
+                yaxis_id: sensor
+                name: Current
+                stroke_width: 5
+                fill_raw: last
+                group_by:
+                  func: last
+                  duration: 1m
+                  fill: last
+              - entity: number.refrigerator_freezer_temperature
+                yaxis_id: number
+                name: Settings
+                stroke_width: 1
+                fill_raw: last
+              - entity: binary_sensor.refrigerator_freezer_door
+                yaxis_id: door_axis
+                name: Door Opened
+                type: column
+                color: '#ffeb3b'
+                stroke_width: 3
+                transform: 'return x === ''on'' ? -23 : -15;'
+                show:
+                  legend_value: false
+                  in_header: false
+                  in_legend: false
+      - type: grid
+        cards:
+          - type: custom:auto-entities
+            filter:
+              include:
+                - options: {}
+                  domain: sensor
+                  attributes:
+                    device_class: temperature
+                - entity_id: sensor.smart_air_box_temperature
+              exclude:
+                - entity_id: '*a1*'
+                - entity_id: '*boiler*'
+                - entity_id: '*gateway*'
+                - entity_id: '*parrots*'
+                - entity_id: '*refrigerator*'
+            card:
+              type: custom:apexcharts-card
+              graph_span: 24h
+              header:
+                show: true
+                title: Home Temperatures
+                show_states: false
+              apex_config:
+                legend:
+                  show: false
+                tooltip:
+                  shared: true
+                  intersect: false
+              all_series_config:
+                stroke_width: 4
+                opacity: 1
+                type: line
+                group_by:
+                  func: avg
+                  duration: 1h
+              series: []
+      - type: grid
+        cards:
+          - type: custom:auto-entities
+            filter:
+              include:
+                - options: {}
+                  domain: sensor
+                  attributes:
+                    device_class: humidity
+              exclude:
+                - entity_id: '*a1*'
+                - entity_id: '*boiler*'
+                - entity_id: '*gateway*'
+                - entity_id: '*parrots*'
+            card:
+              type: custom:apexcharts-card
+              graph_span: 24h
+              header:
+                show: true
+                title: Home Humidity
+                show_states: false
+              apex_config:
+                legend:
+                  show: false
+                tooltip:
+                  shared: true
+                  intersect: false
+              all_series_config:
+                stroke_width: 4
+                opacity: 1
+                type: line
+                group_by:
+                  func: avg
+                  duration: 1h
+              series: []
+      - type: grid
+        cards:
+          - type: custom:auto-entities
+            filter:
+              include:
+                - options: {}
+                  domain: sensor
+                  attributes:
+                    device_class: carbon_dioxide
+              exclude:
+                - entity_id: '*a1*'
+                - entity_id: '*boiler*'
+                - entity_id: '*gateway*'
+                - entity_id: '*parrots*'
+            card:
+              type: custom:apexcharts-card
+              graph_span: 24h
+              yaxis:
+                - min: ~300
+                  max: ~850
+                  decimals: 0
+              header:
+                show: true
+                title: Home CO2
+                show_states: false
+              apex_config:
+                legend:
+                  show: false
+                tooltip:
+                  shared: true
+                  intersect: false
+                annotations:
+                  yaxis:
+                    - 'y': 800
+                      borderColor: '#00E396'
+                      strokeDashArray: 4
+                      label:
+                        text: Normal (800ppm)
+                        position: left
+                        textAnchor: start
+                        style:
+                          color: '#fff'
+                          background: '#00E396'
+                    - 'y': 1000
+                      borderColor: '#ff4560'
+                      strokeDashArray: 4
+                      label:
+                        text: Limit (1000)
+                        position: left
+                        textAnchor: start
+                        style:
+                          color: '#fff'
+                          background: '#ff4560'
+              all_series_config:
+                stroke_width: 4
+                opacity: 1
+                type: line
+                group_by:
+                  func: avg
+                  duration: 1h
+              series: []
+            grid_options:
+              columns: full
+      - type: grid
+        cards:
+          - type: custom:auto-entities
+            filter:
+              include:
+                - entity_id: '*formaldehyde*'
+              exclude:
+                - entity_id: '*a1*'
+                - entity_id: '*boiler*'
+                - entity_id: '*gateway*'
+            card:
+              type: custom:apexcharts-card
+              graph_span: 24h
+              yaxis:
+                - min: 0
+                  max: ~0.120
+                  decimals: 3
+              header:
+                show: true
+                title: Formaldehyde Levels (HCHO)
+                show_states: false
+              apex_config:
+                legend:
+                  show: false
+                tooltip:
+                  shared: true
+                  intersect: false
+                annotations:
+                  yaxis:
+                    - 'y': 0.08
+                      borderColor: '#00E396'
+                      strokeDashArray: 4
+                      label:
+                        text: Normal (0.080mg/m³)
+                        position: left
+                        textAnchor: start
+                        style:
+                          color: '#fff'
+                          background: '#00E396'
+                    - 'y': 0.1
+                      borderColor: '#ff4560'
+                      strokeDashArray: 4
+                      label:
+                        text: Limit (0.100mg/m³)
+                        position: left
+                        textAnchor: start
+                        style:
+                          color: '#fff'
+                          background: '#ff4560'
+              all_series_config:
+                stroke_width: 3
+                opacity: 1
+                type: line
+                group_by:
+                  func: avg
+                  duration: 15m
+              series: []
+      - type: grid
+        cards:
+          - type: custom:auto-entities
+            filter:
+              include:
+                - entity_id: '*volatile*organic*'
+              exclude:
+                - entity_id: '*a1*'
+                - entity_id: '*boiler*'
+            card:
+              type: custom:apexcharts-card
+              graph_span: 24h
+              yaxis:
+                - min: 0
+                  max: ~1.5
+                  decimals: 2
+              header:
+                show: true
+                title: Home VOC Levels
+                show_states: false
+              apex_config:
+                legend:
+                  show: false
+                tooltip:
+                  shared: true
+                  intersect: false
+                annotations:
+                  yaxis:
+                    - 'y': 1
+                      borderColor: '#00E396'
+                      strokeDashArray: 4
+                      label:
+                        text: Normal (1.0ppm)
+                        position: left
+                        textAnchor: start
+                        style:
+                          color: '#fff'
+                          background: '#00E396'
+                    - 'y': 3
+                      borderColor: '#ff4560'
+                      strokeDashArray: 0
+                      label:
+                        text: Limit (3.0ppm)
+                        position: left
+                        textAnchor: start
+                        style:
+                          color: '#fff'
+                          background: '#ff4560'
+              all_series_config:
+                stroke_width: 3
+                opacity: 1
+                type: line
+                group_by:
+                  func: avg
+                  duration: 10m
+              series: []
+    max_columns: 4
+    cards: []
+    show_icon_and_title: true
+    icon: mdi:chart-areaspline
+  - type: sections
+    max_columns: 3
+    title: wc
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: 🚽 WC Control
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-light-card
+                entity: light.wc_lights_wc_light
+                name: Main Light
+                show_brightness_control: true
+                use_light_color: true
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-bottom-left-radius: 0px !important;
+                      border-bottom-right-radius: 0px !important;
+                      margin-bottom: -1px !important;
+                      box-shadow: none !important;
+                    }
+              - type: horizontal-stack
+                cards:
+                  - type: custom:mushroom-entity-card
+                    entity: binary_sensor.wc_lights_wc_user_inside
+                    name: Presence
+                    icon_color: blue
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-radius: 0px !important;
+                          border-top: none !important;
+                          border-bottom: none !important;
+                          box-shadow: none !important;
+                          margin-right: -1px !important;
+                        }
+                  - type: custom:mushroom-entity-card
+                    entity: binary_sensor.wc_lights_wc_door
+                    name: Door
+                    icon_color: orange
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-radius: 0px !important;
+                          border-top: none !important;
+                          border-bottom: none !important;
+                          box-shadow: none !important;
+                        }
+              - type: entities
+                show_header_toggle: false
+                entities:
+                  - entity: sensor.wc_lights_wc_total_time_inside
+                    name: Total Time Inside
+                  - entity: sensor.wc_lights_wc_time_user_spent_inside
+                    name: Time Inside
+                  - entity: sensor.wc_lights_wc_last_visit_duration_human
+                    name: Last Visit
+                  - entity: sensor.wc_lights_wc_max_time_user_inside_human
+                    name: Max Visit
+                  - type: section
+                    label: Settings
+                  - entity: number.wc_lights_wc_day_brightness
+                    name: Day Brightness
+                  - entity: number.wc_lights_wc_night_brightness
+                    name: Night Brightness
+                  - entity: number.wc_lights_wc_door_open_timeout
+                    name: Auto-Off Timeout
+                  - entity: select.wc_lights_wc_endstop_mode
+                    name: Sensor Mode
+                  - entity: select.wc_lights_wc_flash_color
+                    name: Post Visit Flash Color
+                  - entity: number.wc_lights_wc_post_visit_flash_duration
+                    name: Post Visit Flash Timeout
+                  - type: section
+                    label: Inside Status Strip
+                  - entity: number.wc_lights_wc_status_strip_inside_brightness
+                    name: Inside Brightness
+                  - entity: select.wc_lights_wc_inside_color
+                    name: Inside Color
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-top-left-radius: 0px !important;
+                      border-top-right-radius: 0px !important;
+                      border-top: none !important;
+                      box-shadow: none !important;
+                      margin-top: -1px !important;
+                      --mdc-typography-body1-font-size: 14px;
+                      overflow: visible !important;
+                    }
+                    .card-content {
+                      padding-top: 0px !important;
+                      overflow: visible !important;
+                    }
+      - type: grid
+        cards:
+          - type: heading
+            heading: 🛀 Bath Control
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-light-card
+                entity: light.wc_lights_bath_light
+                name: Main Light
+                show_brightness_control: true
+                use_light_color: true
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-bottom-left-radius: 0px !important;
+                      border-bottom-right-radius: 0px !important;
+                      margin-bottom: -1px !important;
+                      box-shadow: none !important;
+                    }
+              - type: horizontal-stack
+                cards:
+                  - type: custom:mushroom-entity-card
+                    entity: binary_sensor.wc_lights_bath_user_inside
+                    name: Presence
+                    icon_color: blue
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-radius: 0px !important;
+                          border-top: none !important;
+                          border-bottom: none !important;
+                          box-shadow: none !important;
+                          margin-right: -1px !important;
+                        }
+                  - type: custom:mushroom-entity-card
+                    entity: binary_sensor.wc_lights_bath_door
+                    name: Door
+                    icon_color: orange
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-radius: 0px !important;
+                          border-top: none !important;
+                          border-bottom: none !important;
+                          box-shadow: none !important;
+                        }
+              - type: entities
+                show_header_toggle: false
+                entities:
+                  - entity: sensor.wc_lights_bath_total_time_inside
+                    name: Total Time Inside
+                  - entity: sensor.wc_lights_bath_time_user_spent_inside
+                    name: Time Inside
+                  - entity: sensor.wc_lights_bath_last_visit_duration_human
+                    name: Last Visit
+                  - entity: sensor.wc_lights_bath_max_time_user_inside_human
+                    name: Max Visit
+                  - type: section
+                    label: Settings
+                  - entity: number.wc_lights_bath_day_brightness
+                    name: Day Brightness
+                  - entity: number.wc_lights_bath_night_brightness
+                    name: Night Brightness
+                  - entity: number.wc_lights_bath_door_open_timeout
+                    name: Auto-Off Timeout
+                  - entity: select.wc_lights_bath_endstop_mode
+                    name: Sensor Mode
+                  - entity: select.wc_lights_bath_flash_color
+                    name: Post Visit Flash Color
+                  - entity: number.wc_lights_bath_post_visit_flash_duration
+                    name: Post Visit Flash Timeout
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-top-left-radius: 0px !important;
+                      border-top-right-radius: 0px !important;
+                      border-top: none !important;
+                      box-shadow: none !important;
+                      margin-top: -1px !important;
+                      overflow: visible !important;
+                    }
+                    .card-content {
+                      padding-top: 0px !important;
+                      overflow: visible !important;
+                    }
+      - type: grid
+        cards:
+          - type: heading
+            heading: ⚙️ Device System
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-light-card
+                entity: light.wc_lights_device_status_strip
+                name: Status LED Strip
+                icon: mdi:led-strip-variant
+                show_brightness_control: true
+                use_light_color: true
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-bottom-left-radius: 0px !important;
+                      border-bottom-right-radius: 0px !important;
+                      margin-bottom: -1px !important;
+                      box-shadow: none !important;
+                    }
+              - type: entities
+                show_header_toggle: false
+                entities:
+                  - type: section
+                    label: Night Mode Schedule
+                  - entity: number.wc_lights_device_night_start_hour
+                    name: Start Hour
+                  - entity: number.wc_lights_device_night_start_minute
+                    name: Start Minute
+                  - entity: number.wc_lights_device_night_end_hour
+                    name: End Hour
+                  - entity: number.wc_lights_device_night_end_minute
+                    name: End Minute
+                  - type: section
+                    label: Hardware Config
+                  - entity: number.wc_lights_device_status_strip_flash_brightness
+                    name: Flash Brightness
+                  - entity: number.wc_lights_device_status_strip_length
+                    name: LED Count
+                card_mod:
+                  style: |
+                    ha-card {
+                      border-radius: 0px !important;
+                      border-top: none !important;
+                      border-bottom: none !important;
+                      box-shadow: none !important;
+                      margin-top: -1px !important;
+                      margin-bottom: -1px !important;
+                      overflow: visible !important;
+                    }
+                    .card-content {
+                      overflow: visible !important;
+                    }
+              - type: horizontal-stack
+                cards:
+                  - type: button
+                    entity: button.wc_lights_device_restart_device
+                    name: Restart
+                    icon: mdi:restart
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-top-left-radius: 0px !important;
+                          border-top-right-radius: 0px !important;
+                          border-top: none !important;
+                          box-shadow: none !important;
+                        }
+                  - type: button
+                    entity: button.wc_lights_device_reset_visit_counters
+                    name: Clear Stats
+                    icon: mdi:counter
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-top-left-radius: 0px !important;
+                          border-top-right-radius: 0px !important;
+                          border-top: none !important;
+                          box-shadow: none !important;
+                        }
+                  - type: button
+                    entity: button.wc_lights_device_reset_wifi_and_device_settings
+                    name: Factory Reset
+                    icon: mdi:alert-circle
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-top-left-radius: 0px !important;
+                          border-top-right-radius: 0px !important;
+                          border-top: none !important;
+                          box-shadow: none !important;
+                        }
+                  - type: button
+                    entity: button.wc_lights_device_test_status_strip_rainbow
+                    name: Rainbow
+                    icon: mdi:drawing-box
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-top-left-radius: 0px !important;
+                          border-top-right-radius: 0px !important;
+                          border-top: none !important;
+                          box-shadow: none !important;              
+                        }
+                  - type: tile
+                    entity: sensor.wc_lights_device_wifi_rssi
+                    name: ''
+                    card_mod:
+                      style: |
+                        ha-card {
+                          border-top-left-radius: 0px !important;
+                          border-top-right-radius: 0px !important;
+                          border-top: none !important;
+                          box-shadow: none !important;              
+                        }
+    cards: []
+    path: wc
+    icon: mdi:toilet
+    show_icon_and_title: false
+    badges:
+      - type: entity
+        entity: light.wc_lights_device_status_strip
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: binary_sensor.wc_lights_wc_user_inside
+        name: WC
+      - type: entity
+        show_name: true
+        show_state: true
+        show_icon: true
+        entity: binary_sensor.wc_lights_bath_user_inside
+        name: Bath
