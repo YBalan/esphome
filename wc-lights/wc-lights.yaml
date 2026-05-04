@@ -69,14 +69,14 @@ esphome:
     priority: 600
     then:
       - lambda: |-
-          id(status_strip_test_active) = true;
+          wc_lights::set_test_mode(id(status_strip_test_active), true);
       - light.turn_on:
           id: status_strip
           effect: Rainbow
           brightness: 50%
       - delay: 20s
       - lambda: |-
-          id(status_strip_test_active) = false;
+          wc_lights::set_test_mode(id(status_strip_test_active), false);
       - light.turn_off:
           id: status_strip
 
@@ -188,82 +188,108 @@ globals:
     restore_value: no
     initial_value: "false"
 
+  - id: wc_inside_blink_next_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: wc_inside_blink_running
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: wc_inside_blink_prev_was_on
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: wc_inside_blink_prev_brightness
+    type: float
+    restore_value: no
+    initial_value: "1.0"
+
 script:
   - id: update_status_strip
     mode: restart
     then:
       - lambda: |-
-          if (id(status_strip_test_active)) {
-            return;
-          }
-
-          const auto wc_inside_color = wc_lights::color_from_preset(id(wc_inside_color_preset).current_option());
-          const auto wc_flash_color = wc_lights::color_from_preset(id(wc_flash_color_preset).current_option());
-          const auto bath_flash_color = wc_lights::color_from_preset(id(bath_flash_color_preset).current_option());
-
-          wc_lights::update_status_strip(
-            id(status_strip),
-            id(wc_user_inside_flag),
-            id(wc_flash_active),
-            id(bath_flash_active),
-            (int)id(num_strip_wc_inside_brightness).state,
-            (int)id(num_strip_flash_brightness).state,
-            wc_inside_color.red,
-            wc_inside_color.green,
-            wc_inside_color.blue,
-            wc_flash_color.red,
-            wc_flash_color.green,
-            wc_flash_color.blue,
-            bath_flash_color.red,
-            bath_flash_color.green,
-            bath_flash_color.blue,
-            (int)id(num_status_strip_length).state
-          );
+          wc_lights::update_status_strip_from_presets(id(status_strip), id(status_strip_test_active), id(wc_user_inside_flag), id(wc_flash_active), id(bath_flash_active), wc_lights::to_int(id(num_strip_wc_inside_brightness).state), wc_lights::to_int(id(num_strip_flash_brightness).state), id(wc_inside_color_preset).current_option(), id(wc_flash_color_preset).current_option(), id(bath_flash_color_preset).current_option(), wc_lights::to_int(id(num_status_strip_length).state));
 
   - id: test_status_strip_rainbow
     mode: restart
     then:
       - lambda: |-
-          id(status_strip_test_active) = true;
+          wc_lights::set_test_mode(id(status_strip_test_active), true);
       - light.turn_on:
           id: status_strip
           effect: Rainbow
           brightness: 100%
       - delay: 60s
       - lambda: |-
-          id(status_strip_test_active) = false;
+          wc_lights::set_test_mode(id(status_strip_test_active), false);
       - script.execute: update_status_strip
 
   - id: wc_flashlight_script
     mode: restart
     then:
       - lambda: |-
-          wc_lights::set_flag(id(wc_flash_active), true);
-          id(wc_flash_started_ms) = millis();
+          wc_lights::start_flash(id(wc_flash_active), id(wc_flash_started_ms), millis());
       - script.execute: update_status_strip
       - while:
           condition:
-            lambda: return !wc_lights::flash_elapsed(id(wc_flash_started_ms), millis(), (int)id(num_wc_flashlight_duration).state);
+            lambda: return wc_lights::should_continue_flash_loop(id(wc_flash_started_ms), millis(), wc_lights::to_int(id(num_wc_flashlight_duration).state));
           then:
             - delay: 1000ms
       - lambda: |-
-          wc_lights::set_flag(id(wc_flash_active), false);
+          wc_lights::stop_flash(id(wc_flash_active));
       - script.execute: update_status_strip
+
+  - id: wc_inside_periodic_blink_script
+    mode: single
+    then:
+      - lambda: |-
+          wc_lights::start_wc_inside_blink(id(wc_inside_blink_running), id(wc_inside_blink_prev_was_on), id(wc_inside_blink_prev_brightness), id(wc_main_light), wc_lights::to_int(id(num_wc_day_brightness).state));
+      - repeat:
+          count: !lambda |-
+            return wc_lights::to_int(id(num_wc_inside_blink_count).state);
+          then:
+            - light.turn_off:
+                id: wc_main_light
+                transition_length: 500ms
+            - delay: 700ms
+            - light.turn_on:
+                id: wc_main_light
+                brightness: !lambda |-
+                  return wc_lights::to_brightness(id(wc_inside_blink_prev_brightness));
+                transition_length: 500ms
+            - delay: 700ms
+      - if:
+          condition:
+            lambda: |-
+              return wc_lights::to_bool(id(wc_inside_blink_prev_was_on));
+          then:
+            - light.turn_on:
+                id: wc_main_light
+                brightness: !lambda |-
+                  return wc_lights::to_brightness(id(wc_inside_blink_prev_brightness));
+                transition_length: ${main_light_transition}
+          else:
+            - light.turn_off:
+                id: wc_main_light
+                transition_length: ${main_light_transition}
+      - lambda: |-
+          wc_lights::finish_wc_inside_blink(id(wc_inside_blink_running));
 
   - id: bath_flashlight_script
     mode: restart
     then:
       - lambda: |-
-          wc_lights::set_flag(id(bath_flash_active), true);
-          id(bath_flash_started_ms) = millis();
+          wc_lights::start_flash(id(bath_flash_active), id(bath_flash_started_ms), millis());
       - script.execute: update_status_strip
       - while:
           condition:
-            lambda: return !wc_lights::flash_elapsed(id(bath_flash_started_ms), millis(), (int)id(num_bath_flashlight_duration).state);
+            lambda: return wc_lights::should_continue_flash_loop(id(bath_flash_started_ms), millis(), wc_lights::to_int(id(num_bath_flashlight_duration).state));
           then:
             - delay: 1000ms
       - lambda: |-
-          wc_lights::set_flag(id(bath_flash_active), false);
+          wc_lights::stop_flash(id(bath_flash_active));
       - script.execute: update_status_strip
 
   - id: handle_wc_door_open
@@ -374,6 +400,12 @@ script:
             id(wc_max_time_inside_sensor),
             id(bath_max_time_inside_sensor)
           );
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          wc_lights::handle_wc_inside_blink_schedule(id(wc_user_inside_flag), id(wc_inside_blink_running), id(wc_inside_blink_next_ms), id(wc_entry_started_ms), wc_lights::to_int(id(num_wc_inside_blink_interval_minutes).state), millis(), id(wc_inside_periodic_blink_script));
 
 output:
   - platform: ledc
@@ -512,7 +544,7 @@ binary_sensor:
     name: WC - Door
     device_class: door
     lambda: |-
-      return wc_lights::resolve_endstop_state(id(wc_door_raw).state, id(wc_endstop_mode).current_option());
+      return wc_lights::resolve_endstop_from_raw(id(wc_door_raw).state, id(wc_endstop_mode).current_option());
     on_press:
       then:
         - script.execute: handle_wc_door_open
@@ -525,7 +557,7 @@ binary_sensor:
     name: Bath - Door
     device_class: door
     lambda: |-
-      return wc_lights::resolve_endstop_state(id(bath_door_raw).state, id(bath_endstop_mode).current_option());
+      return wc_lights::resolve_endstop_from_raw(id(bath_door_raw).state, id(bath_endstop_mode).current_option());
     on_press:
       then:
         - script.execute: handle_bath_door_open
@@ -637,14 +669,7 @@ text_sensor:
     icon: mdi:calendar-clock
     update_interval: ${visit_sensor_update}
     lambda: |-
-      return wc_lights::format_total_duration(
-        wc_lights::total_time_inside_seconds(
-          id(wc_total_visit_seconds),
-          id(wc_user_inside_flag),
-          id(wc_entry_started_ms),
-          millis()
-        )
-      );
+      return wc_lights::format_total_duration_with_live_room_time(id(wc_total_visit_seconds), id(wc_user_inside_flag), id(wc_entry_started_ms), millis());
 
   - platform: template
     id: bath_total_inside_text_sensor
@@ -652,14 +677,7 @@ text_sensor:
     icon: mdi:calendar-clock
     update_interval: ${visit_sensor_update}
     lambda: |-
-      return wc_lights::format_total_duration(
-        wc_lights::total_time_inside_seconds(
-          id(bath_total_visit_seconds),
-          id(bath_user_inside_flag),
-          id(bath_entry_started_ms),
-          millis()
-        )
-      );
+      return wc_lights::format_total_duration_with_live_room_time(id(bath_total_visit_seconds), id(bath_user_inside_flag), id(bath_entry_started_ms), millis());
 
   - platform: template
     id: wc_last_visit_text_sensor
@@ -667,7 +685,7 @@ text_sensor:
     icon: mdi:history
     update_interval: ${visit_sensor_update}
     lambda: |-
-      return wc_lights::format_visit_duration_hms(id(wc_last_visit_seconds));
+      return wc_lights::format_visit_duration_from_seconds(id(wc_last_visit_seconds));
 
   - platform: template
     id: bath_last_visit_text_sensor
@@ -675,7 +693,7 @@ text_sensor:
     icon: mdi:history
     update_interval: ${visit_sensor_update}
     lambda: |-
-      return wc_lights::format_visit_duration_hms(id(bath_last_visit_seconds));
+      return wc_lights::format_visit_duration_from_seconds(id(bath_last_visit_seconds));
 
   - platform: template
     id: wc_max_visit_text_sensor
@@ -683,7 +701,7 @@ text_sensor:
     icon: mdi:timer-star-outline
     update_interval: ${visit_sensor_update}
     lambda: |-
-      return wc_lights::format_visit_duration_hms(id(wc_max_visit_seconds));
+      return wc_lights::format_visit_duration_from_seconds(id(wc_max_visit_seconds));
 
   - platform: template
     id: bath_max_visit_text_sensor
@@ -691,7 +709,7 @@ text_sensor:
     icon: mdi:timer-star-outline
     update_interval: ${visit_sensor_update}
     lambda: |-
-      return wc_lights::format_visit_duration_hms(id(bath_max_visit_seconds));
+      return wc_lights::format_visit_duration_from_seconds(id(bath_max_visit_seconds));
 
 button:
   - platform: template
@@ -711,6 +729,15 @@ button:
     on_press:
       then:
         - script.execute: test_status_strip_rainbow
+
+  - platform: template
+    id: test_wc_inside_blink_button
+    name: WC - Test Inside Blink Reminder
+    icon: mdi:alarm-light-outline
+    entity_category: config
+    on_press:
+      then:
+        - script.execute: wc_inside_periodic_blink_script
 
   - platform: factory_reset
     id: reset_wifi_button
@@ -991,6 +1018,31 @@ number:
     initial_value: ${wc_flashlight_duration_seconds}
     min_value: 0
     max_value: 300
+    step: 1
+
+  - platform: template
+    id: num_wc_inside_blink_interval_minutes
+    name: WC - Inside Blink Reminder Interval
+    entity_category: config
+    icon: mdi:timer-alert-outline
+    unit_of_measurement: min
+    optimistic: true
+    restore_value: true
+    initial_value: 5
+    min_value: 1
+    max_value: 180
+    step: 1
+
+  - platform: template
+    id: num_wc_inside_blink_count
+    name: WC - Inside Blink Reminder Count
+    entity_category: config
+    icon: mdi:counter
+    optimistic: true
+    restore_value: true
+    initial_value: 2
+    min_value: 1
+    max_value: 10
     step: 1
 
   - platform: template
