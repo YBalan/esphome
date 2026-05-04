@@ -11,6 +11,11 @@
 namespace wc_lights {
 
 static constexpr uint32_t MS_PER_SECOND = 1000U;
+static constexpr uint32_t SECONDS_PER_MINUTE = 60U;
+static constexpr uint32_t SECONDS_PER_HOUR = 60U * SECONDS_PER_MINUTE;
+static constexpr uint32_t SECONDS_PER_DAY = 24U * SECONDS_PER_HOUR;
+static constexpr uint32_t SECONDS_PER_WEEK = 7U * SECONDS_PER_DAY;
+static constexpr uint32_t SECONDS_PER_MONTH = 30U * SECONDS_PER_DAY;
 static constexpr float PERCENT_TO_UNIT = 0.01f;
 
 inline float pct_to_unit(const int pct) {
@@ -69,10 +74,25 @@ inline void handle_room_door_open(
   uint32_t &door_open_started_ms,
   const uint32_t now_ms,
   TLight main_light,
-  const int day_brightness_pct
+  const esphome::ESPTime &time_now,
+  const int day_brightness_pct,
+  const int night_brightness_pct,
+  const int night_start_hour,
+  const int night_start_minute,
+  const int night_end_hour,
+  const int night_end_minute
 ) {
   door_open_started_ms = now_ms;
-  turn_light_on_pct(main_light, day_brightness_pct);
+
+  const bool night_mode = is_night_time(
+    time_now,
+    night_start_hour,
+    night_start_minute,
+    night_end_hour,
+    night_end_minute
+  );
+
+  turn_light_on_pct(main_light, night_mode ? night_brightness_pct : day_brightness_pct);
 }
 
 template<typename TLight>
@@ -235,6 +255,75 @@ inline float to_float_seconds(const uint32_t value) {
   return static_cast<float>(value);
 }
 
+inline uint32_t total_time_inside_seconds(
+  const uint32_t total_visit_seconds,
+  const bool user_inside,
+  const uint32_t entry_started_ms,
+  const uint32_t now_ms
+) {
+  return total_visit_seconds + static_cast<uint32_t>(room_time_inside_seconds(user_inside, entry_started_ms, now_ms));
+}
+
+inline std::string pad_two_digits(const uint32_t value) {
+  if (value < 10U) {
+    return "0" + std::to_string(value);
+  }
+  return std::to_string(value);
+}
+
+inline std::string pluralize_unit(const uint32_t value, const char *singular, const char *plural) {
+  return std::to_string(value) + " " + (value == 1U ? singular : plural);
+}
+
+inline std::string format_total_duration(const uint32_t total_seconds) {
+  uint32_t remaining = total_seconds;
+
+  const uint32_t months = remaining / SECONDS_PER_MONTH;
+  remaining %= SECONDS_PER_MONTH;
+
+  const uint32_t weeks = remaining / SECONDS_PER_WEEK;
+  remaining %= SECONDS_PER_WEEK;
+
+  const uint32_t days = remaining / SECONDS_PER_DAY;
+  remaining %= SECONDS_PER_DAY;
+
+  const uint32_t hours = remaining / SECONDS_PER_HOUR;
+
+  std::string formatted;
+
+  if (months > 0U) {
+    formatted += pluralize_unit(months, "month", "months");
+  }
+  if (weeks > 0U) {
+    if (!formatted.empty()) {
+      formatted += ", ";
+    }
+    formatted += pluralize_unit(weeks, "week", "weeks");
+  }
+  if (days > 0U) {
+    if (!formatted.empty()) {
+      formatted += ", ";
+    }
+    formatted += pluralize_unit(days, "day", "days");
+  }
+  if (hours > 0U || formatted.empty()) {
+    if (!formatted.empty()) {
+      formatted += ", ";
+    }
+    formatted += pluralize_unit(hours, "hour", "hours");
+  }
+
+  return formatted;
+}
+
+inline std::string format_visit_duration_hms(const uint32_t total_seconds) {
+  const uint32_t hours = total_seconds / SECONDS_PER_HOUR;
+  const uint32_t minutes = (total_seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE;
+  const uint32_t seconds = total_seconds % SECONDS_PER_MINUTE;
+
+  return std::to_string(hours) + ":" + pad_two_digits(minutes) + ":" + pad_two_digits(seconds);
+}
+
 inline bool resolve_endstop_state(const bool raw_state, const std::string &mode) {
   // With input pull-up wiring, NC and NO contacts map to opposite raw levels.
   return (mode == "NC") ? !raw_state : raw_state;
@@ -247,6 +336,7 @@ inline void handle_room_door_close(
   const uint32_t door_open_started_ms,
   uint32_t &entry_started_ms,
   uint32_t &last_visit_seconds,
+  uint32_t &total_visit_seconds,
   uint32_t &max_visit_seconds,
   TLight main_light,
   TFlashScript flash_script,
@@ -287,6 +377,7 @@ inline void handle_room_door_close(
     user_inside_flag = false;
     const uint32_t visit_seconds = seconds_since_ms(entry_started_ms, now_ms) / MS_PER_SECOND;
     last_visit_seconds = visit_seconds;
+    total_visit_seconds += visit_seconds;
     update_max_seconds(visit_seconds, max_visit_seconds);
 
     turn_light_off(main_light);
@@ -306,6 +397,8 @@ template<typename TSensorA, typename TSensorB, typename TSensorC, typename TSens
 inline void reset_all_visit_counters(
   uint32_t &wc_last_visit_seconds,
   uint32_t &bath_last_visit_seconds,
+  uint32_t &wc_total_visit_seconds,
+  uint32_t &bath_total_visit_seconds,
   uint32_t &wc_max_visit_seconds,
   uint32_t &bath_max_visit_seconds,
   TSensorA wc_last_visit_sensor,
@@ -315,6 +408,8 @@ inline void reset_all_visit_counters(
 ) {
   wc_last_visit_seconds = 0;
   bath_last_visit_seconds = 0;
+  wc_total_visit_seconds = 0;
+  bath_total_visit_seconds = 0;
   wc_max_visit_seconds = 0;
   bath_max_visit_seconds = 0;
   wc_last_visit_sensor->publish_state(0);

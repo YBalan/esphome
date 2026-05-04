@@ -1,0 +1,154 @@
+type: custom:stack-in-card
+cards:
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.boiler_temp_with_trend
+        name: Trend
+        state_content:
+          - state
+          - last_changed
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+            ha-tile-icon {
+              --tile-color: {{ state_attr('sensor.boiler_temp_with_trend', 'trend_color') }} !important;
+            }
+            .icon-container {
+              background-color: {{ state_attr('sensor.boiler_temp_with_trend', 'trend_color') }}15 !important;
+            }
+      - type: tile
+        entity: binary_sensor.electrolux_boiler_boiler_heating_2
+        name: Status
+        state_content:
+          - state
+          - last_changed
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+            ha-tile-icon {
+              --tile-color: {% if is_state('binary_sensor.electrolux_boiler_boiler_heating', 'on') %} red {% else %} grey {% endif %} !important;
+            }
+            .icon-container {
+              background-color: {% if is_state('binary_sensor.electrolux_boiler_boiler_heating', 'on') %} red {% else %} grey {% endif %}15 !important;
+            }
+  - type: gauge
+    entity: sensor.electrolux_boiler_boiler_current_temp
+    name: ""
+    min: 35
+    max: 75
+    needle: true
+    severity:
+      green: 45
+      yellow: 60
+      red: 70
+    card_mod:
+      style: |
+        ha-card {
+          border: none;
+          background: transparent;
+          margin-top: -40px; 
+          margin-bottom: -30px;
+        }
+  - type: entities
+    entities:
+      - entity: number.electrolux_boiler_boiler_target_temp_set_2
+        name: Target
+        icon: mdi:temperature-celsius
+      - entity: select.electrolux_boiler_boiler_power_mode_set_2
+        name: Mode
+      - entity: switch.electrolux_boiler_boiler_bst_mode_2
+        name: BST
+    card_mod:
+      style: |
+        ha-card {
+          border: none;
+          background: transparent;
+          padding-bottom: 0px;
+        }
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: switch.electrolux_boiler_boiler_main_power_2
+        name: Power
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+      - type: tile
+        entity: switch.s1_boiler_socket_1
+        name: Socket
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+      - type: tile
+        entity: light.electrolux_boiler_lcd_display_switch_2
+        name: LCD
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.electrolux_boiler_boiler_clock
+        name: Clock
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+      - type: tile
+        entity: number.electrolux_boiler_boiler_timer_start_hour
+        name: Hours Timer
+        icon: mdi:hours-24
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+      - type: tile
+        entity: number.electrolux_boiler_boiler_timer_start_minute
+        name: Minutes Timer
+        icon: mdi:timer-cog-outline
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+  - type: horizontal-stack
+    cards:
+      - type: tile
+        entity: sensor.electrolux_boiler_boiler_total_energy
+        name: Energy
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }

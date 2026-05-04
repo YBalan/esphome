@@ -147,6 +147,15 @@ globals:
     restore_value: yes
     initial_value: "0"
 
+  - id: wc_total_visit_seconds
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+  - id: bath_total_visit_seconds
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+
   - id: wc_max_visit_seconds
     type: uint32_t
     restore_value: yes
@@ -261,7 +270,18 @@ script:
     mode: restart
     then:
       - lambda: |-
-          wc_lights::handle_room_door_open(id(wc_door_open_started_ms), millis(), id(wc_main_light), (int)id(num_wc_day_brightness).state);
+          wc_lights::handle_room_door_open(
+            id(wc_door_open_started_ms),
+            millis(),
+            id(wc_main_light),
+            id(sntp_time).now(),
+            (int)id(num_wc_day_brightness).state,
+            (int)id(num_wc_night_brightness).state,
+            (int)id(num_night_start_hour).state,
+            (int)id(num_night_start_minute).state,
+            (int)id(num_night_end_hour).state,
+            (int)id(num_night_end_minute).state
+          );
 
   - id: handle_wc_door_close
     mode: restart
@@ -273,6 +293,7 @@ script:
             id(wc_door_open_started_ms),
             id(wc_entry_started_ms),
             id(wc_last_visit_seconds),
+            id(wc_total_visit_seconds),
             id(wc_max_visit_seconds),
             id(wc_main_light),
             id(wc_flashlight_script),
@@ -295,7 +316,18 @@ script:
     mode: restart
     then:
       - lambda: |-
-          wc_lights::handle_room_door_open(id(bath_door_open_started_ms), millis(), id(bath_main_light), (int)id(num_bath_day_brightness).state);
+          wc_lights::handle_room_door_open(
+            id(bath_door_open_started_ms),
+            millis(),
+            id(bath_main_light),
+            id(sntp_time).now(),
+            (int)id(num_bath_day_brightness).state,
+            (int)id(num_bath_night_brightness).state,
+            (int)id(num_night_start_hour).state,
+            (int)id(num_night_start_minute).state,
+            (int)id(num_night_end_hour).state,
+            (int)id(num_night_end_minute).state
+          );
 
   - id: handle_bath_door_close
     mode: restart
@@ -307,6 +339,7 @@ script:
             id(bath_door_open_started_ms),
             id(bath_entry_started_ms),
             id(bath_last_visit_seconds),
+            id(bath_total_visit_seconds),
             id(bath_max_visit_seconds),
             id(bath_main_light),
             id(bath_flashlight_script),
@@ -332,6 +365,8 @@ script:
           wc_lights::reset_all_visit_counters(
             id(wc_last_visit_seconds),
             id(bath_last_visit_seconds),
+            id(wc_total_visit_seconds),
+            id(bath_total_visit_seconds),
             id(wc_max_visit_seconds),
             id(bath_max_visit_seconds),
             id(wc_last_visit_sensor),
@@ -594,6 +629,69 @@ sensor:
     update_interval: never
     lambda: |-
       return wc_lights::to_float_seconds(id(bath_last_visit_seconds));
+
+text_sensor:
+  - platform: template
+    id: wc_total_inside_text_sensor
+    name: WC - Total Time Inside
+    icon: mdi:calendar-clock
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::format_total_duration(
+        wc_lights::total_time_inside_seconds(
+          id(wc_total_visit_seconds),
+          id(wc_user_inside_flag),
+          id(wc_entry_started_ms),
+          millis()
+        )
+      );
+
+  - platform: template
+    id: bath_total_inside_text_sensor
+    name: Bath - Total Time Inside
+    icon: mdi:calendar-clock
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::format_total_duration(
+        wc_lights::total_time_inside_seconds(
+          id(bath_total_visit_seconds),
+          id(bath_user_inside_flag),
+          id(bath_entry_started_ms),
+          millis()
+        )
+      );
+
+  - platform: template
+    id: wc_last_visit_text_sensor
+    name: WC - Last Visit Duration Human
+    icon: mdi:history
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::format_visit_duration_hms(id(wc_last_visit_seconds));
+
+  - platform: template
+    id: bath_last_visit_text_sensor
+    name: Bath - Last Visit Duration Human
+    icon: mdi:history
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::format_visit_duration_hms(id(bath_last_visit_seconds));
+
+  - platform: template
+    id: wc_max_visit_text_sensor
+    name: WC - Max Time User Inside Human
+    icon: mdi:timer-star-outline
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::format_visit_duration_hms(id(wc_max_visit_seconds));
+
+  - platform: template
+    id: bath_max_visit_text_sensor
+    name: Bath - Max Time User Inside Human
+    icon: mdi:timer-star-outline
+    update_interval: ${visit_sensor_update}
+    lambda: |-
+      return wc_lights::format_visit_duration_hms(id(bath_max_visit_seconds));
 
 button:
   - platform: template

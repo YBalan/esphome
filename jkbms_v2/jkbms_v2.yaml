@@ -230,6 +230,7 @@ sensor:
     state_topic: "jkbms/ble_rssi"
     force_update: true
     filters:
+      - filter_out: nan
       - throttle: 15s # Skip values more often than once every 15 seconds
       
   - platform: template
@@ -340,6 +341,11 @@ button:
     name: "BMS Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
+
+  - platform: restart
+    name: "BMS Restart Device"
+    id: restart_btn
+    icon: "mdi:restart"
 
 # 6. CONTROL (Switches)
 # Allow turning charge/discharge on/off via MQTT

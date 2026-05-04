@@ -215,6 +215,7 @@ sensor:
     state_topic: "jbdbms/ble_rssi"
     force_update: true
     filters:
+      - filter_out: nan
       - throttle: 15s
       
   # Charging Time Remaining Calculation
@@ -325,6 +326,11 @@ button:
     name: "JBD Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
+
+  - platform: restart
+    name: "JBD Restart Device"
+    id: restart_btn
+    icon: "mdi:restart"
 
 # 6. CONTROL (Switches)
 switch:
