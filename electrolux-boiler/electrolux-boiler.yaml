@@ -250,6 +250,17 @@ button:
     name: "Boiler Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
+  # Reset Total Energy Button
+  - platform: template
+    name: "Boiler Reset Total Energy"
+    id: reset_energy_btn
+    icon: "mdi:lightning-bolt-reset"
+    on_press:
+      then:
+        - globals.set:
+            id: global_total_energy_wh
+            value: '0'
+        - logger.log: "Total energy reset to 0 Wh"
     
 interval:  
   - interval: ${clock_sync_interval}

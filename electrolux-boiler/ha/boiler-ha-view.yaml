@@ -152,3 +152,24 @@ cards:
               box-shadow: none !important;
               background: transparent !important;
             }
+      - type: tile
+        entity: button.electrolux_boiler_boiler_reset_total_energy
+        name: Reset Energy
+        state_content: []          
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
+      - type: tile
+        entity: sensor.electrolux_boiler_boiler_current_temp
+        name: Current
+        card_mod:
+          style: |
+            ha-card {
+              border: none !important;
+              box-shadow: none !important;
+              background: transparent !important;
+            }
