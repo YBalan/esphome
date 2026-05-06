@@ -28,7 +28,8 @@ An ESPHome-based smart lighting controller for WC and Bath rooms. Automatically 
 - **Day / Night brightness** — configurable brightness levels for day and night per room, with a configurable night window (default 00:00–06:00)
 - **Door open timeout** — if the door is left open longer than the configured timeout (default WC: 10 s, Bath: 20 s), the next door-close will turn the lights off
 - **RGB status strip** — shows WC occupancy color (default: Red) and plays a post-visit flash (default: Yellow, 30 s) for both rooms independently
-- **Visit statistics** — tracks time spent inside, last visit duration, and maximum visit duration per room; all values persist across reboots
+- **WC inside blink reminder** — while WC is occupied, the main WC light can blink periodically with configurable interval and blink count
+- **Visit statistics** — tracks visit count, time spent inside, last visit duration, and maximum visit duration per room; all values persist across reboots
 - **Endstop mode** — supports both NC and NO door switches, configurable per room from Home Assistant
 - **Reset counters** — hardware button (GPIO) and Home Assistant button to reset all visit counters
 - **Captive portal + Web server** — works without Wi-Fi; GPIO logic is fully independent of network connectivity
@@ -116,20 +117,25 @@ Copy `secrets.yaml.example` to `secrets.yaml` and fill in your Wi-Fi credentials
 | WC - Door | Binary sensor | Door open/closed (device class: door) |
 | WC - User Inside | Binary sensor | Occupancy (device class: occupancy) |
 | WC - Time User Spent Inside | Sensor | Live timer while inside (s) |
+| WC - Visit Count | Sensor | Total number of completed WC visits |
 | WC - Last Visit Duration | Sensor | Duration of last visit (s) |
 | WC - Max Time User Inside | Sensor | Record longest visit (s) |
 | WC - Day Brightness | Number | Day brightness (%) |
 | WC - Night Brightness | Number | Night brightness (%) |
 | WC - Door Open Timeout | Number | Timeout before exit-on-close (s) |
 | WC - Post Visit Flash Duration | Number | RGB flash duration after visit (s) |
+| WC - Inside Blink Reminder Interval | Number | Minutes between periodic WC reminder blinks while occupied |
+| WC - Inside Blink Reminder Count | Number | Number of blink cycles per WC reminder |
 | WC - Status Strip Inside Brightness | Number | RGB strip brightness while occupied (%) |
 | WC - Inside Color | Select | RGB color while user is inside |
 | WC - Flash Color | Select | RGB color for post-visit flash |
 | WC - Endstop Mode | Select | NC / NO switch type |
+| WC - Test Inside Blink Reminder | Button | Runs WC blink reminder sequence immediately |
 
 ### Bath
 
-Same set of entities as WC, prefixed with **Bath -**.
+Same core set of entities as WC, prefixed with **Bath -**, including **Bath - Visit Count**.
+WC-only entities are the inside blink reminder controls and test button.
 
 ### Device (shared)
 
@@ -160,6 +166,8 @@ Door opens
 ```
 
 Night mode reduces brightness automatically between `night_start` and `night_end`.
+
+When WC is occupied, a periodic reminder can blink the WC main light based on `WC - Inside Blink Reminder Interval` and `WC - Inside Blink Reminder Count`.
 
 ---
 

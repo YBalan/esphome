@@ -59,6 +59,8 @@ sections:
                 name: Last Visit
               - entity: sensor.wc_lights_wc_max_time_user_inside_human
                 name: Max Visit
+              - entity: sensor.wc_lights_wc_visit_count
+                name: Visit Count
               - type: section
                 label: Settings
               - entity: number.wc_lights_wc_day_brightness
@@ -159,6 +161,8 @@ sections:
                 name: Last Visit
               - entity: sensor.wc_lights_bath_max_time_user_inside_human
                 name: Max Visit
+              - entity: sensor.wc_lights_bath_visit_count
+                name: Visit Count
               - type: section
                 label: Settings
               - entity: number.wc_lights_bath_day_brightness

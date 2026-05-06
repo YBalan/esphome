@@ -486,7 +486,7 @@ inline bool resolve_endstop_state(const bool raw_state, const std::string &mode)
   return (mode == "NC") ? !raw_state : raw_state;
 }
 
-template<typename TLight, typename TFlashScript, typename TStatusScript, typename TBinarySensor, typename TTimeSensor, typename TMaxSensor, typename TLastSensor>
+template<typename TLight, typename TFlashScript, typename TStatusScript, typename TBinarySensor, typename TTimeSensor, typename TMaxSensor, typename TLastSensor, typename TCountSensor>
 inline void handle_room_door_close(
   const uint32_t now_ms,
   bool &user_inside_flag,
@@ -495,6 +495,7 @@ inline void handle_room_door_close(
   uint32_t &last_visit_seconds,
   uint32_t &total_visit_seconds,
   uint32_t &max_visit_seconds,
+  uint32_t &visit_count,
   TLight main_light,
   TFlashScript flash_script,
   TStatusScript status_strip_script,
@@ -502,6 +503,7 @@ inline void handle_room_door_close(
   TTimeSensor time_inside_sensor,
   TMaxSensor max_time_sensor,
   TLastSensor last_visit_sensor,
+  TCountSensor visit_count_sensor,
   const esphome::ESPTime &time_now,
   const uint32_t open_timeout_seconds,
   const int day_brightness_pct,
@@ -536,6 +538,7 @@ inline void handle_room_door_close(
     last_visit_seconds = visit_seconds;
     total_visit_seconds += visit_seconds;
     update_max_seconds(visit_seconds, max_visit_seconds);
+    visit_count++;
 
     turn_light_off(main_light);
     flash_script->execute();
@@ -547,10 +550,11 @@ inline void handle_room_door_close(
   );
   max_time_sensor->publish_state(max_visit_seconds);
   last_visit_sensor->publish_state(last_visit_seconds);
+  visit_count_sensor->publish_state(visit_count);
   status_strip_script->execute();
 }
 
-template<typename TSensorA, typename TSensorB, typename TSensorC, typename TSensorD>
+template<typename TSensorA, typename TSensorB, typename TSensorC, typename TSensorD, typename TSensorE, typename TSensorF>
 inline void reset_all_visit_counters(
   uint32_t &wc_last_visit_seconds,
   uint32_t &bath_last_visit_seconds,
@@ -558,10 +562,14 @@ inline void reset_all_visit_counters(
   uint32_t &bath_total_visit_seconds,
   uint32_t &wc_max_visit_seconds,
   uint32_t &bath_max_visit_seconds,
+  uint32_t &wc_visit_count,
+  uint32_t &bath_visit_count,
   TSensorA wc_last_visit_sensor,
   TSensorB bath_last_visit_sensor,
   TSensorC wc_max_time_inside_sensor,
-  TSensorD bath_max_time_inside_sensor
+  TSensorD bath_max_time_inside_sensor,
+  TSensorE wc_visit_count_sensor,
+  TSensorF bath_visit_count_sensor
 ) {
   wc_last_visit_seconds = 0;
   bath_last_visit_seconds = 0;
@@ -569,10 +577,14 @@ inline void reset_all_visit_counters(
   bath_total_visit_seconds = 0;
   wc_max_visit_seconds = 0;
   bath_max_visit_seconds = 0;
+  wc_visit_count = 0;
+  bath_visit_count = 0;
   wc_last_visit_sensor->publish_state(0);
   bath_last_visit_sensor->publish_state(0);
   wc_max_time_inside_sensor->publish_state(0);
   bath_max_time_inside_sensor->publish_state(0);
+  wc_visit_count_sensor->publish_state(0);
+  bath_visit_count_sensor->publish_state(0);
 }
 
 }  // namespace wc_lights

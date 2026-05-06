@@ -165,6 +165,15 @@ globals:
     restore_value: yes
     initial_value: "0"
 
+  - id: wc_visit_count
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+  - id: bath_visit_count
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+
   - id: wc_flash_active
     type: bool
     restore_value: no
@@ -321,6 +330,7 @@ script:
             id(wc_last_visit_seconds),
             id(wc_total_visit_seconds),
             id(wc_max_visit_seconds),
+            id(wc_visit_count),
             id(wc_main_light),
             id(wc_flashlight_script),
             id(update_status_strip),
@@ -328,6 +338,7 @@ script:
             id(wc_time_inside_sensor),
             id(wc_max_time_inside_sensor),
             id(wc_last_visit_sensor),
+            id(wc_visit_count_sensor),
             id(sntp_time).now(),
             (int)id(num_wc_open_timeout).state,
             (int)id(num_wc_day_brightness).state,
@@ -367,6 +378,7 @@ script:
             id(bath_last_visit_seconds),
             id(bath_total_visit_seconds),
             id(bath_max_visit_seconds),
+            id(bath_visit_count),
             id(bath_main_light),
             id(bath_flashlight_script),
             id(update_status_strip),
@@ -374,6 +386,7 @@ script:
             id(bath_time_inside_sensor),
             id(bath_max_time_inside_sensor),
             id(bath_last_visit_sensor),
+            id(bath_visit_count_sensor),
             id(sntp_time).now(),
             (int)id(num_bath_open_timeout).state,
             (int)id(num_bath_day_brightness).state,
@@ -395,10 +408,14 @@ script:
             id(bath_total_visit_seconds),
             id(wc_max_visit_seconds),
             id(bath_max_visit_seconds),
+            id(wc_visit_count),
+            id(bath_visit_count),
             id(wc_last_visit_sensor),
             id(bath_last_visit_sensor),
             id(wc_max_time_inside_sensor),
-            id(bath_max_time_inside_sensor)
+            id(bath_max_time_inside_sensor),
+            id(wc_visit_count_sensor),
+            id(bath_visit_count_sensor)
           );
 
 interval:
@@ -661,6 +678,26 @@ sensor:
     update_interval: never
     lambda: |-
       return wc_lights::to_float_seconds(id(bath_last_visit_seconds));
+
+  - platform: template
+    id: wc_visit_count_sensor
+    name: WC - Visit Count
+    unit_of_measurement: visits
+    accuracy_decimals: 0
+    icon: mdi:counter
+    update_interval: never
+    lambda: |-
+      return static_cast<float>(id(wc_visit_count));
+
+  - platform: template
+    id: bath_visit_count_sensor
+    name: Bath - Visit Count
+    unit_of_measurement: visits
+    accuracy_decimals: 0
+    icon: mdi:counter
+    update_interval: never
+    lambda: |-
+      return static_cast<float>(id(bath_visit_count));
 
 text_sensor:
   - platform: template
