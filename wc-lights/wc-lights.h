@@ -22,6 +22,17 @@ inline float pct_to_unit(const int pct) {
   return static_cast<float>(pct) * PERCENT_TO_UNIT;
 }
 
+inline bool flash_elapsed(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds);
+inline uint32_t total_time_inside_seconds(
+  const uint32_t total_visit_seconds,
+  const bool user_inside,
+  const uint32_t entry_started_ms,
+  const uint32_t now_ms
+);
+inline std::string format_total_duration(const uint32_t total_seconds);
+inline std::string format_visit_duration_hms(const uint32_t total_seconds);
+inline bool resolve_endstop_state(const bool raw_state, const std::string &mode);
+
 inline uint32_t seconds_since_ms(const uint32_t start_ms, const uint32_t now_ms) {
   return (now_ms >= start_ms) ? (now_ms - start_ms) : 0U;
 }
@@ -232,6 +243,152 @@ inline void set_flag(bool &flag, const bool value) {
   flag = value;
 }
 
+inline void set_test_mode(bool &flag, const bool value) {
+  flag = value;
+}
+
+inline bool should_skip_status_strip_update(const bool test_mode_active) {
+  return test_mode_active;
+}
+
+inline int to_int(const float value) {
+  return static_cast<int>(value);
+}
+
+inline bool to_bool(const bool value) {
+  return value;
+}
+
+inline float to_brightness(const float value) {
+  return value;
+}
+
+inline void start_flash(bool &flash_active, uint32_t &flash_started_ms, const uint32_t now_ms) {
+  flash_active = true;
+  flash_started_ms = now_ms;
+}
+
+inline void stop_flash(bool &flash_active) {
+  flash_active = false;
+}
+
+inline bool should_continue_flash_loop(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds) {
+  return !flash_elapsed(started_ms, now_ms, duration_seconds);
+}
+
+template<typename TLight>
+inline void start_wc_inside_blink(
+  bool &blink_running,
+  bool &blink_prev_was_on,
+  float &blink_prev_brightness,
+  TLight light,
+  const int day_brightness_pct
+) {
+  blink_running = true;
+  blink_prev_was_on = light->current_values.is_on();
+
+  float previous_brightness = light->current_values.get_brightness();
+  if (previous_brightness <= 0.01f) {
+    previous_brightness = pct_to_unit(day_brightness_pct);
+  }
+
+  blink_prev_brightness = previous_brightness;
+}
+
+inline void finish_wc_inside_blink(bool &blink_running) {
+  blink_running = false;
+}
+
+template<typename TBlinkScript>
+inline void handle_wc_inside_blink_schedule(
+  const bool wc_user_inside_flag,
+  const bool wc_inside_blink_running,
+  uint32_t &wc_inside_blink_next_ms,
+  const uint32_t wc_entry_started_ms,
+  const int interval_minutes,
+  const uint32_t now_ms,
+  TBlinkScript wc_inside_blink_script
+) {
+  if (!wc_user_inside_flag) {
+    wc_inside_blink_next_ms = 0;
+    return;
+  }
+
+  if (wc_inside_blink_running || interval_minutes <= 0) {
+    return;
+  }
+
+  const uint32_t period_ms = static_cast<uint32_t>(interval_minutes) * SECONDS_PER_MINUTE * MS_PER_SECOND;
+
+  if (wc_inside_blink_next_ms == 0U) {
+    wc_inside_blink_next_ms = wc_entry_started_ms + period_ms;
+    return;
+  }
+
+  if (now_ms >= wc_inside_blink_next_ms) {
+    wc_inside_blink_next_ms = now_ms + period_ms;
+    wc_inside_blink_script->execute();
+  }
+}
+
+inline std::string format_total_duration_with_live_room_time(
+  const uint32_t total_visit_seconds,
+  const bool user_inside,
+  const uint32_t entry_started_ms,
+  const uint32_t now_ms
+) {
+  return format_total_duration(total_time_inside_seconds(total_visit_seconds, user_inside, entry_started_ms, now_ms));
+}
+
+inline std::string format_visit_duration_from_seconds(const uint32_t seconds) {
+  return format_visit_duration_hms(seconds);
+}
+
+inline bool resolve_endstop_from_raw(const bool raw_state, const std::string &mode) {
+  return resolve_endstop_state(raw_state, mode);
+}
+
+inline void update_status_strip_from_presets(
+  esphome::light::AddressableLightState *strip,
+  const bool test_mode_active,
+  const bool wc_user_inside,
+  const bool wc_flash_active,
+  const bool bath_flash_active,
+  const int wc_inside_brightness_pct,
+  const int flash_brightness_pct,
+  const std::string &wc_inside_color_preset,
+  const std::string &wc_flash_color_preset,
+  const std::string &bath_flash_color_preset,
+  const int active_led_count
+) {
+  if (should_skip_status_strip_update(test_mode_active)) {
+    return;
+  }
+
+  const auto wc_inside_color = color_from_preset(wc_inside_color_preset);
+  const auto wc_flash_color = color_from_preset(wc_flash_color_preset);
+  const auto bath_flash_color = color_from_preset(bath_flash_color_preset);
+
+  update_status_strip(
+    strip,
+    wc_user_inside,
+    wc_flash_active,
+    bath_flash_active,
+    wc_inside_brightness_pct,
+    flash_brightness_pct,
+    wc_inside_color.red,
+    wc_inside_color.green,
+    wc_inside_color.blue,
+    wc_flash_color.red,
+    wc_flash_color.green,
+    wc_flash_color.blue,
+    bath_flash_color.red,
+    bath_flash_color.green,
+    bath_flash_color.blue,
+    active_led_count
+  );
+}
+
 inline bool flash_elapsed(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds) {
   return (now_ms - started_ms) >= (static_cast<uint32_t>(duration_seconds) * MS_PER_SECOND);
 }
@@ -329,7 +486,7 @@ inline bool resolve_endstop_state(const bool raw_state, const std::string &mode)
   return (mode == "NC") ? !raw_state : raw_state;
 }
 
-template<typename TLight, typename TFlashScript, typename TStatusScript, typename TBinarySensor, typename TTimeSensor, typename TMaxSensor, typename TLastSensor>
+template<typename TLight, typename TFlashScript, typename TStatusScript, typename TBinarySensor, typename TTimeSensor, typename TMaxSensor, typename TLastSensor, typename TCountSensor>
 inline void handle_room_door_close(
   const uint32_t now_ms,
   bool &user_inside_flag,
@@ -338,6 +495,7 @@ inline void handle_room_door_close(
   uint32_t &last_visit_seconds,
   uint32_t &total_visit_seconds,
   uint32_t &max_visit_seconds,
+  uint32_t &visit_count,
   TLight main_light,
   TFlashScript flash_script,
   TStatusScript status_strip_script,
@@ -345,6 +503,7 @@ inline void handle_room_door_close(
   TTimeSensor time_inside_sensor,
   TMaxSensor max_time_sensor,
   TLastSensor last_visit_sensor,
+  TCountSensor visit_count_sensor,
   const esphome::ESPTime &time_now,
   const uint32_t open_timeout_seconds,
   const int day_brightness_pct,
@@ -379,6 +538,7 @@ inline void handle_room_door_close(
     last_visit_seconds = visit_seconds;
     total_visit_seconds += visit_seconds;
     update_max_seconds(visit_seconds, max_visit_seconds);
+    visit_count++;
 
     turn_light_off(main_light);
     flash_script->execute();
@@ -390,10 +550,11 @@ inline void handle_room_door_close(
   );
   max_time_sensor->publish_state(max_visit_seconds);
   last_visit_sensor->publish_state(last_visit_seconds);
+  visit_count_sensor->publish_state(visit_count);
   status_strip_script->execute();
 }
 
-template<typename TSensorA, typename TSensorB, typename TSensorC, typename TSensorD>
+template<typename TSensorA, typename TSensorB, typename TSensorC, typename TSensorD, typename TSensorE, typename TSensorF>
 inline void reset_all_visit_counters(
   uint32_t &wc_last_visit_seconds,
   uint32_t &bath_last_visit_seconds,
@@ -401,10 +562,14 @@ inline void reset_all_visit_counters(
   uint32_t &bath_total_visit_seconds,
   uint32_t &wc_max_visit_seconds,
   uint32_t &bath_max_visit_seconds,
+  uint32_t &wc_visit_count,
+  uint32_t &bath_visit_count,
   TSensorA wc_last_visit_sensor,
   TSensorB bath_last_visit_sensor,
   TSensorC wc_max_time_inside_sensor,
-  TSensorD bath_max_time_inside_sensor
+  TSensorD bath_max_time_inside_sensor,
+  TSensorE wc_visit_count_sensor,
+  TSensorF bath_visit_count_sensor
 ) {
   wc_last_visit_seconds = 0;
   bath_last_visit_seconds = 0;
@@ -412,10 +577,14 @@ inline void reset_all_visit_counters(
   bath_total_visit_seconds = 0;
   wc_max_visit_seconds = 0;
   bath_max_visit_seconds = 0;
+  wc_visit_count = 0;
+  bath_visit_count = 0;
   wc_last_visit_sensor->publish_state(0);
   bath_last_visit_sensor->publish_state(0);
   wc_max_time_inside_sensor->publish_state(0);
   bath_max_time_inside_sensor->publish_state(0);
+  wc_visit_count_sensor->publish_state(0);
+  bath_visit_count_sensor->publish_state(0);
 }
 
 }  // namespace wc_lights
