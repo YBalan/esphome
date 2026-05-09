@@ -3,8 +3,13 @@ substitutions:
   device_name: jkbms-gateway-v2
   
   # Hardware
-  bms_mac_address: "C8:47:80:28:71:3E"
+  bms_mac_address: !secret bms_mac_address
   relay_control_pin: "14"
+
+  # MQTT defaults
+  mqtt_broker: !secret mqtt_broker
+  mqtt_username: !secret mqtt_username
+  mqtt_password: !secret mqtt_password
 
   # WiFi AP fallback
   ap_ssid: "AP-JKBMS-Gateway"
@@ -14,18 +19,27 @@ substitutions:
   display_on_time: "30s"
   bms_update_interval: "5s"
   
-  # relay limits
-  total_capacity: "314.0"
-  soc_low_limit: "250.0"
-  soc_high_limit: "310.0"
+  # SOC limit percentages (configurable limits are calculated from total_capacity)
+  soc_low_limit_percentage: "0.8"   # 80% of total capacity
+  soc_high_limit_percentage: "0.99"  # 99% of total capacity
+  # Initial values for 314 Ah battery (314 * 0.8 = 251.2, 314 * 0.99 = 310.86)
+  soc_low_limit_initial: "251"
+  soc_high_limit_initial: "311"
 
 esphome:
   name: ${device_name}
-  # Start the timer when the system boots
+  includes:
+    - jkbms_v2.h
+  # Start the timer and initialize SOC limits when the system boots
   on_boot:
     priority: -100 # Run last, when everything has already finished loading
     then:
+      - script.execute: init_soc_limits
       - script.execute: display_timer
+
+preferences:
+  # Persist restored number values soon after changes (avoids loss after reboot)
+  flash_write_interval: 30s
 
 esp32:
   board: esp32dev
@@ -58,9 +72,9 @@ api: #For Home Assistant
 
 # MQTT configuration (fill in your broker details)
 mqtt:    
-  broker: !secret mqtt_broker
-  username: !secret mqtt_username
-  password: !secret mqtt_password  
+  broker: ${mqtt_broker}
+  username: ${mqtt_username}
+  password: ${mqtt_password}
   port: 1883
   topic_prefix: jkbms
   discovery: true
@@ -97,6 +111,15 @@ sensor:
   - platform: jk_bms_ble
     jk_bms_ble_id: my_bms
 
+    # Total battery capacity setting
+    total_battery_capacity_setting:
+      name: "BMS Total Capacity"
+      state_topic: "jkbms/total_capacity"
+      id: bms_total_capacity
+      unit_of_measurement: "Ah"
+      filters:
+        - throttle: 60s
+
     # Total voltage: publish if it changed by 0.05V, but not more often than once every 2 seconds
     total_voltage:
       name: "BMS Total Voltage"
@@ -122,16 +145,16 @@ sensor:
       id: bms_ah
       on_value:
         then:
-          # If the capacity dropped below ${soc_low_limit} Ah
+          # If the capacity dropped below soc_low_limit
           - if:
               condition:
-                lambda: 'return x < ${soc_low_limit};'
+                lambda: 'return x < id(soc_low_limit_number).state;'
               then:
                 - switch.turn_on: bms_relay                
-          # If the capacity rose to ${soc_high_limit} Ah and above
+          # If the capacity rose to soc_high_limit and above
           - if:
               condition:
-                lambda: 'return x >= ${soc_high_limit};'
+                lambda: 'return x >= id(soc_high_limit_number).state;'
               then:
                 - switch.turn_off: bms_relay                
       filters:
@@ -241,18 +264,7 @@ sensor:
     accuracy_decimals: 1
     update_interval: 10s # No need to calculate too often
     lambda: |-
-      float current = id(bms_a).state;
-      float total_cap = ${total_capacity};
-      float remaining_cap = id(bms_ah).state;
-      
-      // If the charge current is greater than 0.1 A (charging is in progress)
-      if (current > 0.1) {
-        float need_ah = total_cap - remaining_cap;
-        if (need_ah <= 0) return 0; // Already charged
-        return need_ah / current;   // Hours = capacity / current
-      } else {
-        return 0; // Not charging
-      }
+      return jkbms_lambdas::calculate_charging_time();
       
   # Split: Positive values for Charging
   - platform: template
@@ -263,11 +275,7 @@ sensor:
     state_class: measurement
     accuracy_decimals: 1
     lambda: |-
-      if (id(bms_power).state > 0) {
-        return id(bms_power).state;
-      } else {
-        return 0;
-      }
+      return jkbms_lambdas::get_power_in();
 
   # Split: Absolute values for Discharging
   - platform: template
@@ -278,11 +286,7 @@ sensor:
     state_class: measurement
     accuracy_decimals: 1
     lambda: |-
-      if (id(bms_power).state < 0) {
-        return id(bms_power).state * -1.0;
-      } else {
-        return 0;
-      }
+      return jkbms_lambdas::get_power_out();
    # Total Energy Charged (kWh)
   - platform: integration
     name: "Battery Energy In"
@@ -380,6 +384,110 @@ switch:
       name: "BMS Balancer Switch"
       state_topic: "jkbms/switch/balance/state"
       command_topic: "jkbms/switch/balance/set"
+
+# 6.5 CONFIGURABLE NUMBERS (SOC Limits)
+# These are storable, configurable via MQTT and Home Assistant
+# MQTT discovery is automatic via ESPHome API
+number:
+  - platform: template
+    name: "BMS SoC Low Limit (Ah)"
+    id: soc_low_limit_number
+    min_value: 0
+    max_value: 500
+    step: 1
+    unit_of_measurement: "Ah"
+    device_class: energy
+    mode: box
+    optimistic: true
+    restore_value: yes
+    # Default value: total_capacity * soc_low_limit_percentage = total_capacity * 0.6 (60%)
+    initial_value: ${soc_low_limit_initial}
+    set_action:
+      then:
+        - lambda: |-
+            const float rounded_x = roundf(x);
+            id(soc_low_limit_number).publish_state(rounded_x);
+            jkbms_lambdas::log_soc_limit_change("SOC Low Limit", rounded_x);
+    
+  - platform: template
+    name: "BMS SoC High Limit (Ah)"
+    id: soc_high_limit_number
+    min_value: 0
+    max_value: 500
+    step: 1
+    unit_of_measurement: "Ah"
+    device_class: energy
+    mode: box
+    optimistic: true
+    restore_value: yes
+    # Default value: total_capacity * soc_high_limit_percentage = total_capacity * 0.99 (99%)
+    initial_value: ${soc_high_limit_initial}
+    set_action:
+      then:
+        - lambda: |-
+            const float rounded_x = roundf(x);
+            id(soc_high_limit_number).publish_state(rounded_x);
+            jkbms_lambdas::log_soc_limit_change("SOC High Limit", rounded_x);
+
+# 6.6 TEXT CONFIG (editable in Home Assistant, persisted)
+# Note: BLE MAC and MQTT connection fields in ESPHome are compile-time settings.
+# Changes here are stored for convenience and can be used as next-build defaults.
+text:
+  - platform: template
+    name: "BMS MAC Address Config"
+    id: bms_mac_address_config
+    mode: text
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: ${bms_mac_address}
+    set_action:
+      then:
+        - lambda: |-
+            id(bms_mac_address_config).publish_state(x);
+            ESP_LOGI("cfg", "BMS MAC config saved: %s (applies after rebuild/reflash)", x.c_str());
+
+  - platform: template
+    name: "MQTT Broker Config"
+    id: mqtt_broker_config
+    mode: text
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: ${mqtt_broker}
+    set_action:
+      then:
+        - lambda: |-
+            id(mqtt_broker_config).publish_state(x);
+            ESP_LOGI("cfg", "MQTT broker config saved: %s (applies after rebuild/reflash)", x.c_str());
+
+  - platform: template
+    name: "MQTT Username Config"
+    id: mqtt_username_config
+    mode: text
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: ${mqtt_username}
+    set_action:
+      then:
+        - lambda: |-
+            id(mqtt_username_config).publish_state(x);
+            ESP_LOGI("cfg", "MQTT username config saved (applies after rebuild/reflash)");
+
+  - platform: template
+    name: "MQTT Password Config"
+    id: mqtt_password_config
+    mode: password
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    initial_value: ${mqtt_password}
+    set_action:
+      then:
+        - lambda: |-
+            id(mqtt_password_config).publish_state(x);
+            ESP_LOGI("cfg", "MQTT password config saved (applies after rebuild/reflash)");
       
 # Describe the LED as a simple output, so we don't create extra buttons in MQTT
 output:
@@ -400,21 +508,21 @@ text_sensor:
     state_topic: "jkbms/charging_time_human"
     update_interval: 10s
     lambda: |-
-      float hours_raw = id(charging_time).state;
-      if (hours_raw <= 0) {
-        return {"NA"};
-      }
-      
-      int total_minutes = (int)(hours_raw * 60);
-      int h = total_minutes / 60;
-      int m = total_minutes % 60;
-      
-      char buf[20];
-      sprintf(buf, "%dh %dm", h, m);
-      return {buf};
+      return {jkbms_lambdas::format_charging_time(id(charging_time).state)};
       
 # 1. Timer script (controls how long it stays lit)
 script:
+  # Initialize SOC limits based on actual BMS total capacity
+  # Only initializes if limits haven't been manually changed by the user
+  - id: init_soc_limits
+    then:
+      - wait_until:
+          condition:
+            lambda: 'return id(bms_total_capacity).has_state();'
+          timeout: 30s
+      - lambda: |-
+          jkbms_lambdas::init_soc_limits(${soc_low_limit_initial}, ${soc_high_limit_initial}, ${soc_low_limit_percentage}, ${soc_high_limit_percentage});
+
   - id: display_timer
     mode: restart # If you press the button again, the timer resets to the beginning
     then:
@@ -447,7 +555,6 @@ display:
     # The screen will be off on boot until the first button press
     setup_priority: -100 
     lambda: |-
-      // The same drawing code as we wrote above
       it.printf(0, 0, id(font_small), "JK-BMS MONITOR");
       it.line(0, 13, 128, 13);
       if (id(bms_v).has_state()) {
