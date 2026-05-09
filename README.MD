@@ -1,6 +1,6 @@
 # ESPHome Projects
 
-A collection of ESPHome firmware configurations for various home automation hardware — boilers, BMS gateways, and remote displays — all integrated with Home Assistant via MQTT.
+A collection of ESPHome firmware configurations for home automation hardware: boiler controllers, BMS gateways, and room-light automation.
 
 ---
 
@@ -13,6 +13,7 @@ A collection of ESPHome firmware configurations for various home automation hard
 | [`electrolux-boiler-remote/`](electrolux-boiler-remote/) | Boiler Rotary Remote | ESP32 | TFT display + rotary encoder for local boiler control |
 | [`jbdbms_v2/`](jbdbms_v2/) | JBD / XiaoXiang BMS | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
 | [`jkbms_v2/`](jkbms_v2/) | JK-BMS (Jikong) | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
+| [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
 
 ---
 
@@ -61,8 +62,12 @@ A collection of ESPHome firmware configurations for various home automation hard
 **JBD / XiaoXiang / Jiabaida BMS** BLE → MQTT bridge.
 
 - Voltage, current, SoC, power, cell delta, temperatures, charging time remaining
-- Automated relay on GPIO14: ON below 160 Ah, OFF above 195 Ah
+- Total capacity comes from BMS settings (`nominal_capacity`) and is exposed as read-only telemetry
+- Configurable SoC relay thresholds (`JBD SoC Low Limit (Ah)`, `JBD SoC High Limit (Ah)`) persisted across reboots
+- Boot-time smart init calculates rounded default thresholds from total capacity, but preserves user changes
 - 0.96″ OLED (SSD1306) — auto-off after 30 s, BOOT button wake
+- Helper lambdas extracted to `jbdbms_v2.h` (display lambda remains in YAML)
+- Config text entities for BMS MAC and MQTT broker/user/pass are stored in HA; applying them still requires rebuild/reflash
 - MQTT topic prefix: `jbdbms/`
 
 📁 [jbdbms_v2/README.md](jbdbms_v2/README.md)
@@ -74,12 +79,31 @@ A collection of ESPHome firmware configurations for various home automation hard
 **JK-BMS (Jikong)** BLE → MQTT bridge (`JK02_32S` protocol).
 
 - Voltage, current, SoC, power, cell delta, temperatures, MOSFET temp, cycle count
+- Total capacity comes from BMS settings (`total_battery_capacity_setting`) and is exposed as read-only telemetry
 - Charging / discharging / balancing status; individual MOSFET switch control
-- Automated relay on GPIO14: ON below 200 Ah, OFF above 300 Ah
+- Configurable SoC relay thresholds (`BMS SoC Low Limit (Ah)`, `BMS SoC High Limit (Ah)`) persisted across reboots
+- Boot-time smart init calculates rounded default thresholds from total capacity, but preserves user changes
 - 0.96″ OLED (SSD1306) — auto-off after 30 s, BOOT button wake
+- Config text entities for BMS MAC and MQTT broker/user/pass are stored in HA; applying them still requires rebuild/reflash
 - MQTT topic prefix: `jkbms/`
 
 📁 [jkbms_v2/README.md](jkbms_v2/README.md)
+
+---
+
+## wc-lights
+
+**WC and Bath smart lighting controller** with occupancy and visit analytics.
+
+- Automatic day/night brightness control per room
+- Door-open timeout logic to avoid false occupancy
+- RGB status strip for inside status and post-visit flash
+- WC inside blink reminder (configurable interval and blink count)
+- Visit counters and duration stats persisted across reboots
+- Endstop mode (NC/NO) configurable from Home Assistant
+- Works offline with captive portal and local GPIO logic
+
+📁 [wc-lights/README.md](wc-lights/README.md)
 
 ---
 
