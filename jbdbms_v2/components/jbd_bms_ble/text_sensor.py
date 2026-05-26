@@ -1,0 +1,55 @@
+import esphome.codegen as cg
+from esphome.components import text_sensor
+import esphome.config_validation as cv
+from esphome.const import ENTITY_CATEGORY_DIAGNOSTIC
+
+from . import CONF_JBD_BMS_BLE_ID, JBD_BMS_BLE_COMPONENT_SCHEMA
+
+DEPENDENCIES = ["jbd_bms_ble"]
+
+CODEOWNERS = ["@syssi"]
+
+CONF_ERRORS = "errors"
+CONF_OPERATION_STATUS = "operation_status"
+CONF_DEVICE_MODEL = "device_model"
+CONF_BALANCING_CELLS = "balancing_cells"
+
+ICON_ERRORS = "mdi:alert-circle-outline"
+ICON_OPERATION_STATUS = "mdi:heart-pulse"
+ICON_DEVICE_MODEL = "mdi:chip"
+ICON_BALANCING_CELLS = "mdi:battery-heart-variant"
+
+TEXT_SENSORS = [
+    CONF_ERRORS,
+    CONF_OPERATION_STATUS,
+    CONF_DEVICE_MODEL,
+    CONF_BALANCING_CELLS,
+]
+
+CONFIG_SCHEMA = JBD_BMS_BLE_COMPONENT_SCHEMA.extend(
+    {
+        cv.Optional(CONF_ERRORS): text_sensor.text_sensor_schema(
+            icon=ICON_ERRORS,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        cv.Optional(CONF_OPERATION_STATUS): text_sensor.text_sensor_schema(
+            icon=ICON_OPERATION_STATUS,
+        ),
+        cv.Optional(CONF_DEVICE_MODEL): text_sensor.text_sensor_schema(
+            icon=ICON_DEVICE_MODEL,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+        ),
+        cv.Optional(CONF_BALANCING_CELLS): text_sensor.text_sensor_schema(
+            icon=ICON_BALANCING_CELLS,
+        ),
+    }
+)
+
+
+async def to_code(config):
+    hub = await cg.get_variable(config[CONF_JBD_BMS_BLE_ID])
+    for key in TEXT_SENSORS:
+        if key in config:
+            conf = config[key]
+            sens = await text_sensor.new_text_sensor(conf)
+            cg.add(getattr(hub, f"set_{key}_text_sensor")(sens))
