@@ -59,6 +59,8 @@ wifi:
     
   # Allow saving new credentials to flash memory
   fast_connect: true
+  power_save_mode: NONE
+  reboot_timeout: 0s
 
 # Enables the web interface when in AP mode
 captive_portal:
@@ -67,7 +69,8 @@ captive_portal:
 #web_server:
   #port: 80
 
-api: #For Home Assistant  
+api: #For Home Assistant
+  reboot_timeout: 0s
 
 # MQTT configuration
 mqtt:    
@@ -76,6 +79,7 @@ mqtt:
   password: ${mqtt_password}
   port: 1883
   topic_prefix: jbdbms # Changed prefix for JBD
+  keepalive: 30s
   reboot_timeout: 0s
   discovery: true
 
@@ -86,7 +90,8 @@ logger:
 # 2. Bluetooth settings
 esp32_ble_tracker:
   scan_parameters:
-    active: true
+    # Passive scanning improves WiFi coexistence and reduces MQTT/API stalls.
+    active: false
 
 ble_client:
   - mac_address: ${bms_mac_address}
