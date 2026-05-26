@@ -95,8 +95,9 @@ ble_client:
 # 3. JBD-BMS (XiaoXiang) driver integration
 external_components:
   - source:
-      type: local
-      path: components
+      type: git
+      url: https://github.com/YBalan/esphome-jbd-bms.git
+      ref: main
     components: [jbd_bms_ble]
 
 jbd_bms_ble:
