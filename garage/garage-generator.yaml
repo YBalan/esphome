@@ -1,0 +1,780 @@
+substitutions:
+  # Device identity in ESPHome/Home Assistant
+  device_name: generator
+  friendly_name: Generator
+
+  # Fallback AP credentials (used when normal WiFi is unavailable)
+  ap_ssid: "AP Generator"
+  ap_password: "password"
+
+  # GPIO mapping
+  # Relays are active-low outputs
+  gpio_relay_1: "5"
+  gpio_relay_2: "18"
+  gpio_relay_3: "19"
+  gpio_relay_4: "23"
+
+  # I2C bus for LCD backpack (PCF8574)
+  gpio_i2c_sda: "21"
+  gpio_i2c_scl: "22"
+
+  # UART2 for PZEM-004T (ESP RX <- PZEM TX, ESP TX -> PZEM RX)
+  gpio_uart_rx: "16"
+  gpio_uart_tx: "17"
+
+  # 433 MHz ASK receiver/transmitter pins
+  gpio_rf_rx: "27"
+  gpio_rf_tx: "26"
+
+  # Servo PWM outputs (mirrored choke pair for stronger stop force)
+  gpio_servo_1: "12"
+  gpio_servo_2: "13"
+
+  # Environmental sensor input
+  gpio_dht: "4"
+
+  # Physical buttons (Button 5 is input-only pin on ESP32)
+  gpio_btn_1: "14"
+  gpio_btn_2: "25"
+  gpio_btn_3: "32"
+  gpio_btn_4: "33"
+  gpio_btn_5: "35"
+
+  # Functional defaults
+  # Voltage considered as generator running
+  voltage_running_threshold: "200.0"
+
+  # Action timing
+  servo_step_delay: 250ms
+  motor_hours_update_interval: 10s
+
+  # Servo signal parameters
+  servo_pwm_frequency: "50 Hz"
+  servo_auto_detach_time: 800ms
+
+  # LCD and DHT refresh settings
+  lcd_i2c_address: "0x27"
+  lcd_update_interval: 1s
+  dht_update_interval: 15s
+
+  # Servo positions (0.00 .. 1.00)
+  # Choke servo A direction
+  servo_pos_start: "0.00"
+  servo_pos_q1: "0.25"
+  servo_pos_mid: "0.50"
+  servo_pos_q3: "0.75"
+  servo_pos_end: "1.00"
+
+  # Choke servo B mirrored direction (facing servo A)
+  servo_pos_start_m: "1.00"
+  servo_pos_q1_m: "0.75"
+  servo_pos_mid_m: "0.50"
+  servo_pos_q3_m: "0.25"
+  servo_pos_end_m: "0.00"
+
+  # RF defaults
+  # Protocol timing and repeat behavior
+  rf_pulse_length: "350"
+  rf_repeat_times: "8"
+  rf_repeat_wait: 20ms
+
+  # Receiver decode parameters
+  rf_tolerance: 50%
+  rf_filter: 250us
+  rf_idle: 4ms
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  includes:
+    - garage_generator_logic.h
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf # Stable for BLE + WiFi coexistence
+    
+ota:
+  - platform: esphome
+
+# 1. Connection settings
+wifi:
+  #ssid: !secret wifi_ssid
+  #password: !secret wifi_password
+  # Fallback access point if WiFi disappears
+  ap:
+    ssid: ${ap_ssid}
+    password: ${ap_password}
+    
+  # Allow saving new credentials to flash memory
+  fast_connect: true
+  power_save_mode: NONE
+  reboot_timeout: 0s
+
+# Enables the web interface when in AP mode
+captive_portal:
+
+# Simple web server to change settings if already connected
+#web_server:
+  #port: 80
+
+api: #For Home Assistant
+
+time:
+  - platform: homeassistant
+    id: ha_time
+
+logger:
+  level: INFO
+
+globals:
+  - id: motor_hours_total
+    type: float
+    restore_value: yes
+    initial_value: "0.0"
+  - id: total_energy_kwh
+    type: float
+    restore_value: yes
+    initial_value: "0.0"
+  - id: last_run_timestamp
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+  - id: relay_1_timeout_s
+    type: float
+    restore_value: yes
+    initial_value: "0.25"
+  - id: relay_2_timeout_s
+    type: float
+    restore_value: yes
+    initial_value: "0.25"
+  - id: relay_3_timeout_s
+    type: float
+    restore_value: yes
+    initial_value: "0.25"
+  - id: relay_4_timeout_s
+    type: float
+    restore_value: yes
+    initial_value: "0.25"
+  - id: rf_code_btn_1
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+  - id: rf_code_btn_2
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+  - id: rf_code_btn_3
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+  - id: rf_code_btn_4
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+
+i2c:
+  sda: ${gpio_i2c_sda}
+  scl: ${gpio_i2c_scl}
+  scan: true
+
+uart:
+  id: uart_pzem
+  rx_pin: ${gpio_uart_rx}
+  tx_pin: ${gpio_uart_tx}
+  baud_rate: 9600
+
+remote_receiver:
+  pin:
+    number: ${gpio_rf_rx}
+    mode:
+      input: true
+  dump: rc_switch
+  tolerance: ${rf_tolerance}
+  filter: ${rf_filter}
+  idle: ${rf_idle}
+  buffer_size: 2kb
+
+remote_transmitter:
+  pin: ${gpio_rf_tx}
+  carrier_duty_percent: 100%
+  non_blocking: true
+
+output:
+  - platform: ledc
+    pin: ${gpio_servo_1}
+    id: pwm_servo_1
+    frequency: ${servo_pwm_frequency}
+  - platform: ledc
+    pin: ${gpio_servo_2}
+    id: pwm_servo_2
+    frequency: ${servo_pwm_frequency}
+
+servo:
+  # Two mirrored choke servos are used together to increase force when stopping.
+  - id: servo_1
+    output: pwm_servo_1
+    auto_detach_time: ${servo_auto_detach_time}
+  - id: servo_2
+    output: pwm_servo_2
+    auto_detach_time: ${servo_auto_detach_time}
+
+switch:
+  # Relay 1: stop pulse output for the generator stop action.
+  - platform: gpio
+    id: relay_1
+    name: ${friendly_name} Stop
+    pin:
+      number: ${gpio_relay_1}
+      inverted: true
+  # Relay 2: eco mode output.
+  - platform: gpio
+    id: relay_2
+    name: ${friendly_name} Eco Mode
+    pin:
+      number: ${gpio_relay_2}
+      inverted: true
+  # Relay 3: start pulse output for the generator start action.
+  - platform: gpio
+    id: relay_3
+    name: ${friendly_name} Start
+    pin:
+      number: ${gpio_relay_3}
+      inverted: true
+  # Relay 4: rollete output used for the garage rollete action.
+  - platform: gpio
+    id: relay_4
+    name: ${friendly_name} Rollete
+    pin:
+      number: ${gpio_relay_4}
+      inverted: true
+  - platform: template
+    id: rf_emulation_enabled
+    name: ${friendly_name} RF Emulation
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: template
+    id: display_enabled
+    name: ${friendly_name} Display Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+button:
+  # HA action parity for physical buttons
+  - platform: template
+    id: ha_btn_stop
+    name: ${friendly_name} Action Stop
+    icon: mdi:stop-circle
+    on_press:
+      - script.execute: button_1_action
+
+  - platform: template
+    id: ha_btn_eco_toggle
+    name: ${friendly_name} Action Eco On
+    icon: mdi:leaf
+    on_press:
+      - script.execute: button_2_action
+
+  - platform: template
+    id: ha_btn_start
+    name: ${friendly_name} Action Start
+    icon: mdi:play-circle
+    on_press:
+      - script.execute: button_3_action
+
+  - platform: template
+    id: ha_btn_rollete
+    name: ${friendly_name} Action Rollete
+    icon: mdi:garage-open
+    on_press:
+      - script.execute: button_4_action
+
+  - platform: template
+    id: ha_btn_settings_short
+    name: ${friendly_name} Action Settings Short
+    icon: mdi:tune
+    on_press:
+      - script.execute: button_5_short_action
+
+  - platform: template
+    id: ha_btn_settings_long
+    name: ${friendly_name} Action Settings Long
+    icon: mdi:radio-tower
+    on_press:
+      - script.execute: button_5_long_action
+
+sensor:
+  - platform: pzemac
+    update_interval: 2s
+    voltage:
+      id: pzem_voltage
+      name: ${friendly_name} Voltage
+    current:
+      id: pzem_current
+      name: ${friendly_name} Current
+    power:
+      id: pzem_power
+      name: ${friendly_name} Power
+    energy:
+      id: pzem_energy
+      name: ${friendly_name} Energy
+    frequency:
+      id: pzem_frequency
+      name: ${friendly_name} Frequency
+    power_factor:
+      id: pzem_power_factor
+      name: ${friendly_name} Power Factor
+  - platform: dht
+    pin: ${gpio_dht}
+    model: DHT11  # Temporary per request
+    update_interval: ${dht_update_interval}
+    temperature:
+      id: dht_temperature
+      name: ${friendly_name} Temperature
+    humidity:
+      id: dht_humidity
+      name: ${friendly_name} Humidity
+  - platform: template
+    id: motor_hours
+    name: ${friendly_name} Motor Hours
+    unit_of_measurement: h
+    accuracy_decimals: 2
+    icon: mdi:engine-outline
+    state_class: total_increasing
+    update_interval: ${motor_hours_update_interval}
+    lambda: |-
+      return garage::motor_hours_total_value();
+  - platform: template
+    id: ha_power_calc
+    name: ${friendly_name} Power HA Calc
+    unit_of_measurement: W
+    accuracy_decimals: 1
+    device_class: power
+    state_class: measurement
+    update_interval: 2s
+    lambda: |-
+      return garage::power_for_ha_calc(id(pzem_power).state);
+  - platform: template
+    id: total_energy_counter
+    name: ${friendly_name} Total Energy Counter
+    unit_of_measurement: kWh
+    accuracy_decimals: 3
+    icon: mdi:lightning-bolt
+    device_class: energy
+    state_class: total_increasing
+    update_interval: 10s
+    lambda: |-
+      return garage::total_energy_counter_kwh();
+
+text_sensor:
+  - platform: template
+    id: last_run_timestamp_sensor
+    name: ${friendly_name} Last Run Timestamp
+    icon: mdi:clock-end
+    update_interval: 10s
+    lambda: |-
+      return garage::last_run_timestamp_text();
+
+number:
+  - platform: template
+    id: relay_1_timeout
+    name: ${friendly_name} Relay 1 Timeout
+    icon: mdi:timer-outline
+    entity_category: config
+    mode: box
+    min_value: -1.0
+    max_value: 4000000.0
+    step: 0.1
+    lambda: |-
+      return garage::button_timeout_seconds(1);
+    set_action:
+      - lambda: |-
+          garage::set_button_timeout_seconds(1, x);
+
+  - platform: template
+    id: relay_2_timeout
+    name: ${friendly_name} Relay 2 Timeout
+    icon: mdi:timer-outline
+    entity_category: config
+    mode: box
+    min_value: -1.0
+    max_value: 4000000.0
+    step: 0.1
+    lambda: |-
+      return garage::button_timeout_seconds(2);
+    set_action:
+      - lambda: |-
+          garage::set_button_timeout_seconds(2, x);
+
+  - platform: template
+    id: relay_3_timeout
+    name: ${friendly_name} Relay 3 Timeout
+    icon: mdi:timer-outline
+    entity_category: config
+    mode: box
+    min_value: -1.0
+    max_value: 4000000.0
+    step: 0.1
+    lambda: |-
+      return garage::button_timeout_seconds(3);
+    set_action:
+      - lambda: |-
+          garage::set_button_timeout_seconds(3, x);
+
+  - platform: template
+    id: relay_4_timeout
+    name: ${friendly_name} Relay 4 Timeout
+    icon: mdi:timer-outline
+    entity_category: config
+    mode: box
+    min_value: -1.0
+    max_value: 4000000.0
+    step: 0.1
+    lambda: |-
+      return garage::button_timeout_seconds(4);
+    set_action:
+      - lambda: |-
+          garage::set_button_timeout_seconds(4, x);
+
+binary_sensor:
+  - platform: template
+    id: generator_running
+    name: ${friendly_name} Running
+    device_class: running
+    lambda: |-
+      return garage::is_generator_running(id(pzem_voltage).state, ${voltage_running_threshold});
+    on_release:
+      - lambda: |-
+          garage::update_last_run_timestamp(id(ha_time).now());
+      - component.update: last_run_timestamp_sensor
+
+  # Button 1: Stop generator.
+  # Action: pulse Relay 1, move the mirrored choke servos, and send learned RF if set.
+  - platform: gpio
+    id: btn_1_stop
+    name: ${friendly_name} Stop
+    pin:
+      number: ${gpio_btn_1}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_press:
+      - script.execute: button_1_action
+
+  # Button 2: Eco mode.
+  # Action: turn Relay 2 on and send learned RF if set.
+  - platform: gpio
+    id: btn_2_eco
+    name: ${friendly_name} Eco
+    pin:
+      number: ${gpio_btn_2}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_press:
+      - script.execute: button_2_action
+
+  # Button 3: Start generator.
+  # Action: pulse Relay 3 and send learned RF if set.
+  - platform: gpio
+    id: btn_3_start
+    name: ${friendly_name} Start
+    pin:
+      number: ${gpio_btn_3}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_press:
+      - script.execute: button_3_action
+
+  # Button 4: Garage rollete.
+  # Action: pulse Relay 4 and send learned RF if set.
+  - platform: gpio
+    id: btn_4_rollete
+    name: ${friendly_name} Rollete
+    pin:
+      number: ${gpio_btn_4}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_press:
+      - script.execute: button_4_action
+
+  # Button 5: Settings and display control.
+  # Action: short press toggles display, long press toggles RF emulation mode.
+  - platform: gpio
+    id: btn_5_settings
+    name: ${friendly_name} Settings
+    pin:
+      number: ${gpio_btn_5}
+      mode:
+        input: true
+      inverted: true
+    on_multi_click:
+      - timing:
+          - ON for at most 350ms
+        then:
+          - script.execute: button_5_short_action
+      - timing:
+          - ON for at least 600ms
+        then:
+          - script.execute: button_5_long_action
+
+display:
+  - platform: lcd_pcf8574
+    id: lcd_display
+    dimensions: 16x2
+    address: ${lcd_i2c_address}
+    update_interval: ${lcd_update_interval}
+    lambda: |-
+      garage::render_lcd_page(
+          it,
+          id(display_enabled).state,
+          id(dht_temperature).state,
+          id(dht_humidity).state,
+          id(pzem_voltage).state,
+          id(pzem_current).state,
+          id(pzem_power).state,
+          id(pzem_power_factor).state);
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          garage::accumulate_total_energy_kwh(id(pzem_power).state, 1.0f);
+      - component.update: total_energy_counter
+      - if:
+          condition:
+            binary_sensor.is_on: generator_running
+          then:
+            - lambda: |-
+                garage::accumulate_motor_hours(true, 1.0f);
+            - component.update: motor_hours
+
+script:
+  - id: servo_move_to_start
+    mode: restart
+    then:
+      - servo.write:
+          id: servo_1
+          level: ${servo_pos_start}
+      - servo.write:
+          id: servo_2
+          level: ${servo_pos_start_m}
+
+  - id: servo_move_to_end
+    mode: restart
+    then:
+      - servo.write:
+          id: servo_1
+          level: ${servo_pos_end}
+      - servo.write:
+          id: servo_2
+          level: ${servo_pos_end_m}
+
+  - id: servo_sweep_to_stop
+    mode: restart
+    then:
+      - servo.write:
+          id: servo_1
+          level: ${servo_pos_start}
+      - servo.write:
+          id: servo_2
+          level: ${servo_pos_start_m}
+      - delay: ${servo_step_delay}
+      - servo.write:
+          id: servo_1
+          level: ${servo_pos_q1}
+      - servo.write:
+          id: servo_2
+          level: ${servo_pos_q1_m}
+      - delay: ${servo_step_delay}
+      - servo.write:
+          id: servo_1
+          level: ${servo_pos_mid}
+      - servo.write:
+          id: servo_2
+          level: ${servo_pos_mid_m}
+      - delay: ${servo_step_delay}
+      - servo.write:
+          id: servo_1
+          level: ${servo_pos_q3}
+      - servo.write:
+          id: servo_2
+          level: ${servo_pos_q3_m}
+      - delay: ${servo_step_delay}
+      - servo.write:
+          id: servo_1
+          level: ${servo_pos_end}
+      - servo.write:
+          id: servo_2
+          level: ${servo_pos_end_m}
+
+  - id: relay_1_pulse
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_timeout_is_infinite(1);
+          then:
+            # -1 means infinite timeout: keep relay ON until manually switched OFF.
+            - switch.turn_on: relay_1
+          else:
+            - switch.turn_on: relay_1
+            - delay: !lambda |-
+                return garage::button_timeout_ms(1);
+            - switch.turn_off: relay_1
+
+  - id: relay_2_pulse
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_timeout_is_infinite(2);
+          then:
+            # -1 means infinite timeout: keep relay ON until manually switched OFF.
+            - switch.turn_on: relay_2
+          else:
+            - switch.turn_on: relay_2
+            - delay: !lambda |-
+                return garage::button_timeout_ms(2);
+            - switch.turn_off: relay_2
+
+  - id: relay_3_pulse
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_timeout_is_infinite(3);
+          then:
+            # -1 means infinite timeout: keep relay ON until manually switched OFF.
+            - switch.turn_on: relay_3
+          else:
+            - switch.turn_on: relay_3
+            - delay: !lambda |-
+                return garage::button_timeout_ms(3);
+            - switch.turn_off: relay_3
+
+  - id: relay_4_pulse
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_timeout_is_infinite(4);
+          then:
+            # -1 means infinite timeout: keep relay ON until manually switched OFF.
+            - switch.turn_on: relay_4
+          else:
+            - switch.turn_on: relay_4
+            - delay: !lambda |-
+                return garage::button_timeout_ms(4);
+            - switch.turn_off: relay_4
+
+  - id: button_1_action
+    mode: restart
+    then:
+      - script.execute: relay_1_pulse
+      - script.execute: servo_sweep_to_stop
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(1);
+                then:
+                  - remote_transmitter.transmit_rc_switch_raw:
+                      code: !lambda |-
+                        return garage::button_rf_code(1);
+                      protocol:
+                        pulse_length: ${rf_pulse_length}
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: button_2_action
+    mode: restart
+    then:
+      - script.execute: relay_2_pulse
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(2);
+                then:
+                  - remote_transmitter.transmit_rc_switch_raw:
+                      code: !lambda |-
+                        return garage::button_rf_code(2);
+                      protocol:
+                        pulse_length: ${rf_pulse_length}
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: button_3_action
+    mode: restart
+    then:
+      - script.execute: relay_3_pulse
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(3);
+                then:
+                  - remote_transmitter.transmit_rc_switch_raw:
+                      code: !lambda |-
+                        return garage::button_rf_code(3);
+                      protocol:
+                        pulse_length: ${rf_pulse_length}
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: button_4_action
+    mode: restart
+    then:
+      - script.execute: relay_4_pulse
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(4);
+                then:
+                  - remote_transmitter.transmit_rc_switch_raw:
+                      code: !lambda |-
+                        return garage::button_rf_code(4);
+                      protocol:
+                        pulse_length: ${rf_pulse_length}
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: button_5_short_action
+    mode: restart
+    then:
+      - switch.toggle: display_enabled
+      - component.update: lcd_display
+
+  - id: button_5_long_action
+    mode: restart
+    then:
+      - switch.toggle: rf_emulation_enabled
+      - component.update: lcd_display
