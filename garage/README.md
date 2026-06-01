@@ -7,14 +7,16 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - Monitors generator voltage, current, power, energy, frequency, and power factor through a PZEM-004T V3.0.
 - Controls four active-low relays.
 - Uses two mirrored 25 kg servos as a choke pair for stronger stop action.
-- Sends and receives 433.92 MHz RF commands, with optional learned transmit codes stored in runtime globals.
+- Learns and stores 433.92 MHz RF codes for buttons 1 to 4, then transmits them when RF Emulation is enabled.
 - Reads a DHT11 sensor for temperature and humidity.
 - Shows status on a 16x2 I2C LCD.
+- Automatically turns the LCD backlight off after inactivity and wakes it on user actions.
 - Tracks generator motor-hours.
 - Tracks total accumulated energy (kWh) from runtime power integration.
 - Exposes a dedicated power sensor for Home Assistant calculations.
 - Stores last run timestamp when generator transitions from running to stopped.
 - Exposes the physical-button actions as Home Assistant buttons.
+- Exposes WiFi RSSI plus a Home Assistant button to reset WiFi.
 
 ## Current wiring summary
 
@@ -45,7 +47,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 2. Eco mode
 3. Start generator
 4. Garage rollete
-5. Settings / display control
+5. Settings / display control and RF learn mode
 
 ## Home Assistant buttons
 
@@ -57,15 +59,21 @@ The same actions are exposed in Home Assistant as template buttons:
 - Action Rollete
 - Action Settings Short
 - Action Settings Long
+- Action Stop Long
+- Action Eco Long
+- Action Start Long
+- Action Rollete Long
 
 ## Home Assistant sensors and fields
 
-- `Generator Relay 1 Timeout` .. `Generator Relay 4 Timeout` are value fields (`box` mode).
+- `Generator Stop Timeout`, `Generator Eco Timeout`, `Generator Start Timeout`, and `Generator Rollete Timeout` are value fields (`box` mode).
 - Timeout `-1` means infinite (relay stays ON until manually turned OFF).
 - `Generator Motor Hours` tracks total runtime hours.
 - `Generator Total Energy Counter` tracks total increasing kWh.
 - `Generator Power HA Calc` provides explicit power in watts for HA-side calculations.
 - `Generator Last Run Timestamp` stores the last stop-time stamp.
+- `Generator Stop RF Code`, `Generator Eco RF Code`, `Generator Start RF Code`, and `Generator RF Code Btn 4` show the stored RF codes.
+- `Generator WiFi RSSI` reports signal strength.
 
 ## Files
 
@@ -83,6 +91,7 @@ The same actions are exposed in Home Assistant as template buttons:
 
 - DHT11 is currently used temporarily in the configuration.
 - The servos are mirrored choke servos, not choke and throttle.
-- Buttons 1 to 4 drive their matching relay actions first and can also send learned RF codes when one is stored.
+- Buttons 1 to 4 drive their matching relay actions first and can also send learned RF codes when one is stored and RF Emulation is enabled.
 - Motor-hours are accumulated from runtime while the generator is considered running.
+- RF learn mode is entered with a long press on Settings; captured RF codes are assigned by long-pressing the target button.
 - Non-trivial runtime and display logic is centralized in the helper header.

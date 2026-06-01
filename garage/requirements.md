@@ -40,13 +40,16 @@ Build a generator controller on ESP32 that can monitor generator power, control 
 ## ESPHome Behavior
 
 - PZEM is configured over UART on GPIO16/17.
-- RF receiver uses rc_switch dump mode, and RF transmitter is enabled for command emulation.
-- LCD shows DHT values on line 1 and PZEM values on line 2.
+- RF receiver stays quiet during normal operation and only listens in RF learn mode.
+- Learned RF codes can be assigned to buttons 1 to 4 from the physical buttons or the matching Home Assistant long-press buttons.
+- RF Emulation is a master enable for transmitting learned RF codes; it does not block relay actions.
+- LCD shows DHT values on line 1 and alternates line 2 between voltage/power and current/power factor.
+- LCD backlight turns off automatically after inactivity and short Settings press only wakes the display.
 - The two servos are mirrored and are used together to move the choke harder during stop sequences.
 - Motor-hours are accumulated while the generator is running.
 - Total energy counter is accumulated from measured power over time (kWh, total increasing).
 - Last run timestamp is updated when generator state changes from running to stopped.
-- Buttons 1 to 4 trigger their matching relay action and, if a learned RF code is stored, send that code as well.
+- Buttons 1 to 4 trigger their matching relay action and, when RF Emulation is enabled, send the stored RF code if one exists.
 - Each relay has configurable timeout in Home Assistant value fields; `-1` means infinite ON until manual OFF.
 
 ## Button Actions
@@ -55,18 +58,38 @@ Build a generator controller on ESP32 that can monitor generator power, control 
 2. Eco mode: toggle relay 2.
 3. Start generator: trigger relay 3 and send learned RF start when available.
 4. Garage rollete: trigger relay 4 and send learned RF rollete when available.
-5. Settings: short press toggles display, long press toggles RF emulation.
+5. Settings: short press wakes the display, long press toggles RF learn mode.
+
+## RF Learn Flow
+
+- Long press Settings to enter RF learn mode.
+- When an RF signal is received, the LCD shows the captured code.
+- Long press button 1, 2, 3, or 4 to store the captured code for that action.
+- The assigned codes are persisted and also exposed in Home Assistant text fields.
+
+## Servo Control
+
+- A master `Use Servos` switch enables or disables servo usage.
+- Per-action servo switches decide which actions actually run the servos.
+- By default only the Stop action uses the servos.
 
 ## Home Assistant Control
 
 The same physical-button actions are also exposed as ESPHome template buttons in Home Assistant.
 
+Additional HA controls are exposed for convenience:
+
+- `Generator RF Emulation` toggles learned RF transmission.
+- `Generator Use Servos` enables or disables servo control globally.
+- `Generator Use Servo Action Stop`, `Eco`, `Start`, and `Rollete` control servo usage per action.
+
 Additional HA entities are exposed for automation and analytics:
 
-- Per-relay timeout value fields (`Relay 1 Timeout` .. `Relay 4 Timeout`) with `-1` infinite mode.
+- Per-action timeout value fields (`Stop Timeout`, `Eco Timeout`, `Start Timeout`, and `Rollete Timeout`) with `-1` infinite mode.
 - `Power HA Calc` (W) for HA-side power calculations.
 - `Total Energy Counter` (kWh) as a total increasing energy source.
 - `Last Run Timestamp` text sensor.
+- `WiFi RSSI` sensor and a `Reset WiFi` button are available for connectivity management.
 
 ## Implementation Rules
 
