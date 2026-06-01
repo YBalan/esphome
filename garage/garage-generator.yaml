@@ -260,6 +260,28 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
 
 button:
+  - platform: template
+    id: ha_btn_wifi_reset
+    name: ${friendly_name} WiFi Reset
+    icon: mdi:wifi-refresh
+    entity_category: diagnostic
+    on_press:
+      # Force WiFi reconnection without full device reboot.
+      - wifi.disable:
+      - delay: 2s
+      - wifi.enable:
+
+    # WiFi Reset Button
+  - platform: factory_reset
+    name: ${friendly_name} Factory Reset
+    id: reset_wifi_btn
+    icon: "mdi:wifi-reset"
+
+  - platform: restart
+    name: ${friendly_name} Restart Device
+    id: restart_btn
+    icon: "mdi:restart"
+
   # HA action parity for physical buttons
   - platform: template
     id: ha_btn_stop
@@ -304,6 +326,11 @@ button:
       - script.execute: button_5_long_action
 
 sensor:
+  - platform: wifi_signal
+    id: wifi_rssi
+    name: ${friendly_name} WiFi RSSI
+    update_interval: 30s
+
   - platform: pzemac
     update_interval: 2s
     voltage:
