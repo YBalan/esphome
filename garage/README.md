@@ -1,24 +1,22 @@
 # Garage Generator Controller
 
-ESPHome configuration for an ESP32-based generator controller with power monitoring, RF control, mirrored choke servos, relays, LCD status display, and Home Assistant actions.
+ESPHome configuration for an ESP32-based generator controller with power monitoring, mirrored choke servos, relay outputs, RF learn/transmit, LCD status, and Home Assistant integration.
 
-## What it does
+## Implemented behavior (current)
 
-- Monitors generator voltage, current, power, energy, frequency, and power factor through a PZEM-004T V3.0.
-- Controls four active-low relays.
-- Uses two mirrored 25 kg servos as a choke pair for stronger stop action.
-- Learns and stores 433.92 MHz RF codes for buttons 1 to 4, then transmits them when RF Emulation is enabled.
-- Reads a DHT11 sensor for temperature and humidity.
-- Shows status on a 16x2 I2C LCD.
-- Automatically turns the LCD backlight off after inactivity and wakes it on user actions.
-- Tracks generator motor-hours.
-- Tracks total accumulated energy (kWh) from runtime power integration.
-- Exposes a dedicated power sensor for Home Assistant calculations.
-- Stores last run timestamp when generator transitions from running to stopped.
-- Exposes the physical-button actions as Home Assistant buttons.
-- Exposes WiFi RSSI plus a Home Assistant button to reset WiFi.
+- PZEM telemetry is read every second and treated as stale when no fresh values are received.
+- Running-state detection uses both voltage threshold and PZEM freshness checks.
+- Stale PZEM values are actively zeroed (voltage/current/power/frequency/power factor) instead of staying `unknown`.
+- `Total Energy` is integrated only while `Generator Running` is ON.
+- `Motor Hours` is accumulated only while running and supports `Motor Hours Offset`.
+- `Last Run Timestamp`, `Last Run Duration`, and `Current Run Duration` are exposed as text sensors.
+- `Current Run Duration` is event-updated from run-state/PZEM events.
+- Physical GPIO buttons are gated by `Physical Buttons Enabled` and default to OFF for safe bring-up.
+- RF learn/capture is accepted only when learn mode is active.
+- LCD update interval is slowed for lower runtime pressure.
+- API batching is enabled to reduce burst traffic to Home Assistant.
 
-## Current wiring summary
+## Hardware summary
 
 | Function | GPIO |
 | :--- | :--- |
@@ -41,57 +39,58 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 | Button 4 | 33 |
 | Button 5 | 35 |
 
-## Physical buttons
+## Home Assistant actions and entities
 
-1. Stop generator
-2. Eco mode
-3. Start generator
-4. Garage rollete
-5. Settings / display control and RF learn mode
+### Action buttons
 
-## Home Assistant buttons
+- Action Stop / Stop Long
+- Action Eco On / Eco Long
+- Action Start / Start Long
+- Action Rollete / Rollete Long
+- Action Settings Short / Settings Long
 
-The same actions are exposed in Home Assistant as template buttons:
+### Config and operational entities
 
-- Action Stop
-- Action Eco Toggle
-- Action Start
-- Action Rollete
-- Action Settings Short
-- Action Settings Long
-- Action Stop Long
-- Action Eco Long
-- Action Start Long
-- Action Rollete Long
+- `Generator Use RF`
+- `Generator Use Servos`
+- `Generator Servo On <Action> Action` switches
+- `Generator Physical Buttons Enabled`
+- Timeout number fields for Stop/Eco/Start/Rollete (`-1` = infinite ON)
+- `Generator Motor Hours Offset`
+- `Generator Reset Motor Hours`
+- `Generator Reset Total Energy`
+- `Generator Reset All Counters`
+- `Generator WiFi Reset`
 
-## Home Assistant sensors and fields
+### Runtime/diagnostic entities
 
-- `Generator Stop Timeout`, `Generator Eco Timeout`, `Generator Start Timeout`, and `Generator Rollete Timeout` are value fields (`box` mode).
-- Timeout `-1` means infinite (relay stays ON until manually turned OFF).
-- `Generator Motor Hours` tracks total runtime hours.
-- `Generator Total Energy Counter` tracks total increasing kWh.
-- `Generator Power HA Calc` provides explicit power in watts for HA-side calculations.
-- `Generator Last Run Timestamp` stores the last stop-time stamp.
-- `Generator Stop RF Code`, `Generator Eco RF Code`, `Generator Start RF Code`, and `Generator RF Code Btn 4` show the stored RF codes.
-- `Generator WiFi RSSI` reports signal strength.
+- PZEM: voltage/current/power/energy/frequency/power factor
+- DHT11: temperature/humidity
+- `Generator Running`
+- `Generator Motor Hours`
+- `Generator Total Energy`
+- `Generator Last Run Timestamp`
+- `Generator Last Run Duration`
+- `Generator Current Run Duration`
+- RF code text entities for Stop/Eco/Start/Rollete
+- `Generator WiFi RSSI`
+
+## RF learn flow
+
+1. Enter learn mode from Settings long action (physical or HA action button).
+2. Send remote RF signal.
+3. Assign captured code by long action for button 1, 2, 3, or 4.
+4. Use RF action transmission occurs only when `Use RF` is ON and a code is assigned.
+
+## Operational notes from recent work
+
+- If logs show `remote_receiver took a long time` together with `api.connection Buffer full`, treat it as receiver/API pressure first.
+- Keep RF timing parameters conservative when tuning; aggressive decode settings can improve sensitivity but hurt correctness/stability.
+- If OTA upload is unstable, use serial flashing fallback.
+- GPIO5 and GPIO12 are strapping pins; treat external pull-up/down wiring carefully.
 
 ## Files
 
-- Main ESPHome config: [garage-generator.yaml](garage-generator.yaml)
-- C++ helper logic: [garage_generator_logic.h](garage_generator_logic.h)
-- Project requirements: [requirements.md](requirements.md)
-
-## Build notes
-
-- The config has been validated with `esphome config`.
-- The firmware has been compiled successfully after resolving environment-specific build lock issues.
-- GPIO5 and GPIO12 are strapping pins, so treat their wiring carefully.
-
-## Notes
-
-- DHT11 is currently used temporarily in the configuration.
-- The servos are mirrored choke servos, not choke and throttle.
-- Buttons 1 to 4 drive their matching relay actions first and can also send learned RF codes when one is stored and RF Emulation is enabled.
-- Motor-hours are accumulated from runtime while the generator is considered running.
-- RF learn mode is entered with a long press on Settings; captured RF codes are assigned by long-pressing the target button.
-- Non-trivial runtime and display logic is centralized in the helper header.
+- Main config: [garage-generator.yaml](garage-generator.yaml)
+- Runtime helper logic: [garage_generator_logic.h](garage_generator_logic.h)
+- Requirements/spec notes: [requirements.md](requirements.md)

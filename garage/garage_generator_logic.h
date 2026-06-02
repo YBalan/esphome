@@ -293,6 +293,85 @@ inline void note_user_action() {
   wake_backlight();
 }
 
+inline void reset_motor_hours_counter() {
+  id(motor_hours_total) = 0.0f;
+}
+
+inline float motor_hours_offset_value() {
+  return id(motor_hours_offset);
+}
+
+inline void set_motor_hours_offset(const float &hours) {
+  if (!std::isfinite(hours) || hours < 0.0f) {
+    return;
+  }
+  id(motor_hours_offset) = hours;
+}
+
+inline void reset_total_energy_counter() {
+  id(total_energy_kwh) = 0.0f;
+}
+
+inline void reset_all_counters() {
+  reset_motor_hours_counter();
+  reset_total_energy_counter();
+}
+
+inline void set_button_rf_code_from_text(const uint8_t button, const std::string &value_in) {
+  std::string value = value_in;
+  if (value == kRfCodeNotAssigned) {
+    value.clear();
+  }
+  set_button_rf_data(button, value, button_rf_protocol(button));
+}
+
+inline void mark_pzem_rx_if_finite(const float &value) {
+  if (std::isfinite(value)) {
+    id(pzem_last_rx_ms) = now_ms();
+  }
+}
+
+inline bool is_pzem_data_fresh(const uint32_t max_age_ms = 5000U) {
+  if (id(pzem_last_rx_ms) == 0U) {
+    return false;
+  }
+  return static_cast<uint32_t>(now_ms() - id(pzem_last_rx_ms)) <= max_age_ms;
+}
+
+inline bool is_generator_running_with_pzem_freshness(
+    const float &voltage,
+    const float &threshold,
+    const uint32_t max_age_ms = 5000U) {
+  if (!is_pzem_data_fresh(max_age_ms)) {
+    return false;
+  }
+  return is_generator_running(voltage, threshold);
+}
+
+template <typename TSensor>
+inline void publish_sensor_zero_if_needed(const float &state, TSensor &sensor) {
+  if (!std::isfinite(state) || state != 0.0f) {
+    sensor.publish_state(0.0f);
+  }
+}
+
+inline void zero_pzem_sensors_if_stale(const uint32_t max_age_ms = 5000U) {
+  if (is_pzem_data_fresh(max_age_ms)) {
+    return;
+  }
+
+  publish_sensor_zero_if_needed(id(pzem_voltage).state, id(pzem_voltage));
+  publish_sensor_zero_if_needed(id(pzem_current).state, id(pzem_current));
+  publish_sensor_zero_if_needed(id(pzem_power).state, id(pzem_power));
+  publish_sensor_zero_if_needed(id(pzem_frequency).state, id(pzem_frequency));
+  publish_sensor_zero_if_needed(id(pzem_power_factor).state, id(pzem_power_factor));
+}
+
+inline void on_button_long_action(const uint8_t button) {
+  note_user_action();
+  assign_pending_rf_to_button(button);
+}
+
 inline float power_for_ha_calc(const float &power) {
   return std::isfinite(power) ? power : 0.0f;
 }
@@ -302,7 +381,7 @@ inline float total_energy_counter_kwh() {
 }
 
 inline float motor_hours_total_value() {
-  return id(motor_hours_total);
+  return id(motor_hours_total) + id(motor_hours_offset);
 }
 
 inline void accumulate_total_energy_kwh(const float &power_watts, const float &dt_seconds = 1.0f) {
@@ -323,6 +402,21 @@ inline const std::string &last_run_timestamp_text() {
   return id(last_run_timestamp);
 }
 
+inline const std::string &last_run_duration_text() {
+  return id(last_run_duration);
+}
+
+inline std::string format_duration_hms(const uint32_t total_seconds) {
+  const uint32_t hours = total_seconds / 3600U;
+  const uint32_t minutes = (total_seconds % 3600U) / 60U;
+  const uint32_t seconds = total_seconds % 60U;
+
+  char buffer[16] = {0};
+  std::snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", static_cast<unsigned long>(hours),
+                static_cast<unsigned long>(minutes), static_cast<unsigned long>(seconds));
+  return std::string(buffer);
+}
+
 template <typename TNow>
 inline void update_last_run_timestamp(TNow now) {
   if (now.is_valid()) {
@@ -330,6 +424,46 @@ inline void update_last_run_timestamp(TNow now) {
   } else {
     id(last_run_timestamp) = "unknown";
   }
+}
+
+template <typename TNow>
+inline void on_generator_run_started(TNow now) {
+  if (now.is_valid()) {
+    id(last_run_start_unix_s) = now.timestamp;
+  } else {
+    id(last_run_start_unix_s) = 0;
+  }
+}
+
+template <typename TNow>
+inline void on_generator_run_stopped(TNow now) {
+  update_last_run_timestamp(now);
+
+  const int32_t started = id(last_run_start_unix_s);
+  if (!now.is_valid() || started <= 0 || now.timestamp < started) {
+    id(last_run_duration) = "unknown";
+    id(last_run_start_unix_s) = 0;
+    return;
+  }
+
+  const uint32_t duration_seconds = static_cast<uint32_t>(now.timestamp - started);
+  id(last_run_duration) = format_duration_hms(duration_seconds);
+  id(last_run_start_unix_s) = 0;
+}
+
+template <typename TNow>
+inline std::string current_run_duration_text(TNow now, const bool &running) {
+  if (!running) {
+    return "00:00:00";
+  }
+
+  const int32_t started = id(last_run_start_unix_s);
+  if (!now.is_valid() || started <= 0 || now.timestamp < started) {
+    return "unknown";
+  }
+
+  const uint32_t duration_seconds = static_cast<uint32_t>(now.timestamp - started);
+  return format_duration_hms(duration_seconds);
 }
 
 template <typename TDisplay>
@@ -355,7 +489,7 @@ inline void render_status_page(
   const float safe_voltage = std::isfinite(voltage) ? voltage : 0.0f;
   const float safe_power = std::isfinite(power) ? power : 0.0f;
 
-  std::snprintf(line_1, sizeof(line_1), "V:%5.1f P:%4.0f", safe_voltage, safe_power);
+  std::snprintf(line_1, sizeof(line_1), "V:%5.1f P:%4.0fW", safe_voltage, safe_power);
   std::snprintf(
       line_2,
       sizeof(line_2),
@@ -437,9 +571,9 @@ inline void render_lcd_page(
   }
 
   if (line2_show_voltage_power) {
-    std::snprintf(line_2, sizeof(line_2), "V:%5.1f P:%4.0f", safe_voltage, safe_power);
+    std::snprintf(line_2, sizeof(line_2), "V:%5.1f P:%4.0fW", safe_voltage, safe_power);
   } else {
-    std::snprintf(line_2, sizeof(line_2), "I:%4.2f PF:%1.2f", safe_current, safe_power_factor);
+    std::snprintf(line_2, sizeof(line_2), "I:%4.2fA  PF:%1.2f", safe_current, safe_power_factor);
   }
 
   if (is_lcd_message_active()) {

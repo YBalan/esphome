@@ -6,6 +6,24 @@ This document describes the ESPHome-based controller for the Dnipro-M GX-50iGR i
 
 Build a generator controller on ESP32 that can monitor generator power, control the generator through relays, RF, and two mirrored high-torque choke servos, and expose the same actions in Home Assistant.
 
+## Current Implementation Status
+
+The following items are implemented and considered baseline behavior:
+
+- PZEM-based telemetry over UART (`voltage/current/power/energy/frequency/power factor`).
+- Running-state detection with PZEM freshness guard.
+- Stale PZEM safety fallback that publishes zeroes instead of leaving stale `unknown` values.
+- Runtime accounting:
+	- `Motor Hours` accumulated only while running.
+	- `Motor Hours Offset` supported.
+	- `Total Energy` accumulated only while running.
+	- `Last Run Timestamp`, `Last Run Duration`, and `Current Run Duration` available.
+- RF learn/assign/transmit workflow for actions 1..4.
+- Mirrored servo control with per-action enable switches and global servo master switch.
+- Full HA action parity for physical actions through template buttons.
+- Physical GPIO actions protected by `Physical Buttons Enabled` (default OFF).
+- API batching and display pacing tuned for lower runtime pressure.
+
 ## Hardware
 
 - ESP32 DevKit
@@ -40,16 +58,19 @@ Build a generator controller on ESP32 that can monitor generator power, control 
 ## ESPHome Behavior
 
 - PZEM is configured over UART on GPIO16/17.
-- RF receiver stays quiet during normal operation and only listens in RF learn mode.
+- RF capture handler stores a pending code only in learn mode.
 - Learned RF codes can be assigned to buttons 1 to 4 from the physical buttons or the matching Home Assistant long-press buttons.
-- RF Emulation is a master enable for transmitting learned RF codes; it does not block relay actions.
+- Use RF is a master enable for transmitting learned RF codes; it does not block relay actions.
 - LCD shows DHT values on line 1 and alternates line 2 between voltage/power and current/power factor.
 - LCD backlight turns off automatically after inactivity and short Settings press only wakes the display.
-- The two servos are mirrored and are used together to move the choke harder during stop sequences.
-- Motor-hours are accumulated while the generator is running.
-- Total energy counter is accumulated from measured power over time (kWh, total increasing).
+- The two servos are mirrored and used together for stronger choke movement.
+- Motor-hours are accumulated only while the generator is running.
+- Motor-hours offset can be manually set from HA.
+- Total energy is accumulated only while the generator is running (kWh, total increasing).
 - Last run timestamp is updated when generator state changes from running to stopped.
-- Buttons 1 to 4 trigger their matching relay action and, when RF Emulation is enabled, send the stored RF code if one exists.
+- Last run duration is captured on stop.
+- Current run duration is updated from state/sensor events.
+- Buttons 1 to 4 trigger their matching relay action and, when Use RF is enabled, send the stored RF code if one exists.
 - Each relay has configurable timeout in Home Assistant value fields; `-1` means infinite ON until manual OFF.
 
 ## Button Actions
@@ -67,6 +88,12 @@ Build a generator controller on ESP32 that can monitor generator power, control 
 - Long press button 1, 2, 3, or 4 to store the captured code for that action.
 - The assigned codes are persisted and also exposed in Home Assistant text fields.
 
+### Reliability notes for RF
+
+- Long/noisy codes may require RF timing tuning.
+- Overly permissive receiver settings can cause wrong capture and API backlog pressure.
+- Tuning should be done incrementally and verified against both capture correctness and API stability.
+
 ## Servo Control
 
 - A master `Use Servos` switch enables or disables servo usage.
@@ -79,17 +106,30 @@ The same physical-button actions are also exposed as ESPHome template buttons in
 
 Additional HA controls are exposed for convenience:
 
-- `Generator RF Emulation` toggles learned RF transmission.
+- `Generator Use RF` toggles learned RF transmission.
 - `Generator Use Servos` enables or disables servo control globally.
 - `Generator Use Servo Action Stop`, `Eco`, `Start`, and `Rollete` control servo usage per action.
+- `Generator Physical Buttons Enabled` controls whether physical GPIO button presses can trigger actions.
 
 Additional HA entities are exposed for automation and analytics:
 
 - Per-action timeout value fields (`Stop Timeout`, `Eco Timeout`, `Start Timeout`, and `Rollete Timeout`) with `-1` infinite mode.
-- `Power HA Calc` (W) for HA-side power calculations.
-- `Total Energy Counter` (kWh) as a total increasing energy source.
+- `Total Energy` (kWh) as a total increasing energy source.
+- `Motor Hours` and `Motor Hours Offset`.
 - `Last Run Timestamp` text sensor.
+- `Last Run Duration` and `Current Run Duration` text sensors.
 - `WiFi RSSI` sensor and a `Reset WiFi` button are available for connectivity management.
+
+## Stability and Deployment Workflow (used in practice)
+
+1. Reproduce and capture short logs around the fault.
+2. Apply the smallest possible change (prefer rollback over broad refactor when unstable).
+3. Validate with `esphome config` before upload.
+4. Deploy via OTA when stable; use serial fallback when OTA is interrupted/reset.
+5. Verify both symptom fix and adjacent risk areas:
+	- RF learn correctness
+	- API warnings (`Buffer full`, warning flags)
+	- Running-state, energy, and duration counters
 
 ## Implementation Rules
 
