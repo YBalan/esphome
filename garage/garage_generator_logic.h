@@ -6,7 +6,11 @@
 #include <limits>
 #include <string>
 
+#include "esphome/components/wifi/wifi_component.h"
+
 namespace garage {
+
+inline constexpr const char *kRfCodeNotAssigned = "Not assigned";
 
 inline bool is_generator_running(const float &voltage, const float &threshold) {
   if (!std::isfinite(voltage)) {
@@ -17,6 +21,76 @@ inline bool is_generator_running(const float &voltage, const float &threshold) {
 
 inline const char *on_off_text(const bool &value) {
   return value ? "ON" : "OFF";
+}
+
+inline uint32_t now_ms() {
+  return millis();
+}
+
+inline bool time_until_in_future(const uint32_t &timestamp_ms) {
+  return static_cast<int32_t>(timestamp_ms - now_ms()) > 0;
+}
+
+inline void wake_backlight(const uint32_t &timeout_ms = 60000U) {
+  id(display_backlight_until_ms) = now_ms() + timeout_ms;
+}
+
+inline bool is_backlight_active() {
+  return time_until_in_future(id(display_backlight_until_ms));
+}
+
+inline void set_lcd_message(const std::string &line_1, const std::string &line_2, const uint32_t &duration_ms = 5000U) {
+  id(lcd_message_line_1) = line_1;
+  id(lcd_message_line_2) = line_2;
+  id(lcd_message_until_ms) = now_ms() + duration_ms;
+}
+
+inline void clear_lcd_message() {
+  id(lcd_message_line_1).clear();
+  id(lcd_message_line_2).clear();
+  id(lcd_message_until_ms) = 0U;
+}
+
+inline bool is_lcd_message_active() {
+  return time_until_in_future(id(lcd_message_until_ms));
+}
+
+inline std::string clip_16(const std::string &value) {
+  if (value.size() <= 16U) {
+    return value;
+  }
+  return value.substr(0, 16);
+}
+
+inline bool is_ap_mode_active() {
+  return wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_ap_active();
+}
+
+inline std::string active_ap_ssid_or_default() {
+  if (wifi::global_wifi_component == nullptr) {
+    return "AP";
+  }
+  const std::string ssid = wifi::global_wifi_component->get_ap().get_ssid().c_str();
+  return ssid.empty() ? std::string("AP") : ssid;
+}
+
+inline std::string u64_to_binary(const uint64_t &value) {
+  if (value == 0ULL) {
+    return "0";
+  }
+
+  std::string bits;
+  bits.reserve(64U);
+  bool started = false;
+  for (int bit = 63; bit >= 0; --bit) {
+    const bool on = ((value >> bit) & 1ULL) != 0ULL;
+    if (!started && !on) {
+      continue;
+    }
+    started = true;
+    bits.push_back(on ? '1' : '0');
+  }
+  return bits;
 }
 
 inline uint32_t seconds_to_ms(const float &seconds) {
@@ -102,9 +176,214 @@ inline const std::string &button_rf_code(const uint8_t button) {
   }
 }
 
+inline std::string button_rf_code_or_default(const uint8_t button, const char *fallback = kRfCodeNotAssigned) {
+  const std::string &code = button_rf_code(button);
+  if (code.empty()) {
+    return std::string(fallback);
+  }
+  return code;
+}
+
+inline int button_rf_protocol(const uint8_t button) {
+  switch (button) {
+    case 1:
+      return id(rf_protocol_btn_1);
+    case 2:
+      return id(rf_protocol_btn_2);
+    case 3:
+      return id(rf_protocol_btn_3);
+    case 4:
+      return id(rf_protocol_btn_4);
+    default:
+      return 1;
+  }
+}
+
+inline void set_button_rf_data(const uint8_t button, const std::string &code, const int &protocol) {
+  switch (button) {
+    case 1:
+      id(rf_code_btn_1) = code;
+      id(rf_protocol_btn_1) = protocol;
+      break;
+    case 2:
+      id(rf_code_btn_2) = code;
+      id(rf_protocol_btn_2) = protocol;
+      break;
+    case 3:
+      id(rf_code_btn_3) = code;
+      id(rf_protocol_btn_3) = protocol;
+      break;
+    case 4:
+      id(rf_code_btn_4) = code;
+      id(rf_protocol_btn_4) = protocol;
+      break;
+    default:
+      break;
+  }
+}
+
 // True when the matching learned RF code is present and can be transmitted.
 inline bool button_rf_enabled(const uint8_t button) {
   return has_text(button_rf_code(button));
+}
+
+inline bool is_rf_learning_mode() {
+  return id(rf_learning_mode);
+}
+
+inline void enter_rf_learning_mode() {
+  id(rf_learning_mode) = true;
+  id(rf_pending_code).clear();
+  id(rf_pending_protocol) = 1;
+  wake_backlight();
+  set_lcd_message("RF Learn Mode", "Send RF signal", 7000U);
+}
+
+inline void leave_rf_learning_mode() {
+  id(rf_learning_mode) = false;
+  id(rf_pending_code).clear();
+  id(rf_pending_protocol) = 1;
+}
+
+inline void toggle_rf_learning_mode() {
+  if (is_rf_learning_mode()) {
+    leave_rf_learning_mode();
+    wake_backlight();
+    clear_lcd_message();
+  } else {
+    enter_rf_learning_mode();
+  }
+}
+
+inline bool on_rf_signal_received(const uint64_t &code, const uint8_t &protocol) {
+  if (!is_rf_learning_mode()) {
+    return false;
+  }
+
+  id(rf_pending_code) = u64_to_binary(code);
+  id(rf_pending_protocol) = static_cast<int>(protocol);
+  wake_backlight();
+
+  const std::string line_2 = clip_16(id(rf_pending_code));
+  set_lcd_message("RF Captured", line_2, 8000U);
+  return true;
+}
+
+inline bool assign_pending_rf_to_button(const uint8_t button) {
+  if (!is_rf_learning_mode()) {
+    return false;
+  }
+
+  if (!has_text(id(rf_pending_code))) {
+    wake_backlight();
+    set_lcd_message("No RF Captured", "Send RF signal", 5000U);
+    return false;
+  }
+
+  set_button_rf_data(button, id(rf_pending_code), id(rf_pending_protocol));
+
+  char line_1[17] = {0};
+  std::snprintf(line_1, sizeof(line_1), "Saved to Btn %u", button);
+  wake_backlight();
+  set_lcd_message(line_1, "RF assigned", 5000U);
+  leave_rf_learning_mode();
+  return true;
+}
+
+inline void show_assigned_rf_for_button(const uint8_t button) {
+  if (!button_rf_enabled(button)) {
+    return;
+  }
+
+  char line_1[17] = {0};
+  std::snprintf(line_1, sizeof(line_1), "Btn %u RF", button);
+
+  const std::string code = clip_16(button_rf_code(button));
+  wake_backlight();
+  set_lcd_message(line_1, code, 4000U);
+}
+
+inline void note_user_action() {
+  wake_backlight();
+}
+
+inline void reset_motor_hours_counter() {
+  id(motor_hours_total) = 0.0f;
+}
+
+inline float motor_hours_offset_value() {
+  return id(motor_hours_offset);
+}
+
+inline void set_motor_hours_offset(const float &hours) {
+  if (!std::isfinite(hours) || hours < 0.0f) {
+    return;
+  }
+  id(motor_hours_offset) = hours;
+}
+
+inline void reset_total_energy_counter() {
+  id(total_energy_kwh) = 0.0f;
+}
+
+inline void reset_all_counters() {
+  reset_motor_hours_counter();
+  reset_total_energy_counter();
+}
+
+inline void set_button_rf_code_from_text(const uint8_t button, const std::string &value_in) {
+  std::string value = value_in;
+  if (value == kRfCodeNotAssigned) {
+    value.clear();
+  }
+  set_button_rf_data(button, value, button_rf_protocol(button));
+}
+
+inline void mark_pzem_rx_if_finite(const float &value) {
+  if (std::isfinite(value)) {
+    id(pzem_last_rx_ms) = now_ms();
+  }
+}
+
+inline bool is_pzem_data_fresh(const uint32_t max_age_ms = 5000U) {
+  if (id(pzem_last_rx_ms) == 0U) {
+    return false;
+  }
+  return static_cast<uint32_t>(now_ms() - id(pzem_last_rx_ms)) <= max_age_ms;
+}
+
+inline bool is_generator_running_with_pzem_freshness(
+    const float &voltage,
+    const float &threshold,
+    const uint32_t max_age_ms = 5000U) {
+  if (!is_pzem_data_fresh(max_age_ms)) {
+    return false;
+  }
+  return is_generator_running(voltage, threshold);
+}
+
+template <typename TSensor>
+inline void publish_sensor_zero_if_needed(const float &state, TSensor &sensor) {
+  if (!std::isfinite(state) || state != 0.0f) {
+    sensor.publish_state(0.0f);
+  }
+}
+
+inline void zero_pzem_sensors_if_stale(const uint32_t max_age_ms = 5000U) {
+  if (is_pzem_data_fresh(max_age_ms)) {
+    return;
+  }
+
+  publish_sensor_zero_if_needed(id(pzem_voltage).state, id(pzem_voltage));
+  publish_sensor_zero_if_needed(id(pzem_current).state, id(pzem_current));
+  publish_sensor_zero_if_needed(id(pzem_power).state, id(pzem_power));
+  publish_sensor_zero_if_needed(id(pzem_frequency).state, id(pzem_frequency));
+  publish_sensor_zero_if_needed(id(pzem_power_factor).state, id(pzem_power_factor));
+}
+
+inline void on_button_long_action(const uint8_t button) {
+  note_user_action();
+  assign_pending_rf_to_button(button);
 }
 
 inline float power_for_ha_calc(const float &power) {
@@ -116,7 +395,7 @@ inline float total_energy_counter_kwh() {
 }
 
 inline float motor_hours_total_value() {
-  return id(motor_hours_total);
+  return id(motor_hours_total) + id(motor_hours_offset);
 }
 
 inline void accumulate_total_energy_kwh(const float &power_watts, const float &dt_seconds = 1.0f) {
@@ -137,6 +416,31 @@ inline const std::string &last_run_timestamp_text() {
   return id(last_run_timestamp);
 }
 
+inline const std::string &last_run_duration_text() {
+  return id(last_run_duration);
+}
+
+inline std::string format_duration_hms(const uint32_t total_seconds) {
+  const uint32_t hours = total_seconds / 3600U;
+  const uint32_t minutes = (total_seconds % 3600U) / 60U;
+  const uint32_t seconds = total_seconds % 60U;
+
+  char buffer[16] = {0};
+  std::snprintf(buffer, sizeof(buffer), "%02lu:%02lu:%02lu", static_cast<unsigned long>(hours),
+                static_cast<unsigned long>(minutes), static_cast<unsigned long>(seconds));
+  return std::string(buffer);
+}
+
+inline std::string format_duration_hm(const uint32_t total_minutes) {
+  const uint32_t hours = total_minutes / 60U;
+  const uint32_t minutes = total_minutes % 60U;
+
+  char buffer[16] = {0};
+  std::snprintf(buffer, sizeof(buffer), "%02lu:%02lu", static_cast<unsigned long>(hours),
+                static_cast<unsigned long>(minutes));
+  return std::string(buffer);
+}
+
 template <typename TNow>
 inline void update_last_run_timestamp(TNow now) {
   if (now.is_valid()) {
@@ -144,6 +448,52 @@ inline void update_last_run_timestamp(TNow now) {
   } else {
     id(last_run_timestamp) = "unknown";
   }
+}
+
+template <typename TNow>
+inline void on_generator_run_started(TNow now) {
+  if (now.is_valid()) {
+    id(last_run_start_unix_s) = now.timestamp;
+  } else {
+    id(last_run_start_unix_s) = 0;
+  }
+}
+
+template <typename TNow>
+inline void on_generator_run_stopped(TNow now) {
+  update_last_run_timestamp(now);
+
+  const int32_t started = id(last_run_start_unix_s);
+  if (!now.is_valid() || started <= 0 || now.timestamp < started) {
+    id(last_run_duration) = "unknown";
+    id(last_run_start_unix_s) = 0;
+    return;
+  }
+
+  const uint32_t elapsed_minutes = static_cast<uint32_t>(now.timestamp - started) / 60U;
+  id(last_run_duration) = format_duration_hm(elapsed_minutes);
+  id(last_run_start_unix_s) = 0;
+}
+
+template <typename TNow>
+inline std::string current_run_duration_text(TNow now, const bool &running) {
+  if (!running) {
+    return "00:00";
+  }
+
+  if (!now.is_valid()) {
+    return "unknown";
+  }
+
+  const int32_t started = id(last_run_start_unix_s);
+  if (started <= 0 || now.timestamp < started) {
+    // After restart while already running, initialize from current time.
+    id(last_run_start_unix_s) = now.timestamp;
+    return "00:00";
+  }
+
+  const uint32_t elapsed_minutes = static_cast<uint32_t>(now.timestamp - started) / 60U;
+  return format_duration_hm(elapsed_minutes);
 }
 
 template <typename TDisplay>
@@ -169,7 +519,7 @@ inline void render_status_page(
   const float safe_voltage = std::isfinite(voltage) ? voltage : 0.0f;
   const float safe_power = std::isfinite(power) ? power : 0.0f;
 
-  std::snprintf(line_1, sizeof(line_1), "V:%5.1f P:%4.0f", safe_voltage, safe_power);
+  std::snprintf(line_1, sizeof(line_1), "V:%5.1f P:%4.0fW", safe_voltage, safe_power);
   std::snprintf(
       line_2,
       sizeof(line_2),
@@ -221,7 +571,11 @@ inline void render_lcd_page(
     return;
   }
 
-  display.backlight();
+  if (is_backlight_active()) {
+    display.backlight();
+  } else {
+    display.no_backlight();
+  }
 
   char line_1[17] = {0};
   char line_2[17] = {0};
@@ -234,14 +588,41 @@ inline void render_lcd_page(
   const float safe_power_factor = std::isfinite(power_factor) ? power_factor : 0.0f;
 
   std::snprintf(line_1, sizeof(line_1), "T:%4.1fC H:%4.1f%%", safe_temperature, safe_humidity);
+  static uint32_t line2_last_switch_ms = 0U;
+  static bool line2_show_voltage_power = true;
+  constexpr uint32_t line2_switch_period_ms = 3000U;
+  const uint32_t now = now_ms();
 
-  static uint8_t pzem_line_page = 0;
-  if (pzem_line_page == 0) {
-    std::snprintf(line_2, sizeof(line_2), "V:%5.1f I:%3.1f", safe_voltage, safe_current);
-  } else {
-    std::snprintf(line_2, sizeof(line_2), "P:%4.0f PF:%1.2f", safe_power, safe_power_factor);
+  if (line2_last_switch_ms == 0U) {
+    line2_last_switch_ms = now;
+  } else if (static_cast<uint32_t>(now - line2_last_switch_ms) >= line2_switch_period_ms) {
+    line2_last_switch_ms = now;
+    line2_show_voltage_power = !line2_show_voltage_power;
   }
-  pzem_line_page = static_cast<uint8_t>((pzem_line_page + 1U) % 2U);
+
+  if (line2_show_voltage_power) {
+    std::snprintf(line_2, sizeof(line_2), "V:%5.1f P:%4.0fW", safe_voltage, safe_power);
+  } else {
+    std::snprintf(line_2, sizeof(line_2), "I:%4.2fA  PF:%1.2f", safe_current, safe_power_factor);
+  }
+
+  if (is_lcd_message_active()) {
+    const std::string msg_1 = clip_16(id(lcd_message_line_1));
+    const std::string msg_2 = clip_16(id(lcd_message_line_2));
+    std::snprintf(line_1, sizeof(line_1), "%s", msg_1.c_str());
+    std::snprintf(line_2, sizeof(line_2), "%s", msg_2.c_str());
+  } else if (is_rf_learning_mode()) {
+    std::snprintf(line_1, sizeof(line_1), "RF Learn Mode");
+    if (has_text(id(rf_pending_code))) {
+      const std::string learn_code = clip_16(id(rf_pending_code));
+      std::snprintf(line_2, sizeof(line_2), "%s", learn_code.c_str());
+    } else {
+      std::snprintf(line_2, sizeof(line_2), "Send RF signal");
+    }
+  } else if (is_ap_mode_active()) {
+    const std::string ap_ssid = clip_16(active_ap_ssid_or_default());
+    std::snprintf(line_2, sizeof(line_2), "AP:%s", ap_ssid.c_str());
+  }
 
   display.print(0, 0, line_1);
   display.print(0, 1, line_2);

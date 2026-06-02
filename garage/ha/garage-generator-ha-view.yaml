@@ -1,0 +1,247 @@
+type: sections
+max_columns: 2
+title: Garage Generator
+sections:
+  - type: grid
+    cards:
+      - type: heading
+        heading: ⚡ PZEM Values
+      - type: horizontal-stack
+        cards:
+          - type: tile
+            entity: sensor.generator_generator_voltage
+            name: Voltage
+          - type: tile
+            entity: sensor.generator_generator_current
+            name: Current
+          - type: tile
+            entity: sensor.generator_generator_power
+            name: Power
+      - type: horizontal-stack
+        cards:
+          - type: tile
+            entity: sensor.generator_generator_energy
+            name: Energy
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.generator_generator_frequency
+            name: Frequency
+          - type: tile
+            entity: sensor.generator_generator_power_factor
+            name: Power Factor
+      - type: tile
+        entity: sensor.generator_generator_total_energy
+        name: Total Energy
+        vertical: false
+        features_position: bottom
+        grid_options:
+          columns: 12
+          rows: 1
+  - type: grid
+    cards:
+      - type: heading
+        heading: ⏱️ Timings & Durations
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - entity: sensor.generator_generator_current_run_duration
+            name: Current Run Duration
+          - entity: sensor.generator_generator_last_run_timestamp
+            name: Last Run Timestamp
+          - entity: sensor.generator_generator_last_run_duration
+            name: Last Run Duration
+          - entity: sensor.generator_generator_motor_hours
+            name: Motor Hours
+  - type: grid
+    cards:
+      - type: heading
+        heading: 🔘 Buttons
+      - square: false
+        type: grid
+        columns: 2
+        cards:
+          - show_name: true
+            show_icon: true
+            type: button
+            name: Stop
+            icon: mdi:stop-circle
+            entity: button.generator_generator_action_stop
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_action_stop_long
+            name: Stop Long
+            icon: mdi:gesture-tap-hold
+          - show_name: true
+            show_icon: true
+            type: button
+            name: Eco
+            icon: mdi:leaf
+            entity: button.generator_generator_action_eco_on
+          - show_name: true
+            show_icon: true
+            type: button
+            name: Eco Long
+            icon: mdi:gesture-tap-hold
+            entity: button.generator_generator_action_eco_long
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_action_start
+            name: Start
+            icon: mdi:play-circle
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_action_start_long
+            name: Start Long
+            icon: mdi:gesture-tap-hold
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_action_rollete
+            name: Rollete
+            icon: mdi:garage-open
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_action_rollete_long
+            name: Rollete Long
+            icon: mdi:gesture-tap-hold
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_action_settings_short
+            name: Display On
+            icon: mdi:monitor
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_action_settings_long
+            name: RF Learn
+            icon: mdi:radio-tower
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_reset_motor_hours
+            name: Reset Hours
+            icon: mdi:counter
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_reset_total_energy
+            name: Reset Energy
+            icon: mdi:lightning-bolt-circle
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_reset_all_counters
+            name: Reset All
+            icon: mdi:restore
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_restart_device
+            name: Restart
+            icon: mdi:restart
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_factory_reset
+            name: WiFi Reset
+            icon: mdi:wifi-refresh
+  - type: grid
+    cards:
+      - type: heading
+        heading: ⚙️ Configs
+      - type: entities
+        title: Generator Configuration
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: Main Toggles
+          - entity: switch.generator_generator_display_enabled
+            name: Display Enabled
+          - entity: switch.generator_generator_use_rf
+            name: Use RF
+          - entity: switch.generator_generator_use_servos
+            name: Use Servos
+          - type: section
+            label: Servo Actions
+          - entity: switch.generator_generator_servo_on_stop_action
+            name: Stop Action
+          - entity: switch.generator_generator_servo_on_eco_action
+            name: Eco Action
+          - entity: switch.generator_generator_servo_on_start_action
+            name: Start Action
+          - entity: switch.generator_generator_servo_on_rollete_action
+            name: Rollete Action
+          - type: section
+            label: Counters & Timers
+          - entity: number.generator_generator_motor_hours_offset
+            name: Motor Hours Offset
+          - entity: number.generator_generator_timeout_stop
+            name: Stop Timeout
+          - entity: number.generator_generator_timeout_eco
+            name: Eco Timeout
+          - entity: number.generator_generator_timeout_start
+            name: Start Timeout
+          - entity: number.generator_generator_timeout_rollete
+            name: Rollete Timeout
+          - type: section
+            label: Learned
+          - entity: text.generator_generator_rf_code_stop
+            name: RF Code Stop
+          - entity: text.generator_generator_rf_code_eco
+            name: RF Code Eco
+          - entity: text.generator_generator_rf_code_start
+            name: RF Code Start
+          - entity: text.generator_generator_rf_code_rollete
+            name: RF Code Rollete
+  - type: grid
+    cards:
+      - type: heading
+        heading: Relays
+        heading_style: title
+      - square: false
+        type: grid
+        columns: 1
+        cards:
+          - type: entities
+            entities:
+              - entity: switch.generator_generator_stop
+                name: Stop
+              - entity: switch.generator_generator_eco_mode
+                name: Eco
+              - entity: switch.generator_generator_start
+                name: Start
+              - entity: switch.generator_generator_rollete
+                name: Rollete
+            show_header_toggle: false
+            state_color: true
+cards: []
+path: garage
+icon: mdi:generator-stationary
+show_icon_and_title: false
+badges:
+  - type: entity
+    entity: binary_sensor.generator_generator_running
+  - type: entity
+    entity: sensor.generator_generator_voltage
+  - type: entity
+    show_name: false
+    show_state: true
+    show_icon: true
+    entity: sensor.generator_generator_current_run_duration
+  - type: entity
+    show_name: true
+    show_state: true
+    show_icon: true
+    entity: sensor.generator_generator_last_run_duration
+    name:
+      type: entity
+  - type: entity
+    entity: sensor.generator_generator_motor_hours
+  - type: entity
+    entity: sensor.generator_generator_wifi_rssi
