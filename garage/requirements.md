@@ -18,6 +18,10 @@ The following items are implemented and considered baseline behavior:
 	- `Motor Hours Offset` supported.
 	- `Total Energy` accumulated only while running.
 	- `Last Run Timestamp`, `Last Run Duration`, and `Current Run Duration` available.
+	- `Last Run Duration` and `Current Run Duration` shown as `HH:MM`.
+	- `Current Run Duration` updates every 60 seconds and re-initializes from `00:00` after reboot if generator is already running.
+- PZEM source is polled every 2 seconds, with staggered publish throttles by metric priority.
+- RF code text entities publish once on boot and then only when changed.
 - RF learn/assign/transmit workflow for actions 1..4.
 - Mirrored servo control with per-action enable switches and global servo master switch.
 - Full HA action parity for physical actions through template buttons.
@@ -58,20 +62,29 @@ The following items are implemented and considered baseline behavior:
 ## ESPHome Behavior
 
 - PZEM is configured over UART on GPIO16/17.
+- PZEM publish cadence is intentionally staggered to reduce API bursts:
+	- Voltage 2s
+	- Current 3s
+	- Power 5s
+	- Power Factor 7s
+	- Frequency 11s
+	- Energy 29s
 - RF capture handler stores a pending code only in learn mode.
 - Learned RF codes can be assigned to buttons 1 to 4 from the physical buttons or the matching Home Assistant long-press buttons.
 - Use RF is a master enable for transmitting learned RF codes; it does not block relay actions.
 - LCD shows DHT values on line 1 and alternates line 2 between voltage/power and current/power factor.
 - LCD backlight turns off automatically after inactivity and short Settings press only wakes the display.
+- In fallback AP/captive mode, LCD line 2 shows `AP:<ssid>`.
 - The two servos are mirrored and used together for stronger choke movement.
 - Motor-hours are accumulated only while the generator is running.
 - Motor-hours offset can be manually set from HA.
 - Total energy is accumulated only while the generator is running (kWh, total increasing).
 - Last run timestamp is updated when generator state changes from running to stopped.
-- Last run duration is captured on stop.
-- Current run duration is updated from state/sensor events.
+- Last run duration is captured on stop (`HH:MM`).
+- Current run duration is minute-based (`HH:MM`) and updates every 60 seconds.
+- If reboot happens during active run, current duration restarts from `00:00` and continues.
 - Buttons 1 to 4 trigger their matching relay action and, when Use RF is enabled, send the stored RF code if one exists.
-- Each relay has configurable timeout in Home Assistant value fields; `-1` means infinite ON until manual OFF.
+- Each relay has configurable timeout in Home Assistant value fields; `-1` makes action behave as relay toggle.
 
 ## Button Actions
 
@@ -113,12 +126,13 @@ Additional HA controls are exposed for convenience:
 
 Additional HA entities are exposed for automation and analytics:
 
-- Per-action timeout value fields (`Stop Timeout`, `Eco Timeout`, `Start Timeout`, and `Rollete Timeout`) with `-1` infinite mode.
+- Per-action timeout value fields (`Stop Timeout`, `Eco Timeout`, `Start Timeout`, and `Rollete Timeout`) with `-1` toggle mode.
 - `Total Energy` (kWh) as a total increasing energy source.
 - `Motor Hours` and `Motor Hours Offset`.
 - `Last Run Timestamp` text sensor.
 - `Last Run Duration` and `Current Run Duration` text sensors.
-- `WiFi RSSI` sensor and a `Reset WiFi` button are available for connectivity management.
+- `WiFi RSSI` sensor is available for connectivity diagnostics.
+- `WiFi RSSI` sensor is available for connectivity diagnostics.
 
 ## Stability and Deployment Workflow (used in practice)
 

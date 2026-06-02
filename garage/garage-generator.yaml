@@ -46,7 +46,7 @@ substitutions:
 
   # Action timing
   servo_step_delay: 250ms
-  motor_hours_update_interval: 10s
+  motor_hours_update_interval: 30s
 
   # Servo signal parameters
   servo_pwm_frequency: "50 Hz"
@@ -93,6 +93,10 @@ esphome:
     then:
       - lambda: |-
           garage::wake_backlight();
+      - component.update: rf_code_btn_1_text
+      - component.update: rf_code_btn_2_text
+      - component.update: rf_code_btn_3_text
+      - component.update: rf_code_btn_4_text
 
 esp32:
   board: esp32dev
@@ -112,9 +116,7 @@ wifi:
     password: ${ap_password}
     
   # Allow saving new credentials to flash memory
-  fast_connect: true
-  power_save_mode: NONE
-  reboot_timeout: 0s
+  fast_connect: true 
 
 # Enables the web interface when in AP mode
 captive_portal:
@@ -124,12 +126,14 @@ captive_portal:
   #port: 80
 
 api: #For Home Assistant
-  # Slight batching helps avoid API backlog when other components are busy.
-  batch_delay: 1s
+  # Keep batching close to default to avoid large bursts of queued state updates.
+  #batch_delay: 100ms
+  # Prevent periodic reboots when HA is briefly unreachable.
+  #reboot_timeout: 0s
 
 preferences:
   # Persist assigned RF codes quickly so they survive reboot/power cycles.
-  flash_write_interval: 10s
+  flash_write_interval: 30s
 
 time:
   - platform: homeassistant
@@ -137,7 +141,7 @@ time:
 
 logger:
   level: INFO
-  tx_buffer_size: 1024
+  #tx_buffer_size: 1024
   # Keep serial monitor from holding reset/boot straps in programming mode.
   deassert_rts_dtr: true
 
@@ -392,16 +396,16 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
 
 button:
-  - platform: template
-    id: ha_btn_wifi_reset
-    name: ${friendly_name} WiFi Reset
-    icon: mdi:wifi-refresh
-    entity_category: diagnostic
-    on_press:
-      # Force WiFi reconnection without full device reboot.
-      - wifi.disable:
-      - delay: 2s
-      - wifi.enable:
+  # - platform: template
+  #   id: ha_btn_wifi_reset
+  #   name: ${friendly_name} WiFi Reset
+  #   icon: mdi:wifi-refresh
+  #   entity_category: diagnostic
+  #   on_press:
+  #     # Force WiFi reconnection without full device reboot.
+  #     - wifi.disable:
+  #     - delay: 2s
+  #     - wifi.enable:
 
     # WiFi Reset Button
   - platform: factory_reset
@@ -525,30 +529,41 @@ sensor:
   - platform: pzemac
     modbus_id: modbus_pzem
     address: 0x01
-    update_interval: 1s
+    update_interval: 2s
     voltage:
       id: pzem_voltage
       name: ${friendly_name} Voltage
+      filters:
+        - throttle: 2s
       on_value:
         then:
           - lambda: |-
               garage::mark_pzem_rx_if_finite(x);
-          - component.update: current_run_duration_sensor
     current:
       id: pzem_current
       name: ${friendly_name} Current
+      filters:
+        - throttle: 3s
     power:
       id: pzem_power
       name: ${friendly_name} Power
+      filters:
+        - throttle: 5s
     energy:
       id: pzem_energy
       name: ${friendly_name} Energy
+      filters:
+        - throttle: 29s
     frequency:
       id: pzem_frequency
       name: ${friendly_name} Frequency
+      filters:
+        - throttle: 11s
     power_factor:
       id: pzem_power_factor
       name: ${friendly_name} Power Factor
+      filters:
+        - throttle: 7s
 
   - platform: dht
     pin: ${gpio_dht}
@@ -578,7 +593,7 @@ sensor:
     icon: mdi:lightning-bolt
     device_class: energy
     state_class: total_increasing
-    update_interval: 10s
+    update_interval: 30s
     lambda: |-
       return garage::total_energy_counter_kwh();
 
@@ -587,20 +602,21 @@ text_sensor:
     id: last_run_timestamp_sensor
     name: ${friendly_name} Last Run Timestamp
     icon: mdi:clock-end
-    update_interval: 10s
+    update_interval: 60s
     lambda: |-
       return garage::last_run_timestamp_text();
   - platform: template
     id: last_run_duration_sensor
     name: ${friendly_name} Last Run Duration
     icon: mdi:timer-outline
-    update_interval: 10s
+    update_interval: 60s
     lambda: |-
       return garage::last_run_duration_text();
   - platform: template
     id: current_run_duration_sensor
     name: ${friendly_name} Current Run Duration
     icon: mdi:timer-play-outline
+    update_interval: 60s
     lambda: |-
       return garage::current_run_duration_text(id(ha_time).now(), id(generator_running).state);
 
@@ -613,12 +629,13 @@ text:
     mode: text
     min_length: 0
     max_length: 64
-    update_interval: 10s
+    update_interval: never
     lambda: |-
       return garage::button_rf_code_or_default(1);
     set_action:
       - lambda: |-
           garage::set_button_rf_code_from_text(1, x);
+      - component.update: rf_code_btn_1_text
 
   - platform: template
     id: rf_code_btn_2_text
@@ -628,12 +645,13 @@ text:
     mode: text
     min_length: 0
     max_length: 64
-    update_interval: 10s
+    update_interval: never
     lambda: |-
       return garage::button_rf_code_or_default(2);
     set_action:
       - lambda: |-
           garage::set_button_rf_code_from_text(2, x);
+      - component.update: rf_code_btn_2_text
 
   - platform: template
     id: rf_code_btn_3_text
@@ -643,12 +661,13 @@ text:
     mode: text
     min_length: 0
     max_length: 64
-    update_interval: 10s
+    update_interval: never
     lambda: |-
       return garage::button_rf_code_or_default(3);
     set_action:
       - lambda: |-
           garage::set_button_rf_code_from_text(3, x);
+      - component.update: rf_code_btn_3_text
 
   - platform: template
     id: rf_code_btn_4_text
@@ -658,12 +677,13 @@ text:
     mode: text
     min_length: 0
     max_length: 64
-    update_interval: 10s
+    update_interval: never
     lambda: |-
       return garage::button_rf_code_or_default(4);
     set_action:
       - lambda: |-
           garage::set_button_rf_code_from_text(4, x);
+      - component.update: rf_code_btn_4_text
 
 number:
   - platform: template
@@ -765,6 +785,7 @@ binary_sensor:
   - platform: gpio
     id: btn_1_stop
     name: ${friendly_name} Stop
+    internal: true
     pin:
       number: ${gpio_btn_1}
       mode:
@@ -794,6 +815,7 @@ binary_sensor:
   - platform: gpio
     id: btn_2_eco
     name: ${friendly_name} Eco
+    internal: true
     pin:
       number: ${gpio_btn_2}
       mode:
@@ -823,6 +845,7 @@ binary_sensor:
   - platform: gpio
     id: btn_3_start
     name: ${friendly_name} Start
+    internal: true
     pin:
       number: ${gpio_btn_3}
       mode:
@@ -852,6 +875,7 @@ binary_sensor:
   - platform: gpio
     id: btn_4_rollete
     name: ${friendly_name} Rollete
+    internal: true
     pin:
       number: ${gpio_btn_4}
       mode:
@@ -881,11 +905,12 @@ binary_sensor:
   - platform: gpio
     id: btn_5_settings
     name: ${friendly_name} Settings
+    internal: true
     pin:
       number: ${gpio_btn_5}
       mode:
         input: true
-      inverted: true
+      inverted: false
     on_multi_click:
       - timing:
           - ON for at most 350ms
@@ -933,8 +958,6 @@ interval:
             - lambda: |-
                 garage::accumulate_total_energy_kwh(id(pzem_power).state, 1.0f);
                 garage::accumulate_motor_hours(true, 1.0f);
-            - component.update: total_energy_counter
-            - component.update: motor_hours
 
 script:
   - id: servo_move_to_start
@@ -1003,8 +1026,14 @@ script:
             lambda: |-
               return garage::button_timeout_is_infinite(1);
           then:
-            # -1 means infinite timeout: keep relay ON until manually switched OFF.
-            - switch.turn_on: relay_1
+            # -1 means infinite timeout: treat action as relay toggle.
+            - if:
+                condition:
+                  switch.is_on: relay_1
+                then:
+                  - switch.turn_off: relay_1
+                else:
+                  - switch.turn_on: relay_1
           else:
             - switch.turn_on: relay_1
             - delay: !lambda |-
@@ -1019,8 +1048,14 @@ script:
             lambda: |-
               return garage::button_timeout_is_infinite(2);
           then:
-            # -1 means infinite timeout: keep relay ON until manually switched OFF.
-            - switch.turn_on: relay_2
+            # -1 means infinite timeout: treat action as relay toggle.
+            - if:
+                condition:
+                  switch.is_on: relay_2
+                then:
+                  - switch.turn_off: relay_2
+                else:
+                  - switch.turn_on: relay_2
           else:
             - switch.turn_on: relay_2
             - delay: !lambda |-
@@ -1035,8 +1070,14 @@ script:
             lambda: |-
               return garage::button_timeout_is_infinite(3);
           then:
-            # -1 means infinite timeout: keep relay ON until manually switched OFF.
-            - switch.turn_on: relay_3
+            # -1 means infinite timeout: treat action as relay toggle.
+            - if:
+                condition:
+                  switch.is_on: relay_3
+                then:
+                  - switch.turn_off: relay_3
+                else:
+                  - switch.turn_on: relay_3
           else:
             - switch.turn_on: relay_3
             - delay: !lambda |-
@@ -1051,8 +1092,14 @@ script:
             lambda: |-
               return garage::button_timeout_is_infinite(4);
           then:
-            # -1 means infinite timeout: keep relay ON until manually switched OFF.
-            - switch.turn_on: relay_4
+            # -1 means infinite timeout: treat action as relay toggle.
+            - if:
+                condition:
+                  switch.is_on: relay_4
+                then:
+                  - switch.turn_off: relay_4
+                else:
+                  - switch.turn_on: relay_4
           else:
             - switch.turn_on: relay_4
             - delay: !lambda |-

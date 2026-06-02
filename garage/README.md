@@ -4,17 +4,21 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 
 ## Implemented behavior (current)
 
-- PZEM telemetry is read every second and treated as stale when no fresh values are received.
+- PZEM telemetry is polled every 2 seconds and published with staggered per-sensor throttles by priority.
 - Running-state detection uses both voltage threshold and PZEM freshness checks.
 - Stale PZEM values are actively zeroed (voltage/current/power/frequency/power factor) instead of staying `unknown`.
 - `Total Energy` is integrated only while `Generator Running` is ON.
 - `Motor Hours` is accumulated only while running and supports `Motor Hours Offset`.
 - `Last Run Timestamp`, `Last Run Duration`, and `Current Run Duration` are exposed as text sensors.
-- `Current Run Duration` is event-updated from run-state/PZEM events.
+- `Last Run Duration` and `Current Run Duration` are displayed as `HH:MM` (no seconds).
+- `Current Run Duration` updates every 60 seconds and also refreshes on run-state transitions.
+- If the device restarts while already running, current run duration starts from `00:00` and continues.
 - Physical GPIO buttons are gated by `Physical Buttons Enabled` and default to OFF for safe bring-up.
 - RF learn/capture is accepted only when learn mode is active.
+- RF code text entities publish once at boot, then only on real changes (manual set or learn assignment).
 - LCD update interval is slowed for lower runtime pressure.
-- API batching is enabled to reduce burst traffic to Home Assistant.
+- When fallback AP mode is active (captive portal), LCD line 2 shows `AP:<ssid>`.
+- API batching currently uses ESPHome defaults (no custom `batch_delay` override).
 
 ## Hardware summary
 
@@ -55,16 +59,16 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - `Generator Use Servos`
 - `Generator Servo On <Action> Action` switches
 - `Generator Physical Buttons Enabled`
-- Timeout number fields for Stop/Eco/Start/Rollete (`-1` = infinite ON)
+- Timeout number fields for Stop/Eco/Start/Rollete (`-1` = relay toggle behavior)
 - `Generator Motor Hours Offset`
 - `Generator Reset Motor Hours`
 - `Generator Reset Total Energy`
 - `Generator Reset All Counters`
-- `Generator WiFi Reset`
 
 ### Runtime/diagnostic entities
 
 - PZEM: voltage/current/power/energy/frequency/power factor
+	- Published with staggered throttles (Voltage 2s, Current 3s, Power 5s, Power Factor 7s, Frequency 11s, Energy 29s)
 - DHT11: temperature/humidity
 - `Generator Running`
 - `Generator Motor Hours`

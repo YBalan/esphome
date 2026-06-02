@@ -6,6 +6,8 @@
 #include <limits>
 #include <string>
 
+#include "esphome/components/wifi/wifi_component.h"
+
 namespace garage {
 
 inline constexpr const char *kRfCodeNotAssigned = "Not assigned";
@@ -58,6 +60,18 @@ inline std::string clip_16(const std::string &value) {
     return value;
   }
   return value.substr(0, 16);
+}
+
+inline bool is_ap_mode_active() {
+  return wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_ap_active();
+}
+
+inline std::string active_ap_ssid_or_default() {
+  if (wifi::global_wifi_component == nullptr) {
+    return "AP";
+  }
+  const std::string ssid = wifi::global_wifi_component->get_ap().get_ssid().c_str();
+  return ssid.empty() ? std::string("AP") : ssid;
 }
 
 inline std::string u64_to_binary(const uint64_t &value) {
@@ -417,6 +431,16 @@ inline std::string format_duration_hms(const uint32_t total_seconds) {
   return std::string(buffer);
 }
 
+inline std::string format_duration_hm(const uint32_t total_minutes) {
+  const uint32_t hours = total_minutes / 60U;
+  const uint32_t minutes = total_minutes % 60U;
+
+  char buffer[16] = {0};
+  std::snprintf(buffer, sizeof(buffer), "%02lu:%02lu", static_cast<unsigned long>(hours),
+                static_cast<unsigned long>(minutes));
+  return std::string(buffer);
+}
+
 template <typename TNow>
 inline void update_last_run_timestamp(TNow now) {
   if (now.is_valid()) {
@@ -446,24 +470,30 @@ inline void on_generator_run_stopped(TNow now) {
     return;
   }
 
-  const uint32_t duration_seconds = static_cast<uint32_t>(now.timestamp - started);
-  id(last_run_duration) = format_duration_hms(duration_seconds);
+  const uint32_t elapsed_minutes = static_cast<uint32_t>(now.timestamp - started) / 60U;
+  id(last_run_duration) = format_duration_hm(elapsed_minutes);
   id(last_run_start_unix_s) = 0;
 }
 
 template <typename TNow>
 inline std::string current_run_duration_text(TNow now, const bool &running) {
   if (!running) {
-    return "00:00:00";
+    return "00:00";
   }
 
-  const int32_t started = id(last_run_start_unix_s);
-  if (!now.is_valid() || started <= 0 || now.timestamp < started) {
+  if (!now.is_valid()) {
     return "unknown";
   }
 
-  const uint32_t duration_seconds = static_cast<uint32_t>(now.timestamp - started);
-  return format_duration_hms(duration_seconds);
+  const int32_t started = id(last_run_start_unix_s);
+  if (started <= 0 || now.timestamp < started) {
+    // After restart while already running, initialize from current time.
+    id(last_run_start_unix_s) = now.timestamp;
+    return "00:00";
+  }
+
+  const uint32_t elapsed_minutes = static_cast<uint32_t>(now.timestamp - started) / 60U;
+  return format_duration_hm(elapsed_minutes);
 }
 
 template <typename TDisplay>
@@ -589,6 +619,9 @@ inline void render_lcd_page(
     } else {
       std::snprintf(line_2, sizeof(line_2), "Send RF signal");
     }
+  } else if (is_ap_mode_active()) {
+    const std::string ap_ssid = clip_16(active_ap_ssid_or_default());
+    std::snprintf(line_2, sizeof(line_2), "AP:%s", ap_ssid.c_str());
   }
 
   display.print(0, 0, line_1);
