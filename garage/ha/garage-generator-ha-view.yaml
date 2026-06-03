@@ -30,18 +30,6 @@ sections:
           - type: tile
             entity: sensor.generator_generator_power_factor
             name: Power Factor
-      - type: tile
-        entity: sensor.generator_generator_total_energy
-        name: Total Energy
-        vertical: false
-        features_position: bottom
-        grid_options:
-          columns: 12
-          rows: 1
-  - type: grid
-    cards:
-      - type: heading
-        heading: ⏱️ Timings & Durations
       - type: entities
         show_header_toggle: false
         entities:
@@ -55,6 +43,41 @@ sections:
             name: Last Run Duration
           - entity: sensor.generator_generator_motor_hours
             name: Motor Hours
+  - type: grid
+    cards:
+      - type: heading
+        heading: Relays
+        heading_style: title
+      - square: false
+        type: grid
+        columns: 1
+        cards:
+          - type: entities
+            entities:
+              - entity: switch.generator_generator_stop
+                name: Stop
+              - entity: switch.generator_generator_eco_mode
+                name: Eco
+              - entity: switch.generator_generator_start
+                name: Start
+              - entity: switch.generator_generator_rollete
+                name: Rollete
+            show_header_toggle: false
+            state_color: true
+      - square: false
+        type: grid
+        cards:
+          - type: entities
+            entities:
+              - entity: button.generator_generator_run_servos
+                name:
+                  type: entity
+              - entity: button.generator_generator_run_servo_1
+                name: Run Servo 1
+              - entity: button.generator_generator_run_servo_2
+                name: Run Servo 2
+                icon: ""
+        columns: 1
   - type: grid
     cards:
       - type: heading
@@ -144,12 +167,6 @@ sections:
           - show_name: true
             show_icon: true
             type: button
-            entity: button.generator_generator_reset_total_energy
-            name: Reset Energy
-            icon: mdi:lightning-bolt-circle
-          - show_name: true
-            show_icon: true
-            type: button
             entity: button.generator_generator_reset_all_counters
             name: Reset All
             icon: mdi:restore
@@ -162,9 +179,16 @@ sections:
           - show_name: true
             show_icon: true
             type: button
-            entity: button.generator_generator_factory_reset
+            entity: button.generator_generator_wifi_reset_2
             name: WiFi Reset
-            icon: mdi:wifi-refresh
+            tap_action:
+              action: toggle
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_factory_reset
+            name: Factory Reset
+            icon: mdi:lock-reset
   - type: grid
     cards:
       - type: heading
@@ -213,41 +237,6 @@ sections:
             name: RF Code Start
           - entity: text.generator_generator_rf_code_rollete
             name: RF Code Rollete
-  - type: grid
-    cards:
-      - type: heading
-        heading: Relays
-        heading_style: title
-      - square: false
-        type: grid
-        columns: 1
-        cards:
-          - type: entities
-            entities:
-              - entity: switch.generator_generator_stop
-                name: Stop
-              - entity: switch.generator_generator_eco_mode
-                name: Eco
-              - entity: switch.generator_generator_start
-                name: Start
-              - entity: switch.generator_generator_rollete
-                name: Rollete
-            show_header_toggle: false
-            state_color: true
-      - square: false
-        type: grid
-        cards:
-          - type: entities
-            entities:
-              - entity: button.generator_generator_run_servos
-                name:
-                  type: entity
-              - entity: button.generator_generator_run_servo_1
-                name: Run Servo 1
-              - entity: button.generator_generator_run_servo_2
-                name: Run Servo 2
-                icon: ""
-        columns: 1
 cards: []
 path: garage
 icon: mdi:generator-stationary
@@ -271,5 +260,13 @@ badges:
     name: Last Run
   - type: entity
     entity: sensor.generator_generator_motor_hours
+  - type: entity
+    show_name: true
+    show_state: false
+    show_icon: true
+    entity: button.generator_generator_wifi_reset_2
+    tap_action:
+      action: toggle
+    name: WiFi Reset
   - type: entity
     entity: sensor.generator_generator_wifi_rssi

@@ -322,13 +322,8 @@ inline void set_motor_hours_offset(const float &hours) {
   id(motor_hours_offset) = hours;
 }
 
-inline void reset_total_energy_counter() {
-  id(total_energy_kwh) = 0.0f;
-}
-
 inline void reset_all_counters() {
   reset_motor_hours_counter();
-  reset_total_energy_counter();
 }
 
 inline void set_button_rf_code_from_text(const uint8_t button, const std::string &value_in) {
@@ -390,19 +385,8 @@ inline float power_for_ha_calc(const float &power) {
   return std::isfinite(power) ? power : 0.0f;
 }
 
-inline float total_energy_counter_kwh() {
-  return id(total_energy_kwh);
-}
-
 inline float motor_hours_total_value() {
   return id(motor_hours_total) + id(motor_hours_offset);
-}
-
-inline void accumulate_total_energy_kwh(const float &power_watts, const float &dt_seconds = 1.0f) {
-  if (!std::isfinite(power_watts) || !std::isfinite(dt_seconds) || power_watts <= 0.0f || dt_seconds <= 0.0f) {
-    return;
-  }
-  id(total_energy_kwh) += (power_watts * dt_seconds) / 3600000.0f;
 }
 
 inline void accumulate_motor_hours(const bool &running, const float &dt_seconds = 1.0f) {
@@ -412,7 +396,7 @@ inline void accumulate_motor_hours(const bool &running, const float &dt_seconds 
   id(motor_hours_total) += dt_seconds / 3600.0f;
 }
 
-inline void accumulate_runtime_tick(const bool &running, const float &power_watts) {
+inline void accumulate_runtime_tick(const bool &running) {
   static uint32_t last_tick_ms = 0U;
 
   const uint32_t now = now_ms();
@@ -435,9 +419,6 @@ inline void accumulate_runtime_tick(const bool &running, const float &power_watt
 
   const float dt_seconds = static_cast<float>(dt_ms) / 1000.0f;
   accumulate_motor_hours(running, dt_seconds);
-  if (running) {
-    accumulate_total_energy_kwh(power_watts, dt_seconds);
-  }
 }
 
 inline const std::string &last_run_start_text() {
@@ -483,6 +464,16 @@ inline std::string format_time_or_unknown(TNow now) {
 
 template <typename TNow>
 inline void on_generator_run_started(TNow now) {
+  const int32_t started = id(last_run_start_unix_s);
+  if (started > 0) {
+    if (!now.is_valid() || now.timestamp >= started) {
+      if (!has_text(id(last_run_start_text_value)) && now.is_valid()) {
+        id(last_run_start_text_value) = now.strftime("%Y-%m-%d %H:%M:%S");
+      }
+      return;
+    }
+  }
+
   id(last_run_start_text_value) = format_time_or_unknown(now);
 
   if (now.is_valid()) {
