@@ -412,8 +412,40 @@ inline void accumulate_motor_hours(const bool &running, const float &dt_seconds 
   id(motor_hours_total) += dt_seconds / 3600.0f;
 }
 
-inline const std::string &last_run_timestamp_text() {
-  return id(last_run_timestamp);
+inline void accumulate_runtime_tick(const bool &running, const float &power_watts) {
+  static uint32_t last_tick_ms = 0U;
+
+  const uint32_t now = now_ms();
+  if (last_tick_ms == 0U) {
+    last_tick_ms = now;
+    return;
+  }
+
+  uint32_t dt_ms = static_cast<uint32_t>(now - last_tick_ms);
+  last_tick_ms = now;
+  if (dt_ms == 0U) {
+    return;
+  }
+
+  // Cap long scheduler gaps so a paused loop does not over-add counters.
+  constexpr uint32_t kMaxDtMs = 5000U;
+  if (dt_ms > kMaxDtMs) {
+    dt_ms = kMaxDtMs;
+  }
+
+  const float dt_seconds = static_cast<float>(dt_ms) / 1000.0f;
+  accumulate_motor_hours(running, dt_seconds);
+  if (running) {
+    accumulate_total_energy_kwh(power_watts, dt_seconds);
+  }
+}
+
+inline const std::string &last_run_start_text() {
+  return id(last_run_start_text_value);
+}
+
+inline const std::string &last_run_stop_text() {
+  return id(last_run_stop_text_value);
 }
 
 inline const std::string &last_run_duration_text() {
@@ -442,16 +474,17 @@ inline std::string format_duration_hm(const uint32_t total_minutes) {
 }
 
 template <typename TNow>
-inline void update_last_run_timestamp(TNow now) {
+inline std::string format_time_or_unknown(TNow now) {
   if (now.is_valid()) {
-    id(last_run_timestamp) = now.strftime("%Y-%m-%d %H:%M:%S");
-  } else {
-    id(last_run_timestamp) = "unknown";
+    return now.strftime("%Y-%m-%d %H:%M:%S");
   }
+  return "unknown";
 }
 
 template <typename TNow>
 inline void on_generator_run_started(TNow now) {
+  id(last_run_start_text_value) = format_time_or_unknown(now);
+
   if (now.is_valid()) {
     id(last_run_start_unix_s) = now.timestamp;
   } else {
@@ -461,7 +494,7 @@ inline void on_generator_run_started(TNow now) {
 
 template <typename TNow>
 inline void on_generator_run_stopped(TNow now) {
-  update_last_run_timestamp(now);
+  id(last_run_stop_text_value) = format_time_or_unknown(now);
 
   const int32_t started = id(last_run_start_unix_s);
   if (!now.is_valid() || started <= 0 || now.timestamp < started) {
@@ -489,6 +522,7 @@ inline std::string current_run_duration_text(TNow now, const bool &running) {
   if (started <= 0 || now.timestamp < started) {
     // After restart while already running, initialize from current time.
     id(last_run_start_unix_s) = now.timestamp;
+    id(last_run_start_text_value) = now.strftime("%Y-%m-%d %H:%M:%S");
     return "00:00";
   }
 

@@ -17,7 +17,7 @@ The following items are implemented and considered baseline behavior:
 	- `Motor Hours` accumulated only while running.
 	- `Motor Hours Offset` supported.
 	- `Total Energy` accumulated only while running.
-	- `Last Run Timestamp`, `Last Run Duration`, and `Current Run Duration` available.
+	- `Last Run Start`, `Last Run Stop`, `Last Run Duration`, and `Current Run Duration` available.
 	- `Last Run Duration` and `Current Run Duration` shown as `HH:MM`.
 	- `Current Run Duration` updates every 60 seconds and re-initializes from `00:00` after reboot if generator is already running.
 - PZEM source is polled every 2 seconds, with staggered publish throttles by metric priority.
@@ -79,7 +79,8 @@ The following items are implemented and considered baseline behavior:
 - Motor-hours are accumulated only while the generator is running.
 - Motor-hours offset can be manually set from HA.
 - Total energy is accumulated only while the generator is running (kWh, total increasing).
-- Last run timestamp is updated when generator state changes from running to stopped.
+- Last run start is updated when generator state changes from stopped to running.
+- Last run stop is updated when generator state changes from running to stopped.
 - Last run duration is captured on stop (`HH:MM`).
 - Current run duration is minute-based (`HH:MM`) and updates every 60 seconds.
 - If reboot happens during active run, current duration restarts from `00:00` and continues.
@@ -129,7 +130,7 @@ Additional HA entities are exposed for automation and analytics:
 - Per-action timeout value fields (`Stop Timeout`, `Eco Timeout`, `Start Timeout`, and `Rollete Timeout`) with `-1` toggle mode.
 - `Total Energy` (kWh) as a total increasing energy source.
 - `Motor Hours` and `Motor Hours Offset`.
-- `Last Run Timestamp` text sensor.
+- `Last Run Start` and `Last Run Stop` text sensors.
 - `Last Run Duration` and `Current Run Duration` text sensors.
 - `WiFi RSSI` sensor is available for connectivity diagnostics.
 - `WiFi RSSI` sensor is available for connectivity diagnostics.

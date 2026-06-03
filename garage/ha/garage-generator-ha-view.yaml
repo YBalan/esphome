@@ -5,7 +5,7 @@ sections:
   - type: grid
     cards:
       - type: heading
-        heading: ⚡ PZEM Values
+        heading: ⚡ Generator Values
       - type: horizontal-stack
         cards:
           - type: tile
@@ -47,8 +47,10 @@ sections:
         entities:
           - entity: sensor.generator_generator_current_run_duration
             name: Current Run Duration
-          - entity: sensor.generator_generator_last_run_timestamp
-            name: Last Run Timestamp
+          - entity: sensor.generator_generator_last_run_start
+            name: Last Run Start
+          - entity: sensor.generator_generator_last_run_stop
+            name: Last Run Stop
           - entity: sensor.generator_generator_last_run_duration
             name: Last Run Duration
           - entity: sensor.generator_generator_motor_hours
@@ -73,6 +75,8 @@ sections:
             entity: button.generator_generator_action_stop_long
             name: Stop Long
             icon: mdi:gesture-tap-hold
+            tap_action:
+              action: toggle
           - show_name: true
             show_icon: true
             type: button
@@ -85,6 +89,8 @@ sections:
             name: Eco Long
             icon: mdi:gesture-tap-hold
             entity: button.generator_generator_action_eco_long
+            tap_action:
+              action: toggle
           - show_name: true
             show_icon: true
             type: button
@@ -97,6 +103,8 @@ sections:
             entity: button.generator_generator_action_start_long
             name: Start Long
             icon: mdi:gesture-tap-hold
+            tap_action:
+              action: toggle
           - show_name: true
             show_icon: true
             type: button
@@ -109,18 +117,24 @@ sections:
             entity: button.generator_generator_action_rollete_long
             name: Rollete Long
             icon: mdi:gesture-tap-hold
+            tap_action:
+              action: toggle
           - show_name: true
             show_icon: true
             type: button
             entity: button.generator_generator_action_settings_short
             name: Display On
             icon: mdi:monitor
+            tap_action:
+              action: toggle
           - show_name: true
             show_icon: true
             type: button
             entity: button.generator_generator_action_settings_long
             name: RF Learn
             icon: mdi:radio-tower
+            tap_action:
+              action: toggle
           - show_name: true
             show_icon: true
             type: button
@@ -220,6 +234,20 @@ sections:
                 name: Rollete
             show_header_toggle: false
             state_color: true
+      - square: false
+        type: grid
+        cards:
+          - type: entities
+            entities:
+              - entity: button.generator_generator_run_servos
+                name:
+                  type: entity
+              - entity: button.generator_generator_run_servo_1
+                name: Run Servo 1
+              - entity: button.generator_generator_run_servo_2
+                name: Run Servo 2
+                icon: ""
+        columns: 1
 cards: []
 path: garage
 icon: mdi:generator-stationary
@@ -230,17 +258,17 @@ badges:
   - type: entity
     entity: sensor.generator_generator_voltage
   - type: entity
-    show_name: false
+    show_name: true
     show_state: true
     show_icon: true
     entity: sensor.generator_generator_current_run_duration
+    name: Current Run
   - type: entity
     show_name: true
     show_state: true
     show_icon: true
     entity: sensor.generator_generator_last_run_duration
-    name:
-      type: entity
+    name: Last Run
   - type: entity
     entity: sensor.generator_generator_motor_hours
   - type: entity

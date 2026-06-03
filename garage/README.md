@@ -2,6 +2,16 @@
 
 ESPHome configuration for an ESP32-based generator controller with power monitoring, mirrored choke servos, relay outputs, RF learn/transmit, LCD status, and Home Assistant integration.
 
+## Screenshots
+
+![Garage Generator screenshot 1](images/Screenshot%202026-06-03%20090547.png)
+
+![Garage Generator screenshot 2](images/Screenshot%202026-06-03%20090610.png)
+
+![Garage Generator screenshot 3](images/Screenshot%202026-06-03%20090621.png)
+
+![Garage Generator screenshot 4](images/Screenshot%202026-06-03%20090630.png)
+
 ## Implemented behavior (current)
 
 - PZEM telemetry is polled every 2 seconds and published with staggered per-sensor throttles by priority.
@@ -9,7 +19,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - Stale PZEM values are actively zeroed (voltage/current/power/frequency/power factor) instead of staying `unknown`.
 - `Total Energy` is integrated only while `Generator Running` is ON.
 - `Motor Hours` is accumulated only while running and supports `Motor Hours Offset`.
-- `Last Run Timestamp`, `Last Run Duration`, and `Current Run Duration` are exposed as text sensors.
+- `Last Run Start`, `Last Run Stop`, `Last Run Duration`, and `Current Run Duration` are exposed as text sensors.
 - `Last Run Duration` and `Current Run Duration` are displayed as `HH:MM` (no seconds).
 - `Current Run Duration` updates every 60 seconds and also refreshes on run-state transitions.
 - If the device restarts while already running, current run duration starts from `00:00` and continues.
@@ -73,7 +83,8 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - `Generator Running`
 - `Generator Motor Hours`
 - `Generator Total Energy`
-- `Generator Last Run Timestamp`
+- `Generator Last Run Start`
+- `Generator Last Run Stop`
 - `Generator Last Run Duration`
 - `Generator Current Run Duration`
 - RF code text entities for Stop/Eco/Start/Rollete
