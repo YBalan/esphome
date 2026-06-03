@@ -17,18 +17,18 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - PZEM telemetry is polled every 2 seconds and published with staggered per-sensor throttles by priority.
 - Running-state detection uses both voltage threshold and PZEM freshness checks.
 - Stale PZEM values are actively zeroed (voltage/current/power/frequency/power factor) instead of staying `unknown`.
-- `Total Energy` is integrated only while `Generator Running` is ON.
 - `Motor Hours` is accumulated only while running and supports `Motor Hours Offset`.
 - `Last Run Start`, `Last Run Stop`, `Last Run Duration`, and `Current Run Duration` are exposed as text sensors.
 - `Last Run Duration` and `Current Run Duration` are displayed as `HH:MM` (no seconds).
 - `Current Run Duration` updates every 60 seconds and also refreshes on run-state transitions.
-- If the device restarts while already running, current run duration starts from `00:00` and continues.
+- If the device restarts while already running, current run duration is resumed from the preserved run start timestamp.
 - Physical GPIO buttons are gated by `Physical Buttons Enabled` and default to OFF for safe bring-up.
 - RF learn/capture is accepted only when learn mode is active.
 - RF code text entities publish once at boot, then only on real changes (manual set or learn assignment).
 - LCD update interval is slowed for lower runtime pressure.
 - When fallback AP mode is active (captive portal), LCD line 2 shows `AP:<ssid>`.
-- API batching currently uses ESPHome defaults (no custom `batch_delay` override).
+- API batching is intentionally limited (`batch_delay: 200ms`) to reduce burst pressure.
+- MQTT auto-published entities are disabled (`topic_prefix: null`, `discovery: false`); only explicit `cmd` and `tele` topics are used.
 
 ## Hardware summary
 
@@ -72,7 +72,6 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - Timeout number fields for Stop/Eco/Start/Rollete (`-1` = relay toggle behavior)
 - `Generator Motor Hours Offset`
 - `Generator Reset Motor Hours`
-- `Generator Reset Total Energy`
 - `Generator Reset All Counters`
 
 ### Runtime/diagnostic entities
@@ -82,13 +81,27 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - DHT11: temperature/humidity
 - `Generator Running`
 - `Generator Motor Hours`
-- `Generator Total Energy`
 - `Generator Last Run Start`
 - `Generator Last Run Stop`
 - `Generator Last Run Duration`
 - `Generator Current Run Duration`
 - RF code text entities for Stop/Eco/Start/Rollete
 - `Generator WiFi RSSI`
+
+## MQTT contract
+
+The device uses manual MQTT topics only.
+
+- Commands:
+	- `${device_name}/cmd/start`
+	- `${device_name}/cmd/stop`
+	- `${device_name}/cmd/eco`
+	- `${device_name}/cmd/wifi_reset`
+- Telemetry (published every 10 seconds when MQTT is connected):
+	- `${device_name}/tele/voltage`
+	- `${device_name}/tele/current`
+	- `${device_name}/tele/power`
+	- `${device_name}/tele/current_run_duration`
 
 ## RF learn flow
 

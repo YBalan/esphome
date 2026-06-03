@@ -13,6 +13,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 | [`electrolux-boiler-remote/`](electrolux-boiler-remote/) | Boiler Rotary Remote | ESP32 | TFT display + rotary encoder for local boiler control |
 | [`jbdbms_v2/`](jbdbms_v2/) | JBD / XiaoXiang BMS | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
 | [`jkbms_v2/`](jkbms_v2/) | JK-BMS (Jikong) | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
+| [`garage/`](garage/) | Garage Generator Controller | ESP32 | Generator control + PZEM telemetry + RF learn/transmit + mirrored servos |
 | [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
 
 ---
@@ -107,6 +108,19 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 
 ---
 
+## garage
+
+**Garage generator controller** with relay actions, RF learn/transmit support, mirrored choke servos, and runtime tracking.
+
+- PZEM telemetry with stale-data guard and staggered publish strategy
+- Running-state detection with runtime counters (`Motor Hours`, last/current run duration)
+- `Current Run Duration` is preserved across restart when reboot happens during an active run
+- MQTT uses explicit command/telemetry topics only (`topic_prefix: null`, `discovery: false`)
+
+📁 [garage/README.md](garage/README.md)
+
+---
+
 ## Common Setup
 
 All projects share the same pattern:
@@ -123,7 +137,7 @@ All projects share the same pattern:
    ```cmd
    esphome run <project>/<config>.yaml
    ```
-3. **Home Assistant** — all devices use MQTT discovery; entities appear automatically.
+3. **Home Assistant / MQTT** — most devices use MQTT discovery; the garage generator project uses manual MQTT topics with discovery disabled.
 4. **Fallback AP** — if WiFi is unavailable, each device broadcasts a fallback access point for recovery.
 
 ---

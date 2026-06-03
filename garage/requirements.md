@@ -16,10 +16,9 @@ The following items are implemented and considered baseline behavior:
 - Runtime accounting:
 	- `Motor Hours` accumulated only while running.
 	- `Motor Hours Offset` supported.
-	- `Total Energy` accumulated only while running.
 	- `Last Run Start`, `Last Run Stop`, `Last Run Duration`, and `Current Run Duration` available.
 	- `Last Run Duration` and `Current Run Duration` shown as `HH:MM`.
-	- `Current Run Duration` updates every 60 seconds and re-initializes from `00:00` after reboot if generator is already running.
+	- `Current Run Duration` updates every 60 seconds and is preserved across restart while the generator is already running.
 - PZEM source is polled every 2 seconds, with staggered publish throttles by metric priority.
 - RF code text entities publish once on boot and then only when changed.
 - RF learn/assign/transmit workflow for actions 1..4.
@@ -27,6 +26,7 @@ The following items are implemented and considered baseline behavior:
 - Full HA action parity for physical actions through template buttons.
 - Physical GPIO actions protected by `Physical Buttons Enabled` (default OFF).
 - API batching and display pacing tuned for lower runtime pressure.
+- MQTT default entity publishing is disabled (`topic_prefix: null`, `discovery: false`) and only explicit command/telemetry topics are used.
 
 ## Hardware
 
@@ -78,14 +78,15 @@ The following items are implemented and considered baseline behavior:
 - The two servos are mirrored and used together for stronger choke movement.
 - Motor-hours are accumulated only while the generator is running.
 - Motor-hours offset can be manually set from HA.
-- Total energy is accumulated only while the generator is running (kWh, total increasing).
 - Last run start is updated when generator state changes from stopped to running.
 - Last run stop is updated when generator state changes from running to stopped.
 - Last run duration is captured on stop (`HH:MM`).
 - Current run duration is minute-based (`HH:MM`) and updates every 60 seconds.
-- If reboot happens during active run, current duration restarts from `00:00` and continues.
+- If reboot happens during active run, current duration continues from the preserved run start timestamp.
 - Buttons 1 to 4 trigger their matching relay action and, when Use RF is enabled, send the stored RF code if one exists.
 - Each relay has configurable timeout in Home Assistant value fields; `-1` makes action behave as relay toggle.
+- MQTT command topics: `${device_name}/cmd/start`, `${device_name}/cmd/stop`, `${device_name}/cmd/eco`, `${device_name}/cmd/wifi_reset`.
+- MQTT telemetry topics (10s publish interval): `${device_name}/tele/voltage`, `${device_name}/tele/current`, `${device_name}/tele/power`, `${device_name}/tele/current_run_duration`.
 
 ## Button Actions
 
@@ -128,7 +129,6 @@ Additional HA controls are exposed for convenience:
 Additional HA entities are exposed for automation and analytics:
 
 - Per-action timeout value fields (`Stop Timeout`, `Eco Timeout`, `Start Timeout`, and `Rollete Timeout`) with `-1` toggle mode.
-- `Total Energy` (kWh) as a total increasing energy source.
 - `Motor Hours` and `Motor Hours Offset`.
 - `Last Run Start` and `Last Run Stop` text sensors.
 - `Last Run Duration` and `Current Run Duration` text sensors.
@@ -144,7 +144,7 @@ Additional HA entities are exposed for automation and analytics:
 5. Verify both symptom fix and adjacent risk areas:
 	- RF learn correctness
 	- API warnings (`Buffer full`, warning flags)
-	- Running-state, energy, and duration counters
+	- Running-state and duration counters
 
 ## Implementation Rules
 
