@@ -26,9 +26,11 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - RF learn/capture is accepted only when learn mode is active.
 - RF code text entities publish once at boot, then only on real changes (manual set or learn assignment).
 - LCD update interval is slowed for lower runtime pressure.
+- LCD line 2 no longer rotates automatically; short Settings press cycles line 2 view (V/P <-> I/PF).
 - When fallback AP mode is active (captive portal), LCD line 2 shows `AP:<ssid>`.
-- API batching is intentionally limited (`batch_delay: 200ms`) to reduce burst pressure.
+- API batching is intentionally limited (`batch_delay: 250ms`) to reduce burst pressure.
 - MQTT auto-published entities are disabled (`topic_prefix: null`, `discovery: false`); only explicit `cmd` and `tele` topics are used.
+- MQTT behavior is runtime-controlled from HA by `Generator MQTT Enabled` (no recompile required).
 
 ## Hardware summary
 
@@ -66,6 +68,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 ### Config and operational entities
 
 - `Generator Use RF`
+- `Generator MQTT Enabled`
 - `Generator Use Servos`
 - `Generator Servo On <Action> Action` switches
 - `Generator Physical Buttons Enabled`
@@ -92,16 +95,28 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 
 The device uses manual MQTT topics only.
 
+- Runtime enable/disable:
+	- `Generator MQTT Enabled` = ON: command handling + telemetry/status publishing active.
+	- `Generator MQTT Enabled` = OFF: MQTT commands are ignored and custom telemetry/status publishing is paused.
+
 - Commands:
-	- `${device_name}/cmd/start`
-	- `${device_name}/cmd/stop`
-	- `${device_name}/cmd/eco`
-	- `${device_name}/cmd/wifi_reset`
+	- `${device_name}/cmd/start` payload `PRESS`
+	- `${device_name}/cmd/stop` payload `PRESS`
+	- `${device_name}/cmd/eco` payload `PRESS`
+	- `${device_name}/cmd/rollete` payload `PRESS`
+	- `${device_name}/cmd/restart` payload `PRESS`
+	- `${device_name}/cmd/wifi_reset` payload `PRESS`
+	- `${device_name}/cmd/reset_rf_codes` payload `PRESS`
 - Telemetry (published every 10 seconds when MQTT is connected):
 	- `${device_name}/tele/voltage`
 	- `${device_name}/tele/current`
 	- `${device_name}/tele/power`
 	- `${device_name}/tele/current_run_duration`
+- Relay/button state topics (published on every relay change, retained):
+	- `${device_name}/stat/stop` -> `PRESSED`/`RELEASED`
+	- `${device_name}/stat/eco` -> `PRESSED`/`RELEASED`
+	- `${device_name}/stat/start` -> `PRESSED`/`RELEASED`
+	- `${device_name}/stat/rollete` -> `PRESSED`/`RELEASED`
 
 ## RF learn flow
 

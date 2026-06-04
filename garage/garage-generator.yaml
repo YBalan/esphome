@@ -2,6 +2,8 @@ substitutions:
   # Device identity in ESPHome/Home Assistant
   device_name: generator
   friendly_name: Generator
+  # Timezone
+  time_zone: "Europe/Kyiv"
 
   # Fallback AP credentials (used when normal WiFi is unavailable)
   ap_ssid: "AP Generator"
@@ -83,6 +85,9 @@ substitutions:
   rf_filter: 250us
   rf_idle: 4ms
 
+packages:
+  mqtt_feature: !include garage-generator-mqtt.yaml
+
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
@@ -105,6 +110,8 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf # Stable for BLE + WiFi coexistence
+    advanced:
+      minimum_chip_revision: "3.1"
     sdkconfig_options:
       # Add headroom for occasional heavy loop iterations under RF/network bursts.
       CONFIG_ESP_TASK_WDT_TIMEOUT_S: "15"
@@ -137,44 +144,22 @@ captive_portal:
 
 api: #For Home Assistant
   # Keep batching moderate to avoid large bursts of queued state updates.
-  batch_delay: 200ms
-  # Give HA interruptions time, then reboot if API session cannot recover.
-  reboot_timeout: 1min
-
-mqtt:
-  broker: !secret mqtt_broker  
-  username: !secret mqtt_username
-  password: !secret mqtt_password
-  port: 1883
-  topic_prefix: null
-  discovery: false
-  on_message:
-    - topic: ${device_name}/cmd/wifi_reset
-      payload: "PRESS"
-      then:
-        - wifi.disable:
-        - delay: 2s
-        - wifi.enable:
-    - topic: ${device_name}/cmd/start
-      payload: "PRESS"
-      then:
-        - script.execute: button_3_action
-    - topic: ${device_name}/cmd/stop
-      payload: "PRESS"
-      then:
-        - script.execute: button_1_action
-    - topic: ${device_name}/cmd/eco
-      payload: "PRESS"
-      then:
-        - script.execute: button_2_action
+  batch_delay: 250ms
+  # Allow short bursts when HA/network is briefly slow.
+  max_send_queue: 24
+  # Keep enough room for HA + temporary logger sessions.
+  max_connections: 8
+  # If API stays disconnected too long, reboot to self-heal WiFi/API stack.
+  reboot_timeout: 5min
 
 preferences:
   # Persist assigned RF codes quickly so they survive reboot/power cycles.
   flash_write_interval: 30s
 
 time:
-  - platform: homeassistant
+  - platform: sntp
     id: ha_time
+    timezone: ${time_zone}
 
 logger:
   level: INFO
@@ -299,6 +284,10 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
+  - id: lcd_line2_mode
+    type: int
+    restore_value: yes
+    initial_value: "0"
 
 i2c:
   sda: ${gpio_i2c_sda}
@@ -311,10 +300,10 @@ uart:
   tx_pin: ${gpio_uart_tx}
   baud_rate: 9600
 
-modbus:
-  id: modbus_pzem
-  uart_id: uart_pzem
-  send_wait_time: 200ms
+# modbus:
+#   id: modbus_pzem
+#   uart_id: uart_pzem
+#   send_wait_time: 200ms
 
 remote_receiver:
   pin:
@@ -367,6 +356,10 @@ switch:
     pin:
       number: ${gpio_relay_1}
       inverted: true
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   # Relay 2: eco mode output.
   - platform: gpio
     id: relay_2
@@ -374,6 +367,10 @@ switch:
     pin:
       number: ${gpio_relay_2}
       inverted: true
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   # Relay 3: start pulse output for the generator start action.
   - platform: gpio
     id: relay_3
@@ -381,6 +378,10 @@ switch:
     pin:
       number: ${gpio_relay_3}
       inverted: true
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   # Relay 4: rollete output used for the garage rollete action.
   - platform: gpio
     id: relay_4
@@ -388,6 +389,10 @@ switch:
     pin:
       number: ${gpio_relay_4}
       inverted: true
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   - platform: template
     id: rf_emulation_enabled
     name: ${friendly_name} Use RF
@@ -396,6 +401,13 @@ switch:
   - platform: template
     id: display_enabled
     name: ${friendly_name} Display Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: template
+    id: mqtt_runtime_enabled
+    name: ${friendly_name} MQTT Enabled
+    icon: mdi:mqtt
+    entity_category: config
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
   - platform: template
@@ -482,6 +494,22 @@ button:
       - lambda: |-
           garage::reset_all_counters();
       - component.update: motor_hours
+
+  - platform: template
+    id: reset_rf_codes_btn
+    name: ${friendly_name} Reset RF Codes
+    icon: mdi:radio-tower-off
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::set_button_rf_data(1, "", 1);
+          garage::set_button_rf_data(2, "", 1);
+          garage::set_button_rf_data(3, "", 1);
+          garage::set_button_rf_data(4, "", 1);
+      - component.update: rf_code_btn_1_text
+      - component.update: rf_code_btn_2_text
+      - component.update: rf_code_btn_3_text
+      - component.update: rf_code_btn_4_text
 
   # HA action parity for physical buttons
   - platform: template
@@ -582,8 +610,8 @@ sensor:
     update_interval: 30s
 
   - platform: pzemac
-    modbus_id: modbus_pzem
-    address: 0x01
+    #modbus_id: modbus_pzem
+    #address: 0x01
     update_interval: 2s
     voltage:
       id: pzem_voltage
@@ -1004,40 +1032,6 @@ interval:
       - lambda: |-
           garage::zero_pzem_sensors_if_stale();
           garage::accumulate_runtime_tick(id(generator_running).state);
-  - interval: 10s
-    then:
-      - if:
-          condition:
-            mqtt.connected:
-          then:
-            - mqtt.publish:
-                topic: ${device_name}/tele/voltage
-                payload: !lambda |-
-                  const float v = id(pzem_voltage).state;
-                  if (!std::isfinite(v)) return std::string("nan");
-                  char buf[16];
-                  std::snprintf(buf, sizeof(buf), "%.1f", v);
-                  return std::string(buf);
-            - mqtt.publish:
-                topic: ${device_name}/tele/current
-                payload: !lambda |-
-                  const float c = id(pzem_current).state;
-                  if (!std::isfinite(c)) return std::string("nan");
-                  char buf[16];
-                  std::snprintf(buf, sizeof(buf), "%.2f", c);
-                  return std::string(buf);
-            - mqtt.publish:
-                topic: ${device_name}/tele/power
-                payload: !lambda |-
-                  const float p = id(pzem_power).state;
-                  if (!std::isfinite(p)) return std::string("nan");
-                  char buf[16];
-                  std::snprintf(buf, sizeof(buf), "%.0f", p);
-                  return std::string(buf);
-            - mqtt.publish:
-                topic: ${device_name}/tele/current_run_duration
-                payload: !lambda |-
-                  return garage::current_run_duration_text(id(ha_time).now(), id(generator_running).state);
 
 script:
   - id: run_servo_1_manual
@@ -1445,6 +1439,7 @@ script:
     mode: restart
     then:
       - lambda: |-
+          garage::cycle_lcd_line2_mode();
           garage::wake_backlight();
       - component.update: lcd_display
 

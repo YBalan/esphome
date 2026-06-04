@@ -1,7 +1,95 @@
 type: sections
-max_columns: 2
+max_columns: 3
 title: Garage Generator
 sections:
+  - type: grid
+    cards:
+      - type: custom:stack-in-card
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: tile
+                entity: sensor.generator_generator_current_run_duration
+                name: Current Run
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    } 
+              - type: tile
+                entity: sensor.generator_generator_last_run_duration
+                name: Last Run
+                state_content:
+                  - last_changed_stable
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }                            
+              - type: tile
+                entity: sensor.generator_generator_motor_hours
+                name: Hours
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }                 
+          - type: gauge
+            entity: sensor.generator_generator_power
+            name: ""
+            min: 0
+            max: 4500
+            needle: true
+            severity:
+              green: 0
+              yellow: 1700
+              red: 3000
+            card_mod:
+              style: |
+                ha-card {
+                  border: none;
+                  background: transparent;
+                  margin-top: -40px; 
+                  margin-bottom: -30px;
+                }
+          - type: horizontal-stack
+            cards:
+              - type: tile
+                entity: sensor.generator_generator_current
+                name: Current
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }                      
+              - type: tile
+                entity: sensor.generator_generator_voltage
+                name: Voltage
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }           
+              - type: tile
+                entity: sensor.generator_generator_power_factor
+                name: Factor
+                card_mod:
+                  style: |
+                    ha-card {
+                      border: none !important;
+                      box-shadow: none !important;
+                      background: transparent !important;
+                    }      
   - type: grid
     cards:
       - type: heading
@@ -176,6 +264,12 @@ sections:
             entity: button.generator_generator_restart_device
             name: Restart
             icon: mdi:restart
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.generator_generator_reset_rf_codes
+            name: Reset RF Codes
+            icon: mdi:radio-tower
           - show_name: true
             show_icon: true
             type: button

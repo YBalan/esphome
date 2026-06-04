@@ -45,6 +45,12 @@ inline void set_lcd_message(const std::string &line_1, const std::string &line_2
   id(lcd_message_until_ms) = now_ms() + duration_ms;
 }
 
+inline void set_lcd_message(const char *line_1, const char *line_2, const uint32_t &duration_ms = 5000U) {
+  id(lcd_message_line_1) = line_1;
+  id(lcd_message_line_2) = line_2;
+  id(lcd_message_until_ms) = now_ms() + duration_ms;
+}
+
 inline void clear_lcd_message() {
   id(lcd_message_line_1).clear();
   id(lcd_message_line_2).clear();
@@ -55,23 +61,32 @@ inline bool is_lcd_message_active() {
   return time_until_in_future(id(lcd_message_until_ms));
 }
 
-inline std::string clip_16(const std::string &value) {
-  if (value.size() <= 16U) {
-    return value;
-  }
-  return value.substr(0, 16);
+inline void cycle_lcd_line2_mode() {
+  // Two manual pages: 0 => voltage/power, 1 => current/power factor.
+  id(lcd_line2_mode) = (id(lcd_line2_mode) + 1) % 2;
+}
+
+inline void copy_16(char (&buffer)[17], const std::string &value) {
+  std::snprintf(buffer, sizeof(buffer), "%.*s", 16, value.c_str());
 }
 
 inline bool is_ap_mode_active() {
   return wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_ap_active();
 }
 
-inline std::string active_ap_ssid_or_default() {
+inline void active_ap_ssid_or_default(char (&buffer)[17]) {
   if (wifi::global_wifi_component == nullptr) {
-    return "AP";
+    std::snprintf(buffer, sizeof(buffer), "%s", "AP");
+    return;
   }
-  const std::string ssid = wifi::global_wifi_component->get_ap().get_ssid().c_str();
-  return ssid.empty() ? std::string("AP") : ssid;
+
+  const char *ssid = wifi::global_wifi_component->get_ap().get_ssid().c_str();
+  if (ssid == nullptr || ssid[0] == '\0') {
+    std::snprintf(buffer, sizeof(buffer), "%s", "AP");
+    return;
+  }
+
+  std::snprintf(buffer, sizeof(buffer), "%.*s", 16, ssid);
 }
 
 inline std::string u64_to_binary(const uint64_t &value) {
@@ -264,7 +279,8 @@ inline bool on_rf_signal_received(const uint64_t &code, const uint8_t &protocol)
   id(rf_pending_protocol) = static_cast<int>(protocol);
   wake_backlight();
 
-  const std::string line_2 = clip_16(id(rf_pending_code));
+  char line_2[17] = {0};
+  copy_16(line_2, id(rf_pending_code));
   set_lcd_message("RF Captured", line_2, 8000U);
   return true;
 }
@@ -283,9 +299,11 @@ inline bool assign_pending_rf_to_button(const uint8_t button) {
   set_button_rf_data(button, id(rf_pending_code), id(rf_pending_protocol));
 
   char line_1[17] = {0};
+  char line_2[17] = {0};
   std::snprintf(line_1, sizeof(line_1), "Saved to Btn %u", button);
+  std::snprintf(line_2, sizeof(line_2), "RF assigned");
   wake_backlight();
-  set_lcd_message(line_1, "RF assigned", 5000U);
+  set_lcd_message(line_1, line_2, 5000U);
   leave_rf_learning_mode();
   return true;
 }
@@ -298,7 +316,8 @@ inline void show_assigned_rf_for_button(const uint8_t button) {
   char line_1[17] = {0};
   std::snprintf(line_1, sizeof(line_1), "Btn %u RF", button);
 
-  const std::string code = clip_16(button_rf_code(button));
+  char code[17] = {0};
+  copy_16(code, button_rf_code(button));
   wake_backlight();
   set_lcd_message(line_1, code, 4000U);
 }
@@ -613,40 +632,26 @@ inline void render_lcd_page(
   const float safe_power_factor = std::isfinite(power_factor) ? power_factor : 0.0f;
 
   std::snprintf(line_1, sizeof(line_1), "T:%4.1fC H:%4.1f%%", safe_temperature, safe_humidity);
-  static uint32_t line2_last_switch_ms = 0U;
-  static bool line2_show_voltage_power = true;
-  constexpr uint32_t line2_switch_period_ms = 3000U;
-  const uint32_t now = now_ms();
-
-  if (line2_last_switch_ms == 0U) {
-    line2_last_switch_ms = now;
-  } else if (static_cast<uint32_t>(now - line2_last_switch_ms) >= line2_switch_period_ms) {
-    line2_last_switch_ms = now;
-    line2_show_voltage_power = !line2_show_voltage_power;
-  }
-
-  if (line2_show_voltage_power) {
+  if (id(lcd_line2_mode) == 0) {
     std::snprintf(line_2, sizeof(line_2), "V:%5.1f P:%4.0fW", safe_voltage, safe_power);
   } else {
     std::snprintf(line_2, sizeof(line_2), "I:%4.2fA  PF:%1.2f", safe_current, safe_power_factor);
   }
 
   if (is_lcd_message_active()) {
-    const std::string msg_1 = clip_16(id(lcd_message_line_1));
-    const std::string msg_2 = clip_16(id(lcd_message_line_2));
-    std::snprintf(line_1, sizeof(line_1), "%s", msg_1.c_str());
-    std::snprintf(line_2, sizeof(line_2), "%s", msg_2.c_str());
+    copy_16(line_1, id(lcd_message_line_1));
+    copy_16(line_2, id(lcd_message_line_2));
   } else if (is_rf_learning_mode()) {
     std::snprintf(line_1, sizeof(line_1), "RF Learn Mode");
     if (has_text(id(rf_pending_code))) {
-      const std::string learn_code = clip_16(id(rf_pending_code));
-      std::snprintf(line_2, sizeof(line_2), "%s", learn_code.c_str());
+      copy_16(line_2, id(rf_pending_code));
     } else {
       std::snprintf(line_2, sizeof(line_2), "Send RF signal");
     }
   } else if (is_ap_mode_active()) {
-    const std::string ap_ssid = clip_16(active_ap_ssid_or_default());
-    std::snprintf(line_2, sizeof(line_2), "AP:%s", ap_ssid.c_str());
+    char ap_ssid[17] = {0};
+    active_ap_ssid_or_default(ap_ssid);
+    std::snprintf(line_2, sizeof(line_2), "AP:%s", ap_ssid);
   }
 
   display.print(0, 0, line_1);

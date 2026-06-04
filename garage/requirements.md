@@ -27,6 +27,7 @@ The following items are implemented and considered baseline behavior:
 - Physical GPIO actions protected by `Physical Buttons Enabled` (default OFF).
 - API batching and display pacing tuned for lower runtime pressure.
 - MQTT default entity publishing is disabled (`topic_prefix: null`, `discovery: false`) and only explicit command/telemetry topics are used.
+- MQTT behavior is controlled at runtime from HA with `Generator MQTT Enabled` (no compile-time toggle).
 
 ## Hardware
 
@@ -72,8 +73,9 @@ The following items are implemented and considered baseline behavior:
 - RF capture handler stores a pending code only in learn mode.
 - Learned RF codes can be assigned to buttons 1 to 4 from the physical buttons or the matching Home Assistant long-press buttons.
 - Use RF is a master enable for transmitting learned RF codes; it does not block relay actions.
-- LCD shows DHT values on line 1 and alternates line 2 between voltage/power and current/power factor.
-- LCD backlight turns off automatically after inactivity and short Settings press only wakes the display.
+- LCD shows DHT values on line 1 and keeps a manual line 2 page selected.
+- Short Settings press cycles LCD line 2 between voltage/power and current/power factor.
+- LCD backlight turns off automatically after inactivity.
 - In fallback AP/captive mode, LCD line 2 shows `AP:<ssid>`.
 - The two servos are mirrored and used together for stronger choke movement.
 - Motor-hours are accumulated only while the generator is running.
@@ -85,8 +87,10 @@ The following items are implemented and considered baseline behavior:
 - If reboot happens during active run, current duration continues from the preserved run start timestamp.
 - Buttons 1 to 4 trigger their matching relay action and, when Use RF is enabled, send the stored RF code if one exists.
 - Each relay has configurable timeout in Home Assistant value fields; `-1` makes action behave as relay toggle.
-- MQTT command topics: `${device_name}/cmd/start`, `${device_name}/cmd/stop`, `${device_name}/cmd/eco`, `${device_name}/cmd/wifi_reset`.
+- MQTT command topics: `${device_name}/cmd/start`, `${device_name}/cmd/stop`, `${device_name}/cmd/eco`, `${device_name}/cmd/rollete`, `${device_name}/cmd/restart`, `${device_name}/cmd/wifi_reset`, `${device_name}/cmd/reset_rf_codes` (payload `PRESS`).
 - MQTT telemetry topics (10s publish interval): `${device_name}/tele/voltage`, `${device_name}/tele/current`, `${device_name}/tele/power`, `${device_name}/tele/current_run_duration`.
+- MQTT relay/button status topics (published on relay state change, retained): `${device_name}/stat/stop`, `${device_name}/stat/eco`, `${device_name}/stat/start`, `${device_name}/stat/rollete` with payload `PRESSED` or `RELEASED`.
+- MQTT command handling and custom topic publishing are active only when HA switch `Generator MQTT Enabled` is ON.
 
 ## Button Actions
 
@@ -94,7 +98,7 @@ The following items are implemented and considered baseline behavior:
 2. Eco mode: toggle relay 2.
 3. Start generator: trigger relay 3 and send learned RF start when available.
 4. Garage rollete: trigger relay 4 and send learned RF rollete when available.
-5. Settings: short press wakes the display, long press toggles RF learn mode.
+5. Settings: short press cycles LCD line 2 view, long press toggles RF learn mode.
 
 ## RF Learn Flow
 
@@ -122,6 +126,7 @@ The same physical-button actions are also exposed as ESPHome template buttons in
 Additional HA controls are exposed for convenience:
 
 - `Generator Use RF` toggles learned RF transmission.
+- `Generator MQTT Enabled` toggles custom MQTT command/publish behavior at runtime.
 - `Generator Use Servos` enables or disables servo control globally.
 - `Generator Use Servo Action Stop`, `Eco`, `Start`, and `Rollete` control servo usage per action.
 - `Generator Physical Buttons Enabled` controls whether physical GPIO button presses can trigger actions.
@@ -132,7 +137,6 @@ Additional HA entities are exposed for automation and analytics:
 - `Motor Hours` and `Motor Hours Offset`.
 - `Last Run Start` and `Last Run Stop` text sensors.
 - `Last Run Duration` and `Current Run Duration` text sensors.
-- `WiFi RSSI` sensor is available for connectivity diagnostics.
 - `WiFi RSSI` sensor is available for connectivity diagnostics.
 
 ## Stability and Deployment Workflow (used in practice)
