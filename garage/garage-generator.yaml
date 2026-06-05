@@ -47,7 +47,7 @@ substitutions:
   voltage_running_threshold: "200.0"
 
   # Action timing
-  servo_step_delay: 250ms
+  servo_step_delay: 100ms
   motor_hours_update_interval: 30s
 
   # Servo signal parameters
@@ -59,20 +59,32 @@ substitutions:
   lcd_update_interval: 5s
   dht_update_interval: 15s
 
-  # Servo positions (0.00 .. 1.00)
-  # Choke servo A direction
-  servo_pos_start: "0.00"
-  servo_pos_q1: "0.25"
-  servo_pos_mid: "0.50"
-  servo_pos_q3: "0.75"
-  servo_pos_end: "1.00"
+  # Servo positions (0.00 .. 1.00) mapped from Uno constants (0..180 degrees)
+  # Uno: INITIAL_ANGLE=130, GENERATOR_OFF_ANGLE=0
+  servo_pos_start: "0.7222"
+  servo_pos_q1: "0.6500"
+  servo_pos_q2: "0.5778"
+  servo_pos_q3: "0.5056"
+  servo_pos_q4: "0.4333"
+  servo_pos_q5: "0.3611"
+  servo_pos_q6: "0.2889"
+  servo_pos_q7: "0.2167"
+  servo_pos_q8: "0.1444"
+  servo_pos_q9: "0.0722"
+  servo_pos_end: "0.0000"
 
-  # Choke servo B mirrored direction (facing servo A)
-  servo_pos_start_m: "1.00"
-  servo_pos_q1_m: "0.75"
-  servo_pos_mid_m: "0.50"
-  servo_pos_q3_m: "0.25"
-  servo_pos_end_m: "0.00"
+  # Uno mirrored: INITIAL_2_ANGLE=50, GENERATOR_OFF_2_ANGLE=180
+  servo_pos_start_m: "0.2778"
+  servo_pos_q1_m: "0.3500"
+  servo_pos_q2_m: "0.4222"
+  servo_pos_q3_m: "0.4944"
+  servo_pos_q4_m: "0.5667"
+  servo_pos_q5_m: "0.6389"
+  servo_pos_q6_m: "0.7111"
+  servo_pos_q7_m: "0.7833"
+  servo_pos_q8_m: "0.8556"
+  servo_pos_q9_m: "0.9278"
+  servo_pos_end_m: "1.0000"
 
   # RF defaults
   # Protocol timing and repeat behavior
@@ -284,6 +296,10 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
+  - id: servo_step_delay_ms
+    type: float
+    restore_value: yes
+    initial_value: "100.0"
   - id: lcd_line2_mode
     type: int
     restore_value: yes
@@ -626,6 +642,13 @@ button:
     on_press:
       - script.execute: run_servos_manual
 
+  - platform: template
+    id: ha_btn_servos_min
+    name: ${friendly_name} Servos Min Position
+    icon: mdi:arrow-collapse-down
+    on_press:
+      - script.execute: servo_move_to_min
+
 sensor:
   - platform: wifi_signal
     id: wifi_rssi
@@ -788,6 +811,31 @@ text:
       - component.update: rf_code_btn_4_text
 
 number:
+  - platform: template
+    id: servo_step_delay_input
+    name: ${friendly_name} Servo Step Delay
+    icon: mdi:speedometer
+    entity_category: config
+    mode: box
+    min_value: 10.0
+    max_value: 1000.0
+    step: 5.0
+    unit_of_measurement: ms
+    lambda: |-
+      return id(servo_step_delay_ms);
+    set_action:
+      - lambda: |-
+          if (!std::isfinite(x)) {
+            return;
+          }
+          if (x < 10.0f) {
+            x = 10.0f;
+          }
+          if (x > 1000.0f) {
+            x = 1000.0f;
+          }
+          id(servo_step_delay_ms) = x;
+
   - platform: template
     id: motor_hours_offset_input
     name: ${friendly_name} Motor Hours Offset
@@ -1079,6 +1127,7 @@ script:
                 level: ${servo_pos_start}
             - lambda: |-
                 id(servo_1_near_start) = true;
+      - script.execute: servo_release_both
 
   - id: run_servo_2_manual
     mode: restart
@@ -1101,44 +1150,17 @@ script:
                 level: ${servo_pos_start_m}
             - lambda: |-
                 id(servo_2_near_start) = true;
+      - script.execute: servo_release_both
 
   - id: run_servos_manual
     mode: restart
     then:
       - lambda: |-
           garage::note_user_action();
-      - if:
-          condition:
-            lambda: |-
-              return id(servo_1_near_start);
-          then:
-            - servo.write:
-                id: servo_1
-                level: ${servo_pos_end}
-            - lambda: |-
-                id(servo_1_near_start) = false;
-          else:
-            - servo.write:
-                id: servo_1
-                level: ${servo_pos_start}
-            - lambda: |-
-                id(servo_1_near_start) = true;
-      - if:
-          condition:
-            lambda: |-
-              return id(servo_2_near_start);
-          then:
-            - servo.write:
-                id: servo_2
-                level: ${servo_pos_end_m}
-            - lambda: |-
-                id(servo_2_near_start) = false;
-          else:
-            - servo.write:
-                id: servo_2
-                level: ${servo_pos_start_m}
-            - lambda: |-
-                id(servo_2_near_start) = true;
+      - script.execute: servo_move_to_min
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - script.execute: servo_sweep_to_stop
+      - script.execute: servo_release_both
 
   - id: servo_move_to_start
     mode: restart
@@ -1152,6 +1174,7 @@ script:
       - lambda: |-
           id(servo_1_near_start) = true;
           id(servo_2_near_start) = true;
+      - script.execute: servo_release_both
 
   - id: servo_move_to_end
     mode: restart
@@ -1165,38 +1188,98 @@ script:
       - lambda: |-
           id(servo_1_near_start) = false;
           id(servo_2_near_start) = false;
+      - script.execute: servo_release_both
 
-  - id: servo_sweep_to_stop
+  - id: servo_move_to_min
     mode: restart
     then:
+      - lambda: |-
+          garage::note_user_action();
       - servo.write:
           id: servo_1
           level: ${servo_pos_start}
       - servo.write:
           id: servo_2
           level: ${servo_pos_start_m}
-      - delay: ${servo_step_delay}
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_q1}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_q1_m}
-      - delay: ${servo_step_delay}
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_mid}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_mid_m}
-      - delay: ${servo_step_delay}
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_q3}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_q3_m}
-      - delay: ${servo_step_delay}
+      - lambda: |-
+          id(servo_1_near_start) = true;
+          id(servo_2_near_start) = true;
+      - script.execute: servo_release_both
+
+  - id: servo_sweep_to_stop
+    mode: restart
+    then:
+      - if:
+          condition:
+            or:
+              - lambda: |-
+                  return id(servo_1_near_start);
+              - lambda: |-
+                  return id(servo_2_near_start);
+          then:
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q1}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q1_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q2}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q2_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q3}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q3_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q4}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q4_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q5}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q5_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q6}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q6_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q7}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q7_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q8}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q8_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+            - servo.write:
+                id: servo_1
+                level: ${servo_pos_q9}
+            - servo.write:
+                id: servo_2
+                level: ${servo_pos_q9_m}
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - servo.write:
           id: servo_1
           level: ${servo_pos_end}
@@ -1206,6 +1289,14 @@ script:
       - lambda: |-
           id(servo_1_near_start) = false;
           id(servo_2_near_start) = false;
+      - script.execute: servo_release_both
+
+  - id: servo_release_both
+    mode: restart
+    then:
+      - delay: ${servo_auto_detach_time}
+      - servo.detach: servo_1
+      - servo.detach: servo_2
 
   - id: relay_1_pulse
     mode: restart
@@ -1296,10 +1387,11 @@ script:
             - switch.turn_off: relay_4
 
   - id: button_1_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
-          garage::note_user_action();
+          garage::note_user_action();          
+      - delay: 1000ms
       - script.execute: relay_1_pulse
       - if:
           condition:
@@ -1329,7 +1421,7 @@ script:
                         wait_time: ${rf_repeat_wait}
 
   - id: button_2_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
           garage::note_user_action();
@@ -1362,7 +1454,7 @@ script:
                         wait_time: ${rf_repeat_wait}
 
   - id: button_3_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
           garage::note_user_action();
@@ -1395,7 +1487,7 @@ script:
                         wait_time: ${rf_repeat_wait}
 
   - id: button_4_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
           garage::note_user_action();
@@ -1463,13 +1555,15 @@ script:
     mode: restart
     then:
       - lambda: |-
-          garage::cycle_lcd_line2_mode();
           garage::wake_backlight();
+          garage::cycle_lcd_line2_mode();
       - component.update: lcd_display
 
   - id: button_5_long_action
     mode: restart
     then:
+      - lambda: |-
+          garage::note_user_action();
       - if:
           condition:
             switch.is_on: rf_receiver_enabled
