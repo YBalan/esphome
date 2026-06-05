@@ -139,18 +139,18 @@ wifi:
 captive_portal:
 
 # Simple web server to change settings if already connected
-#web_server:
-  #port: 80
+web_server:
+  port: 80
 
 api: #For Home Assistant
   # Keep batching moderate to avoid large bursts of queued state updates.
-  batch_delay: 250ms
+  #batch_delay: 250ms
   # Allow short bursts when HA/network is briefly slow.
-  max_send_queue: 24
+  max_send_queue: 64
   # Keep enough room for HA + temporary logger sessions.
-  max_connections: 8
+  max_connections: 5
   # If API stays disconnected too long, reboot to self-heal WiFi/API stack.
-  reboot_timeout: 5min
+  reboot_timeout: 10min
 
 preferences:
   # Persist assigned RF codes quickly so they survive reboot/power cycles.
@@ -319,8 +319,10 @@ remote_receiver:
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::on_rf_signal_received(x.code, x.protocol);
+            and:
+              - switch.is_on: rf_receiver_enabled
+              - lambda: |-
+                  return garage::on_rf_signal_received(x.code, x.protocol);
           then:
             - component.update: lcd_display
 
@@ -403,6 +405,27 @@ switch:
     name: ${friendly_name} Display Enabled
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
+  - platform: template
+    id: rf_receiver_enabled
+    name: ${friendly_name} RF Receiver Enabled
+    icon: mdi:radio-tower
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          if (!garage::is_rf_learning_mode()) {
+            garage::enter_rf_learning_mode();
+          }
+      - component.update: lcd_display
+    on_turn_off:
+      - lambda: |-
+          if (garage::is_rf_learning_mode()) {
+            garage::leave_rf_learning_mode();
+            garage::wake_backlight();
+            garage::clear_lcd_message();
+          }
+      - component.update: lcd_display
   - platform: template
     id: mqtt_runtime_enabled
     name: ${friendly_name} MQTT Enabled
@@ -650,7 +673,7 @@ sensor:
 
   - platform: dht
     pin: ${gpio_dht}
-    model: DHT11  # Temporary per request
+    model: DHT22
     update_interval: ${dht_update_interval}
     temperature:
       id: dht_temperature
@@ -990,7 +1013,8 @@ binary_sensor:
       number: ${gpio_btn_5}
       mode:
         input: true
-      inverted: false
+        #pullup: true
+      inverted: true
     on_multi_click:
       - timing:
           - ON for at most 350ms
@@ -1446,6 +1470,10 @@ script:
   - id: button_5_long_action
     mode: restart
     then:
-      - lambda: |-
-          garage::toggle_rf_learning_mode();
-      - component.update: lcd_display
+      - if:
+          condition:
+            switch.is_on: rf_receiver_enabled
+          then:
+            - switch.turn_off: rf_receiver_enabled
+          else:
+            - switch.turn_on: rf_receiver_enabled

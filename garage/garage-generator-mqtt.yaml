@@ -110,6 +110,14 @@ interval:
                   std::snprintf(buf, sizeof(buf), "%.0f", p);
                   return std::string(buf);
             - mqtt.publish:
+                topic: ${device_name}/tele/wifi_rssi
+                payload: !lambda |-
+                  const float rssi = id(wifi_rssi).state;
+                  if (!std::isfinite(rssi)) return std::string("nan");
+                  char buf[16];
+                  std::snprintf(buf, sizeof(buf), "%.0f", rssi);
+                  return std::string(buf);
+            - mqtt.publish:
                 topic: ${device_name}/tele/current_run_duration
                 payload: !lambda |-
                   return garage::current_run_duration_text(id(ha_time).now(), id(generator_running).state);

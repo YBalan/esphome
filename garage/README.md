@@ -4,13 +4,13 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 
 ## Screenshots
 
-![Garage Generator screenshot 1](images/Screenshot%202026-06-03%20090547.png)
+![Garage Generator screenshot 1](images/Screenshot%202026-06-05%20175842.png)
 
-![Garage Generator screenshot 2](images/Screenshot%202026-06-03%20090610.png)
+![Garage Generator screenshot 2](images/Screenshot%202026-06-05%20175930.png)
 
-![Garage Generator screenshot 3](images/Screenshot%202026-06-03%20090621.png)
+![Garage Generator screenshot 3](images/Screenshot%202026-06-05%20175944.png)
 
-![Garage Generator screenshot 4](images/Screenshot%202026-06-03%20090630.png)
+![Garage Generator screenshot 4](images/Screenshot%202026-06-05%20175956.png)
 
 ## Implemented behavior (current)
 
@@ -24,6 +24,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - If the device restarts while already running, current run duration is resumed from the preserved run start timestamp.
 - Physical GPIO buttons are gated by `Physical Buttons Enabled` and default to OFF for safe bring-up.
 - RF learn/capture is accepted only when learn mode is active.
+- RF receive handling is controlled by `Generator RF Receiver Enabled` (OFF blocks capture handling to reduce noise).
 - RF code text entities publish once at boot, then only on real changes (manual set or learn assignment).
 - LCD update interval is slowed for lower runtime pressure.
 - LCD line 2 no longer rotates automatically; short Settings press cycles line 2 view (V/P <-> I/PF).
@@ -81,7 +82,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 
 - PZEM: voltage/current/power/energy/frequency/power factor
 	- Published with staggered throttles (Voltage 2s, Current 3s, Power 5s, Power Factor 7s, Frequency 11s, Energy 29s)
-- DHT11: temperature/humidity
+- DHT22: temperature/humidity
 - `Generator Running`
 - `Generator Motor Hours`
 - `Generator Last Run Start`
@@ -111,6 +112,7 @@ The device uses manual MQTT topics only.
 	- `${device_name}/tele/voltage`
 	- `${device_name}/tele/current`
 	- `${device_name}/tele/power`
+	- `${device_name}/tele/wifi_rssi`
 	- `${device_name}/tele/current_run_duration`
 - Relay/button state topics (published on every relay change, retained):
 	- `${device_name}/stat/stop` -> `PRESSED`/`RELEASED`
@@ -137,3 +139,19 @@ The device uses manual MQTT topics only.
 - Main config: [garage-generator.yaml](garage-generator.yaml)
 - Runtime helper logic: [garage_generator_logic.h](garage_generator_logic.h)
 - Requirements/spec notes: [requirements.md](requirements.md)
+
+## Wiring Images
+
+Additional wiring and hardware photos:
+
+- ![Wiring photo 1](images/IMG_20260601_113656.jpg)
+- ![Wiring photo 2](images/IMG_20260605_150307.jpg)
+- ![Wiring photo 3](images/IMG_20260605_154435.jpg)
+- ![Wiring photo 4](images/IMG_20260605_154441.jpg)
+- ![Wiring photo 5](images/IMG_20260605_154445.jpg)
+- ![Wiring photo 6](images/IMG_20260605_154452.jpg)
+- ![Wiring photo 7](images/IMG_20260605_154841.jpg)
+- ![Wiring photo 8](images/IMG_20260605_154845.jpg)
+- ![Wiring photo 9](images/IMG_20260605_154904.jpg)
+- ![Wiring photo 10](images/IMG_20260605_154916.jpg)
+- ![Wiring photo 11](images/IMG_20260605_155123.jpg)

@@ -36,7 +36,7 @@ The following items are implemented and considered baseline behavior:
 - 4-channel active-low relay module
 - 433.92 MHz ASK radio pair: SYN480R receiver and FS1000A/SYN115 transmitter
 - Two 25 kg servos used as a mirrored choke pair for stronger stop force
-- DHT11 sensor temporarily used for temperature and humidity
+- DHT22 sensor used for temperature and humidity
 - LCD 16x2 over I2C via PCF8574
 - Five physical buttons
 - Dual PSU setup with common ground
@@ -50,7 +50,7 @@ The following items are implemented and considered baseline behavior:
 | UART2 | PZEM RX/TX | 16, 17 | RX on ESP32 connects to TX on PZEM |
 | RF | Receiver / Transmitter | 27, 26 | Receiver needs level shifting or divider |
 | Servos | Servo 1 / Servo 2 | 12, 13 | Mirrored choke servos |
-| Sensor | DHT11 | 4 | Temporary sensor model |
+| Sensor | DHT22 | 4 | Temperature/humidity sensor |
 | Buttons | Button 1 to 5 | 14, 25, 32, 33, 35 | Button 5 uses GPIO35, external pull-up required |
 
 ## Electrical Notes
@@ -71,6 +71,7 @@ The following items are implemented and considered baseline behavior:
 	- Frequency 11s
 	- Energy 29s
 - RF capture handler stores a pending code only in learn mode.
+- RF receive handling can be runtime-gated by `Generator RF Receiver Enabled` to reduce noise processing when not learning.
 - Learned RF codes can be assigned to buttons 1 to 4 from the physical buttons or the matching Home Assistant long-press buttons.
 - Use RF is a master enable for transmitting learned RF codes; it does not block relay actions.
 - LCD shows DHT values on line 1 and keeps a manual line 2 page selected.
@@ -88,7 +89,7 @@ The following items are implemented and considered baseline behavior:
 - Buttons 1 to 4 trigger their matching relay action and, when Use RF is enabled, send the stored RF code if one exists.
 - Each relay has configurable timeout in Home Assistant value fields; `-1` makes action behave as relay toggle.
 - MQTT command topics: `${device_name}/cmd/start`, `${device_name}/cmd/stop`, `${device_name}/cmd/eco`, `${device_name}/cmd/rollete`, `${device_name}/cmd/restart`, `${device_name}/cmd/wifi_reset`, `${device_name}/cmd/reset_rf_codes` (payload `PRESS`).
-- MQTT telemetry topics (10s publish interval): `${device_name}/tele/voltage`, `${device_name}/tele/current`, `${device_name}/tele/power`, `${device_name}/tele/current_run_duration`.
+- MQTT telemetry topics (10s publish interval): `${device_name}/tele/voltage`, `${device_name}/tele/current`, `${device_name}/tele/power`, `${device_name}/tele/wifi_rssi`, `${device_name}/tele/current_run_duration`.
 - MQTT relay/button status topics (published on relay state change, retained): `${device_name}/stat/stop`, `${device_name}/stat/eco`, `${device_name}/stat/start`, `${device_name}/stat/rollete` with payload `PRESSED` or `RELEASED`.
 - MQTT command handling and custom topic publishing are active only when HA switch `Generator MQTT Enabled` is ON.
 
@@ -127,6 +128,7 @@ Additional HA controls are exposed for convenience:
 
 - `Generator Use RF` toggles learned RF transmission.
 - `Generator MQTT Enabled` toggles custom MQTT command/publish behavior at runtime.
+- `Generator RF Receiver Enabled` toggles RF capture handling (useful to reduce noise outside learning).
 - `Generator Use Servos` enables or disables servo control globally.
 - `Generator Use Servo Action Stop`, `Eco`, `Start`, and `Rollete` control servo usage per action.
 - `Generator Physical Buttons Enabled` controls whether physical GPIO button presses can trigger actions.

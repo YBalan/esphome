@@ -299,6 +299,12 @@ sections:
             name: Use RF
           - entity: switch.generator_generator_use_servos
             name: Use Servos
+          - entity: switch.generator_generator_physical_buttons_enabled
+            name: Physical Buttons
+          - entity: switch.garage_generator_generator_rf_receiver_enabled
+            name: RF Receiver Enabled
+          - entity: switch.generator_generator_mqtt_enabled
+            name: MQTT Enabled
           - type: section
             label: Servo Actions
           - entity: switch.generator_generator_servo_on_stop_action
@@ -353,12 +359,15 @@ badges:
     entity: sensor.generator_generator_last_run_duration
     name: Last Run
   - type: entity
-    entity: sensor.generator_generator_motor_hours
-  - type: entity
-    show_name: true
-    show_state: false
+    show_name: false
+    show_state: true
     show_icon: true
-    entity: button.generator_generator_wifi_reset_2
+    entity: sensor.generator_generator_temperature
+  - type: entity
+    show_name: false
+    show_state: true
+    show_icon: true
+    entity: sensor.generator_generator_humidity
     tap_action:
       action: toggle
     name: WiFi Reset
