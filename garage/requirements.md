@@ -23,6 +23,8 @@ The following items are implemented and considered baseline behavior:
 - RF code text entities publish once on boot and then only when changed.
 - RF learn/assign/transmit workflow for actions 1..4.
 - Mirrored servo control with per-action enable switches and global servo master switch.
+- Servo manual controls for `Run Servos`, `Servos To Start`, `Servos To Stop`, and per-servo `Move ... To Angle` actions.
+- A combined servo range text sensor is available in HA: `Generator Servo Start Stop Values`.
 - Full HA action parity for physical actions through template buttons.
 - Physical GPIO actions protected by `Physical Buttons Enabled` (default OFF).
 - API batching and display pacing tuned for lower runtime pressure.
@@ -79,6 +81,9 @@ The following items are implemented and considered baseline behavior:
 - LCD backlight turns off automatically after inactivity.
 - In fallback AP/captive mode, LCD line 2 shows `AP:<ssid>`.
 - The two servos are mirrored and used together for stronger choke movement.
+- Manual `Move Left/Right Servo To Angle` actions clamp by hardware max angle only.
+- Saved Start/Stop values are exposed in one string: `Stop: Left/Right ; Start: Left/Right`.
+- The combined Start/Stop text sensor is updated on boot and when Save Start/Save Stop is pressed.
 - Motor-hours are accumulated only while the generator is running.
 - Motor-hours offset can be manually set from HA.
 - Last run start is updated when generator state changes from stopped to running.
@@ -119,6 +124,10 @@ The following items are implemented and considered baseline behavior:
 - A master `Use Servos` switch enables or disables servo usage.
 - Per-action servo switches decide which actions actually run the servos.
 - By default only the Stop action uses the servos.
+- `Run Servos` performs the configured start-to-stop sequence for both servos.
+- `Servos To Start` and `Servos To Stop` move both servos directly to the saved Start/Stop positions.
+- `Move Left Servo To Angle` and `Move Right Servo To Angle` use target inputs and are limited only by `servo_max_angle_deg`.
+- `Save Values As Start Position` and `Save Values As Stop Position` persist the current target angles as the saved range.
 
 ## Home Assistant Control
 
@@ -139,6 +148,7 @@ Additional HA entities are exposed for automation and analytics:
 - `Motor Hours` and `Motor Hours Offset`.
 - `Last Run Start` and `Last Run Stop` text sensors.
 - `Last Run Duration` and `Current Run Duration` text sensors.
+- `Generator Servo Start Stop Values` text sensor (format: `Stop: Left/Right ; Start: Left/Right`).
 - `WiFi RSSI` sensor is available for connectivity diagnostics.
 
 ## Stability and Deployment Workflow (used in practice)

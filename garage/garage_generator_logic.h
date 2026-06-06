@@ -326,6 +326,120 @@ inline void note_user_action() {
   wake_backlight();
 }
 
+inline float clamp_servo_angle(const float &angle_deg, const float &max_angle_deg) {
+  if (!std::isfinite(angle_deg)) {
+    return 0.0f;
+  }
+  if (!std::isfinite(max_angle_deg) || max_angle_deg <= 0.0f) {
+    return 0.0f;
+  }
+  if (angle_deg < 0.0f) {
+    return 0.0f;
+  }
+  if (angle_deg > max_angle_deg) {
+    return max_angle_deg;
+  }
+  return angle_deg;
+}
+
+inline float angle_to_servo_level(const float &angle_deg, const float &max_angle_deg) {
+  const float clamped = clamp_servo_angle(angle_deg, max_angle_deg);
+  if (!std::isfinite(max_angle_deg) || max_angle_deg <= 0.0f) {
+    return -1.0f;
+  }
+  return (clamped / max_angle_deg) * 2.0f - 1.0f;
+}
+
+inline bool is_servo_near_start(const float &angle_deg, const float &start_deg, const float &stop_deg) {
+  const float d_start = std::fabs(angle_deg - start_deg);
+  const float d_stop = std::fabs(angle_deg - stop_deg);
+  return d_start <= d_stop;
+}
+
+inline float interpolate_servo_angle(const float &from_deg, const float &to_deg, const float &ratio) {
+  if (!std::isfinite(from_deg) || !std::isfinite(to_deg) || !std::isfinite(ratio)) {
+    return from_deg;
+  }
+  float t = ratio;
+  if (t < 0.0f) {
+    t = 0.0f;
+  }
+  if (t > 1.0f) {
+    t = 1.0f;
+  }
+  return from_deg + (to_deg - from_deg) * t;
+}
+
+inline float left_range_min_deg() {
+  return std::fmin(id(servo_1_start_deg), id(servo_1_stop_deg));
+}
+
+inline float left_range_max_deg() {
+  return std::fmax(id(servo_1_start_deg), id(servo_1_stop_deg));
+}
+
+inline float right_range_min_deg() {
+  return std::fmin(id(servo_2_start_deg), id(servo_2_stop_deg));
+}
+
+inline float right_range_max_deg() {
+  return std::fmax(id(servo_2_start_deg), id(servo_2_stop_deg));
+}
+
+inline float clamp_to_range(const float &value, const float &min_value, const float &max_value) {
+  if (!std::isfinite(value)) {
+    return min_value;
+  }
+  if (value < min_value) {
+    return min_value;
+  }
+  if (value > max_value) {
+    return max_value;
+  }
+  return value;
+}
+
+inline float clamp_left_servo_to_saved_range(const float &angle_deg, const float &max_angle_deg) {
+  const float clamped = clamp_servo_angle(angle_deg, max_angle_deg);
+  return clamp_to_range(clamped, left_range_min_deg(), left_range_max_deg());
+}
+
+inline float clamp_right_servo_to_saved_range(const float &angle_deg, const float &max_angle_deg) {
+  const float clamped = clamp_servo_angle(angle_deg, max_angle_deg);
+  return clamp_to_range(clamped, right_range_min_deg(), right_range_max_deg());
+}
+
+inline void move_left_servo_to_angle(const float &target_deg, const float &max_angle_deg) {
+  const float clamped = clamp_left_servo_to_saved_range(target_deg, max_angle_deg);
+  id(servo_1_current_deg) = clamped;
+  id(servo_1_near_start) = is_servo_near_start(clamped, id(servo_1_start_deg), id(servo_1_stop_deg));
+}
+
+inline void move_right_servo_to_angle(const float &target_deg, const float &max_angle_deg) {
+  const float clamped = clamp_right_servo_to_saved_range(target_deg, max_angle_deg);
+  id(servo_2_current_deg) = clamped;
+  id(servo_2_near_start) = is_servo_near_start(clamped, id(servo_2_start_deg), id(servo_2_stop_deg));
+}
+
+inline void save_target_angles_as_stop(const float &max_angle_deg) {
+  id(servo_1_stop_deg) = clamp_servo_angle(id(servo_1_target_deg_input_value), max_angle_deg);
+  id(servo_2_stop_deg) = clamp_servo_angle(id(servo_2_target_deg_input_value), max_angle_deg);
+}
+
+inline void save_target_angles_as_start(const float &max_angle_deg) {
+  id(servo_1_start_deg) = clamp_servo_angle(id(servo_1_target_deg_input_value), max_angle_deg);
+  id(servo_2_start_deg) = clamp_servo_angle(id(servo_2_target_deg_input_value), max_angle_deg);
+}
+
+inline void step_servos_toward_stop(const float &ratio, const float &max_angle_deg) {
+  id(servo_1_current_deg) = clamp_left_servo_to_saved_range(
+      interpolate_servo_angle(id(servo_1_current_deg), id(servo_1_stop_deg), ratio),
+      max_angle_deg);
+  id(servo_2_current_deg) = clamp_right_servo_to_saved_range(
+      interpolate_servo_angle(id(servo_2_current_deg), id(servo_2_stop_deg), ratio),
+      max_angle_deg);
+}
+
 inline void reset_motor_hours_counter() {
   id(motor_hours_total) = 0.0f;
 }

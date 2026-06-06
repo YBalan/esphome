@@ -32,6 +32,10 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - API batching is intentionally limited (`batch_delay: 250ms`) to reduce burst pressure.
 - MQTT auto-published entities are disabled (`topic_prefix: null`, `discovery: false`); only explicit `cmd` and `tele` topics are used.
 - MQTT behavior is runtime-controlled from HA by `Generator MQTT Enabled` (no recompile required).
+- Servo manual controls are exposed as `Run Servos`, `Servos To Start`, `Servos To Stop`, `Move Left Servo To Angle`, and `Move Right Servo To Angle`.
+- `Move ... Servo To Angle` buttons use target angle clamped only by hardware max angle (`servo_max_angle_deg`), not by saved Start/Stop range.
+- Servo saved range summary is exposed by one combined text sensor: `Generator Servo Start Stop Values`.
+- `Generator Servo Start Stop Values` is refreshed on boot and when `Save Values As Start Position` or `Save Values As Stop Position` is pressed.
 
 ## Hardware summary
 
@@ -65,6 +69,13 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - Action Start / Start Long
 - Action Rollete / Rollete Long
 - Action Settings Short / Settings Long
+- Run Servos
+- Servos To Start
+- Servos To Stop
+- Move Left Servo To Angle
+- Move Right Servo To Angle
+- Save Values As Start Position
+- Save Values As Stop Position
 
 ### Config and operational entities
 
@@ -89,6 +100,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - `Generator Last Run Stop`
 - `Generator Last Run Duration`
 - `Generator Current Run Duration`
+- `Generator Servo Start Stop Values` (`Stop: Left/Right ; Start: Left/Right`)
 - RF code text entities for Stop/Eco/Start/Rollete
 - `Generator WiFi RSSI`
 
