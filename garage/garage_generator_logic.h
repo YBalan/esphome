@@ -1,12 +1,18 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <limits>
 #include <string>
+#include <vector>
 
+#include "esphome/components/remote_base/rc_switch_protocol.h"
 #include "esphome/components/wifi/wifi_component.h"
+#include "esphome/core/helpers.h"
 
 namespace garage {
 
@@ -199,65 +205,347 @@ inline std::string button_rf_code_or_default(const uint8_t button, const char *f
   return code;
 }
 
-inline int button_rf_protocol(const uint8_t button) {
-  switch (button) {
-    case 1:
-      return id(rf_protocol_btn_1);
-    case 2:
-      return id(rf_protocol_btn_2);
-    case 3:
-      return id(rf_protocol_btn_3);
-    case 4:
-      return id(rf_protocol_btn_4);
-    default:
-      return 1;
-  }
-}
+inline std::string button_rf_raw_text(const uint8_t button) {
+  std::string value;
 
-inline void set_button_rf_data(const uint8_t button, const std::string &code, const int &protocol) {
   switch (button) {
     case 1:
-      id(rf_code_btn_1) = code;
-      id(rf_protocol_btn_1) = protocol;
+      value = id(rf_raw_btn_1);
+      value += id(rf_raw_btn_1_b);
+      value += id(rf_raw_btn_1_c);
       break;
     case 2:
-      id(rf_code_btn_2) = code;
-      id(rf_protocol_btn_2) = protocol;
+      value = id(rf_raw_btn_2);
+      value += id(rf_raw_btn_2_b);
+      value += id(rf_raw_btn_2_c);
       break;
     case 3:
-      id(rf_code_btn_3) = code;
-      id(rf_protocol_btn_3) = protocol;
+      value = id(rf_raw_btn_3);
+      value += id(rf_raw_btn_3_b);
+      value += id(rf_raw_btn_3_c);
       break;
     case 4:
-      id(rf_code_btn_4) = code;
-      id(rf_protocol_btn_4) = protocol;
+      value = id(rf_raw_btn_4);
+      value += id(rf_raw_btn_4_b);
+      value += id(rf_raw_btn_4_c);
       break;
     default:
       break;
   }
+
+  return value;
 }
 
-// True when the matching learned RF code is present and can be transmitted.
+inline void set_button_rf_raw_text(const uint8_t button, const std::string &raw_text) {
+  constexpr size_t kChunkLen = 254U;
+  const std::string part_a = raw_text.substr(0U, kChunkLen);
+  const std::string part_b = (raw_text.size() > kChunkLen) ? raw_text.substr(kChunkLen, kChunkLen) : std::string();
+  const std::string part_c = (raw_text.size() > (kChunkLen * 2U)) ? raw_text.substr(kChunkLen * 2U, kChunkLen) : std::string();
+
+  switch (button) {
+    case 1:
+      id(rf_raw_btn_1) = part_a;
+      id(rf_raw_btn_1_b) = part_b;
+      id(rf_raw_btn_1_c) = part_c;
+      break;
+    case 2:
+      id(rf_raw_btn_2) = part_a;
+      id(rf_raw_btn_2_b) = part_b;
+      id(rf_raw_btn_2_c) = part_c;
+      break;
+    case 3:
+      id(rf_raw_btn_3) = part_a;
+      id(rf_raw_btn_3_b) = part_b;
+      id(rf_raw_btn_3_c) = part_c;
+      break;
+    case 4:
+      id(rf_raw_btn_4) = part_a;
+      id(rf_raw_btn_4_b) = part_b;
+      id(rf_raw_btn_4_c) = part_c;
+      break;
+    default:
+      break;
+  }
+}
+
+inline bool button_rf_raw_enabled(const uint8_t button) {
+  return has_text(button_rf_raw_text(button));
+}
+
+inline bool pending_rf_raw_enabled() {
+  return has_text(id(rf_pending_raw));
+}
+
 inline bool button_rf_enabled(const uint8_t button) {
-  return has_text(button_rf_code(button));
+  return button_rf_raw_enabled(button);
 }
 
 inline bool is_rf_learning_mode() {
   return id(rf_learning_mode);
 }
 
+template <typename TTiming>
+inline std::string raw_timings_to_text(const std::vector<TTiming> &timings) {
+  std::string raw_text;
+  raw_text.reserve(timings.size() * 10U);
+
+  for (size_t i = 0; i < timings.size(); i++) {
+    if (i != 0U) {
+      raw_text += ", ";
+    }
+    raw_text += std::to_string(static_cast<long long>(timings[i]));
+  }
+
+  return raw_text;
+}
+
+template <typename TTiming>
+inline std::string raw_timings_to_encoded_text(const std::vector<TTiming> &timings) {
+  std::vector<uint8_t> packed;
+  packed.reserve(timings.size() * 2U);
+
+  for (TTiming timing_value : timings) {
+    int32_t timing = static_cast<int32_t>(timing_value);
+    if (timing < static_cast<int32_t>(std::numeric_limits<int16_t>::min())) {
+      timing = static_cast<int32_t>(std::numeric_limits<int16_t>::min());
+    }
+    if (timing > static_cast<int32_t>(std::numeric_limits<int16_t>::max())) {
+      timing = static_cast<int32_t>(std::numeric_limits<int16_t>::max());
+    }
+
+    const uint16_t encoded = static_cast<uint16_t>(static_cast<int16_t>(timing));
+    packed.push_back(static_cast<uint8_t>(encoded & 0xFFU));
+    packed.push_back(static_cast<uint8_t>((encoded >> 8) & 0xFFU));
+  }
+
+  return esphome::base64_encode(packed);
+}
+
+inline bool decode_raw_timings_payload(const std::string &payload, std::vector<int32_t> &out_values) {
+  out_values.clear();
+  if (!has_text(payload)) {
+    return false;
+  }
+
+  const std::vector<uint8_t> packed = esphome::base64_decode(payload);
+  if (packed.empty() || (packed.size() % 2U) != 0U) {
+    return false;
+  }
+
+  out_values.reserve(packed.size() / 2U);
+  for (size_t i = 0; i < packed.size(); i += 2U) {
+    const uint16_t encoded = static_cast<uint16_t>(packed[i]) | (static_cast<uint16_t>(packed[i + 1]) << 8U);
+    out_values.push_back(static_cast<int32_t>(static_cast<int16_t>(encoded)));
+  }
+
+  return !out_values.empty();
+}
+
+inline std::string pending_rf_raw_text() {
+  std::vector<int32_t> timings;
+  if (!decode_raw_timings_payload(id(rf_pending_raw), timings)) {
+    return "";
+  }
+  return raw_timings_to_text(timings);
+}
+
+inline std::string raw_timings_summary_for_ha(const std::vector<int32_t> &timings) {
+  if (timings.empty()) {
+    return "N:0";
+  }
+
+  std::vector<int32_t> abs_values;
+  abs_values.reserve(timings.size());
+
+  uint64_t total_us = 0ULL;
+  for (size_t i = 0U; i < timings.size(); ++i) {
+    const int32_t value = timings[i];
+    const int32_t abs_value = (value < 0) ? -value : value;
+    if (abs_value <= 0) {
+      continue;
+    }
+    abs_values.push_back(abs_value);
+    total_us += static_cast<uint64_t>(abs_value);
+  }
+
+  if (abs_values.empty()) {
+    return "N:0";
+  }
+
+  std::sort(abs_values.begin(), abs_values.end());
+
+  const size_t abs_count = abs_values.size();
+  const size_t low_bucket_count = std::max(static_cast<size_t>(3U), abs_count / 3U);
+  const size_t low_bucket_index = std::min(low_bucket_count - 1U, abs_count - 1U) / 2U;
+
+  const int32_t pulse_us = abs_values[low_bucket_index];
+  const int32_t min_us = abs_values.front();
+  const int32_t max_us = abs_values.back();
+  const uint32_t avg_us = static_cast<uint32_t>(total_us / static_cast<uint64_t>(abs_count));
+
+  char out[128] = {0};
+  std::snprintf(
+      out,
+      sizeof(out),
+      "N:%u P~%dus Avg:%uus Min:%dus Max:%dus T:%lluus",
+      static_cast<unsigned int>(timings.size()),
+      static_cast<int>(pulse_us),
+      static_cast<unsigned int>(avg_us),
+      static_cast<int>(min_us),
+      static_cast<int>(max_us),
+      static_cast<unsigned long long>(total_us));
+
+  return std::string(out);
+}
+
+inline std::string button_rf_raw_text_for_ha(const uint8_t button, const char *fallback = kRfCodeNotAssigned) {
+  std::vector<int32_t> timings;
+  if (!decode_raw_timings_payload(button_rf_raw_text(button), timings)) {
+    return std::string(fallback);
+  }
+  return raw_timings_summary_for_ha(timings);
+}
+
+inline std::vector<int32_t> button_rf_raw_timings(const uint8_t button) {
+  std::vector<int32_t> timings;
+  decode_raw_timings_payload(button_rf_raw_text(button), timings);
+  return timings;
+}
+
+inline bool parse_raw_timings_from_text(const std::string &text, std::vector<int32_t> &out_values) {
+  out_values.clear();
+  const char *cursor = text.c_str();
+
+  while (*cursor != '\0') {
+    while (*cursor != '\0' && (std::isspace(static_cast<unsigned char>(*cursor)) || *cursor == ',')) {
+      cursor++;
+    }
+    if (*cursor == '\0') {
+      break;
+    }
+
+    char *end_ptr = nullptr;
+    long parsed = std::strtol(cursor, &end_ptr, 10);
+    if (end_ptr == cursor) {
+      return false;
+    }
+
+    if (parsed < static_cast<long>(std::numeric_limits<int16_t>::min())) {
+      parsed = static_cast<long>(std::numeric_limits<int16_t>::min());
+    }
+    if (parsed > static_cast<long>(std::numeric_limits<int16_t>::max())) {
+      parsed = static_cast<long>(std::numeric_limits<int16_t>::max());
+    }
+
+    out_values.push_back(static_cast<int32_t>(parsed));
+    cursor = end_ptr;
+  }
+
+  return !out_values.empty();
+}
+
+inline void set_button_rf_raw_from_text(const uint8_t button, const std::string &value_in) {
+  if (!has_text(value_in) || value_in == kRfCodeNotAssigned) {
+    set_button_rf_raw_text(button, "");
+    return;
+  }
+
+  std::vector<int32_t> timings;
+  if (!parse_raw_timings_from_text(value_in, timings)) {
+    return;
+  }
+
+  set_button_rf_raw_text(button, raw_timings_to_encoded_text(timings));
+}
+
+inline size_t button_rf_raw_item_count(const uint8_t button) {
+  std::vector<int32_t> timings;
+  if (!decode_raw_timings_payload(button_rf_raw_text(button), timings)) {
+    return 0U;
+  }
+  return timings.size();
+}
+
+inline size_t pending_rf_raw_item_count() {
+  std::vector<int32_t> timings;
+  if (!decode_raw_timings_payload(id(rf_pending_raw), timings)) {
+    return 0U;
+  }
+  return timings.size();
+}
+
+template <typename TLeft, typename TRight>
+inline bool raw_frames_are_similar(const std::vector<TLeft> &left, const std::vector<TRight> &right) {
+  if (left.empty() || right.empty()) {
+    return false;
+  }
+
+  const size_t left_size = left.size();
+  const size_t right_size = right.size();
+  const size_t size_diff = (left_size > right_size) ? (left_size - right_size) : (right_size - left_size);
+  if (size_diff > 4U) {
+    return false;
+  }
+
+  const size_t compare_count = std::min(std::min(left_size, right_size), static_cast<size_t>(24U));
+  if (compare_count < 10U) {
+    return false;
+  }
+
+  size_t mismatches = 0U;
+  for (size_t i = 0U; i < compare_count; ++i) {
+    const int32_t a = static_cast<int32_t>(left[i]);
+    const int32_t b = static_cast<int32_t>(right[i]);
+    const int32_t abs_a = (a < 0) ? -a : a;
+    const int32_t abs_b = (b < 0) ? -b : b;
+    const int32_t max_v = (abs_a > abs_b) ? abs_a : abs_b;
+    if (max_v == 0) {
+      continue;
+    }
+    const int32_t delta = (abs_a > abs_b) ? (abs_a - abs_b) : (abs_b - abs_a);
+    if (delta * 100 > max_v * 45) {
+      ++mismatches;
+    }
+  }
+
+  if (mismatches > (compare_count / 4U)) {
+    return false;
+  }
+
+  int64_t sum_left = 0;
+  int64_t sum_right = 0;
+  for (size_t i = 0U; i < left_size; ++i) {
+    const int64_t v = static_cast<int64_t>(left[i]);
+    sum_left += (v < 0) ? -v : v;
+  }
+  for (size_t i = 0U; i < right_size; ++i) {
+    const int64_t v = static_cast<int64_t>(right[i]);
+    sum_right += (v < 0) ? -v : v;
+  }
+
+  const int64_t max_sum = (sum_left > sum_right) ? sum_left : sum_right;
+  const int64_t sum_delta = (sum_left > sum_right) ? (sum_left - sum_right) : (sum_right - sum_left);
+  if (max_sum <= 0) {
+    return false;
+  }
+
+  return (sum_delta * 100) <= (max_sum * 30);
+}
+
 inline void enter_rf_learning_mode() {
   id(rf_learning_mode) = true;
-  id(rf_pending_code).clear();
-  id(rf_pending_protocol) = 1;
+  id(rf_pending_raw).clear();
+  id(rf_learning_candidate_raw).clear();
+  id(rf_last_raw_sample_ms) = 0U;
   wake_backlight();
   set_lcd_message("RF Learn Mode", "Send RF signal", 7000U);
 }
 
 inline void leave_rf_learning_mode() {
   id(rf_learning_mode) = false;
-  id(rf_pending_code).clear();
-  id(rf_pending_protocol) = 1;
+  id(rf_pending_raw).clear();
+  id(rf_learning_candidate_raw).clear();
+  id(rf_last_raw_sample_ms) = 0U;
 }
 
 inline void toggle_rf_learning_mode() {
@@ -270,18 +558,53 @@ inline void toggle_rf_learning_mode() {
   }
 }
 
-inline bool on_rf_signal_received(const uint64_t &code, const uint8_t &protocol) {
+template <typename TTiming>
+inline bool on_rf_raw_received(const std::vector<TTiming> &timings) {
   if (!is_rf_learning_mode()) {
     return false;
   }
 
-  id(rf_pending_code) = u64_to_binary(code);
-  id(rf_pending_protocol) = static_cast<int>(protocol);
+  // Ignore obvious noise bursts and malformed captures.
+  if (timings.size() < 20U || timings.size() > 220U) {
+    return false;
+  }
+
+  const uint32_t now = now_ms();
+  // Raw callbacks can be very frequent; keep learning responsive but bounded.
+  if (id(rf_last_raw_sample_ms) != 0U && static_cast<uint32_t>(now - id(rf_last_raw_sample_ms)) < 120U) {
+    return false;
+  }
+
+  const std::string encoded = raw_timings_to_encoded_text(timings);
+  if (!has_text(id(rf_learning_candidate_raw))) {
+    id(rf_learning_candidate_raw) = encoded;
+    id(rf_last_raw_sample_ms) = now;
+    return false;
+  }
+
+  if (encoded == id(rf_learning_candidate_raw)) {
+    id(rf_pending_raw) = encoded;
+    id(rf_learning_candidate_raw).clear();
+    id(rf_last_raw_sample_ms) = now;
+  } else {
+    std::vector<int32_t> candidate_timings;
+    if (decode_raw_timings_payload(id(rf_learning_candidate_raw), candidate_timings) &&
+        raw_frames_are_similar(candidate_timings, timings)) {
+      id(rf_pending_raw) = encoded;
+      id(rf_learning_candidate_raw).clear();
+      id(rf_last_raw_sample_ms) = now;
+    } else {
+      id(rf_learning_candidate_raw) = encoded;
+      id(rf_last_raw_sample_ms) = now;
+      return false;
+    }
+  }
+
   wake_backlight();
 
   char line_2[17] = {0};
-  copy_16(line_2, id(rf_pending_code));
-  set_lcd_message("RF Captured", line_2, 8000U);
+  std::snprintf(line_2, sizeof(line_2), "%u raw items", static_cast<unsigned int>(timings.size()));
+  set_lcd_message("RAW Captured", line_2, 8000U);
   return true;
 }
 
@@ -290,18 +613,18 @@ inline bool assign_pending_rf_to_button(const uint8_t button) {
     return false;
   }
 
-  if (!has_text(id(rf_pending_code))) {
+  if (!pending_rf_raw_enabled()) {
     wake_backlight();
-    set_lcd_message("No RF Captured", "Send RF signal", 5000U);
+    set_lcd_message("No RAW Capt", "Send RF signal", 5000U);
     return false;
   }
 
-  set_button_rf_data(button, id(rf_pending_code), id(rf_pending_protocol));
+  set_button_rf_raw_text(button, id(rf_pending_raw));
 
   char line_1[17] = {0};
   char line_2[17] = {0};
   std::snprintf(line_1, sizeof(line_1), "Saved to Btn %u", button);
-  std::snprintf(line_2, sizeof(line_2), "RF assigned");
+  std::snprintf(line_2, sizeof(line_2), "%u raw items", static_cast<unsigned int>(button_rf_raw_item_count(button)));
   wake_backlight();
   set_lcd_message(line_1, line_2, 5000U);
   leave_rf_learning_mode();
@@ -314,12 +637,29 @@ inline void show_assigned_rf_for_button(const uint8_t button) {
   }
 
   char line_1[17] = {0};
-  std::snprintf(line_1, sizeof(line_1), "Btn %u RF", button);
+  char line_2[17] = {0};
+  std::snprintf(line_1, sizeof(line_1), "Btn %u RAW Sent", button);
+  std::snprintf(line_2, sizeof(line_2), "%u raw items", static_cast<unsigned int>(button_rf_raw_item_count(button)));
 
-  char code[17] = {0};
-  copy_16(code, button_rf_code(button));
   wake_backlight();
-  set_lcd_message(line_1, code, 4000U);
+  set_lcd_message(line_1, line_2, 4000U);
+}
+
+inline void show_rf_test_result(const uint8_t button, const bool has_raw) {
+  char line_1[17] = {0};
+  char line_2[17] = {0};
+
+  std::snprintf(line_1, sizeof(line_1), "RF Test Btn %u", button);
+  if (!has_raw) {
+    std::snprintf(line_2, sizeof(line_2), "No RAW assigned");
+    wake_backlight();
+    set_lcd_message(line_1, line_2, 5000U);
+    return;
+  }
+
+  std::snprintf(line_2, sizeof(line_2), "%u raw items", static_cast<unsigned int>(button_rf_raw_item_count(button)));
+  wake_backlight();
+  set_lcd_message(line_1, line_2, 5000U);
 }
 
 inline void note_user_action() {
@@ -457,14 +797,6 @@ inline void set_motor_hours_offset(const float &hours) {
 
 inline void reset_all_counters() {
   reset_motor_hours_counter();
-}
-
-inline void set_button_rf_code_from_text(const uint8_t button, const std::string &value_in) {
-  std::string value = value_in;
-  if (value == kRfCodeNotAssigned) {
-    value.clear();
-  }
-  set_button_rf_data(button, value, button_rf_protocol(button));
 }
 
 inline void mark_pzem_rx_if_finite(const float &value) {
@@ -757,8 +1089,8 @@ inline void render_lcd_page(
     copy_16(line_2, id(lcd_message_line_2));
   } else if (is_rf_learning_mode()) {
     std::snprintf(line_1, sizeof(line_1), "RF Learn Mode");
-    if (has_text(id(rf_pending_code))) {
-      copy_16(line_2, id(rf_pending_code));
+    if (pending_rf_raw_enabled()) {
+      std::snprintf(line_2, sizeof(line_2), "%u raw items", static_cast<unsigned int>(pending_rf_raw_item_count()));
     } else {
       std::snprintf(line_2, sizeof(line_2), "Send RF signal");
     }

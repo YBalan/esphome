@@ -1,0 +1,617 @@
+substitutions:
+  # 433 MHz ASK receiver/transmitter pins
+  gpio_rf_rx: "27"
+  gpio_rf_tx: "26"
+
+  # RF defaults
+  # Pulse length and repeat behavior from original remote profile.
+  rf_pulse_length: "350"
+  rf_repeat_times: "10"
+  rf_repeat_wait: 15ms
+
+  # Receiver decode parameters
+  rf_tolerance: 50%
+  rf_filter: 250us
+  rf_idle: 8ms
+
+  # Carrier duty for ASK RF modules.
+  rf_carrier_duty_percent: 100%
+
+globals:
+  - id: rf_default_pulse_length
+    type: uint32_t
+    restore_value: yes
+    initial_value: "${rf_pulse_length}"
+  - id: rf_code_btn_1
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 64
+  - id: rf_code_btn_2
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 64
+  - id: rf_code_btn_3
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 64
+  - id: rf_code_btn_4
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 64
+  - id: rf_protocol_btn_1
+    type: int
+    restore_value: yes
+    initial_value: "1"
+  - id: rf_protocol_btn_2
+    type: int
+    restore_value: yes
+    initial_value: "1"
+  - id: rf_protocol_btn_3
+    type: int
+    restore_value: yes
+    initial_value: "1"
+  - id: rf_protocol_btn_4
+    type: int
+    restore_value: yes
+    initial_value: "1"
+  - id: rf_pulse_btn_1
+    type: uint32_t
+    restore_value: yes
+    initial_value: "${rf_pulse_length}"
+  - id: rf_pulse_btn_2
+    type: uint32_t
+    restore_value: yes
+    initial_value: "${rf_pulse_length}"
+  - id: rf_pulse_btn_3
+    type: uint32_t
+    restore_value: yes
+    initial_value: "${rf_pulse_length}"
+  - id: rf_pulse_btn_4
+    type: uint32_t
+    restore_value: yes
+    initial_value: "${rf_pulse_length}"
+  - id: rf_raw_btn_1
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_1_b
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_1_c
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_2
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_2_b
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_2_c
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_3
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_3_b
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_3_c
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_4
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_4_b
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_raw_btn_4_c
+    type: std::string
+    restore_value: yes
+    initial_value: '""'
+    max_restore_data_length: 254
+  - id: rf_learning_mode
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: rf_pending_code
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: rf_pending_protocol
+    type: int
+    restore_value: no
+    initial_value: "1"
+  - id: rf_pending_pulse_length
+    type: uint32_t
+    restore_value: no
+    initial_value: "${rf_pulse_length}"
+  - id: rf_pending_raw
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: rf_learning_candidate_raw
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: rf_last_raw_sample_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+remote_receiver:
+  pin:
+    number: ${gpio_rf_rx}
+    mode:
+      input: true
+  dump: []
+  tolerance: ${rf_tolerance}
+  filter: ${rf_filter}
+  idle: ${rf_idle}
+  buffer_size: 8kb
+  on_raw:
+    then:
+      - lambda: |-
+          if (!id(rf_receiver_enabled).state) {
+            return;
+          }
+          if (!garage::is_rf_learning_mode()) {
+            return;
+          }
+          if (!garage::on_rf_raw_received(x)) {
+            return;
+          }
+
+remote_transmitter:
+  pin: ${gpio_rf_tx}
+  carrier_duty_percent: ${rf_carrier_duty_percent}
+  non_blocking: true
+
+switch:
+  - platform: template
+    id: rf_emulation_enabled
+    name: ${friendly_name} Use RF
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: template
+    id: rf_receiver_enabled
+    name: ${friendly_name} RF Receiver Enabled
+    icon: mdi:radio-tower
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: |-
+          if (!garage::is_rf_learning_mode()) {
+            garage::enter_rf_learning_mode();
+          }
+      - component.update: lcd_display
+    on_turn_off:
+      - lambda: |-
+          if (garage::is_rf_learning_mode()) {
+            garage::leave_rf_learning_mode();
+            garage::wake_backlight();
+            garage::clear_lcd_message();
+          }
+      - component.update: lcd_display
+
+button:
+  - platform: template
+    name: "Test (Raw)"
+    icon: "mdi:engine-start"
+    on_press:
+      - remote_transmitter.transmit_raw:
+          code: [
+            1248, -480, 382, -1376, 1262, -459, 407, -1361, 407, -1361, 
+            1261, -458, 409, -1359, 1263, -456, 1266, -454, 1264, -455, 
+            410, -1358, 401, -1380, 389, -1377, 392, -1376, 1246, -473, 
+            392, -1378, 392, -1373, 1251, -468, 396, -1372, 396, -1372, 
+            398, -1370, 398, -1369, 401, -1366, 1256, -463, 403
+          ]
+          repeat:
+            times: 10
+            wait_time: 15ms
+  - platform: template
+    name: "Rollete Test Button"
+    icon: "mdi:window-shutter"
+    on_press:
+      - remote_transmitter.transmit_raw:
+          # This code includes the Sync Preamble, the Gap, and the Data Packet
+          code: [
+            # Preamble (Sync)
+            379, -442, 377, -443, 379, -442, 378, -443, 378, -442, 
+            378, -443, 378, -442, 378, -442, 379, -443, 378, -441, 
+            379, -442, 379, 
+            # Long Gap
+            -4173, 
+            # Data Packet
+            788, -444, 787, -443, 787, -444, 787, -443, 380, -852, 
+            782, -456, 774, -456, 781, -467, 779, -444, 787, -445, 
+            784, -446, 378, -852, 379, -853, 379, -852, 379, -850, 
+            381, -868, 786, -443, 787, -453, 368, -855, 786, -444, 
+            787, -445, 785, -446, 785, -445, 785, -464, 377, -853, 
+            785, -446, 378, -852, 379, -852, 378, -853, 378, -852, 
+            380, -850, 381, -868, 379, -857, 368, -856, 788, -444, 
+            787, -445, 372, -858, 380, -851, 379, -853, 786, -459, 
+            787, -445, 786, -444, 379, -851, 381, -850, 381, -850, 
+            787, -445, 786, -445, 786, -461, 379, -852, 786, -445, 
+            379, -852, 786, -445, 786, -443, 380, -851, 381, -851, 
+            379, -867, 381, -851, 786, -446, 379, -852, 785, -446, 
+            378, -850, 788, -443, 788, -444, 786, -460, 379, -850, 
+            380, -852, 379, -852, 786, -443, 788, -445, 785, -445, 
+            378, -853, 786
+          ]
+          repeat:
+            times: 10
+            wait_time: 10ms
+  - platform: template
+    id: reset_rf_codes_btn
+    name: ${friendly_name} Reset RF Codes
+    icon: mdi:radio-tower-off
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::set_button_rf_raw_text(1, "");
+          garage::set_button_rf_raw_text(2, "");
+          garage::set_button_rf_raw_text(3, "");
+          garage::set_button_rf_raw_text(4, "");
+      - script.execute: rf_boot_sync
+
+  - platform: template
+    id: ha_btn_rf_test_stop
+    name: ${friendly_name} RF Test Stop
+    icon: mdi:radio-tower
+    entity_category: diagnostic
+    on_press:
+      - if:
+          condition:
+            switch.is_off: rf_receiver_enabled
+          then:
+            - switch.turn_on: rf_receiver_enabled
+            - delay: 150ms
+      - script.execute: rf_test_btn_1
+
+  - platform: template
+    id: ha_btn_rf_test_eco
+    name: ${friendly_name} RF Test Eco
+    icon: mdi:radio-tower
+    entity_category: diagnostic
+    on_press:
+      - if:
+          condition:
+            switch.is_off: rf_receiver_enabled
+          then:
+            - switch.turn_on: rf_receiver_enabled
+            - delay: 150ms
+      - script.execute: rf_test_btn_2
+
+  - platform: template
+    id: ha_btn_rf_test_start
+    name: ${friendly_name} RF Test Start
+    icon: mdi:radio-tower
+    entity_category: diagnostic
+    on_press:
+      - if:
+          condition:
+            switch.is_off: rf_receiver_enabled
+          then:
+            - switch.turn_on: rf_receiver_enabled
+            - delay: 150ms
+      - script.execute: rf_test_btn_3
+
+  - platform: template
+    id: ha_btn_rf_test_rollete
+    name: ${friendly_name} RF Test Rollete
+    icon: mdi:radio-tower
+    entity_category: diagnostic
+    on_press:
+      - if:
+          condition:
+            switch.is_off: rf_receiver_enabled
+          then:
+            - switch.turn_on: rf_receiver_enabled
+            - delay: 150ms
+      - script.execute: rf_test_btn_4
+
+text_sensor:
+  - platform: template
+    id: rf_raw_btn_1_sensor
+    name: ${friendly_name} RF Raw Stop
+    icon: mdi:waveform
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      return garage::button_rf_raw_text_for_ha(1);
+
+  - platform: template
+    id: rf_raw_btn_2_sensor
+    name: ${friendly_name} RF Raw Eco
+    icon: mdi:waveform
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      return garage::button_rf_raw_text_for_ha(2);
+
+  - platform: template
+    id: rf_raw_btn_3_sensor
+    name: ${friendly_name} RF Raw Start
+    icon: mdi:waveform
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      return garage::button_rf_raw_text_for_ha(3);
+
+  - platform: template
+    id: rf_raw_btn_4_sensor
+    name: ${friendly_name} RF Raw Rollete
+    icon: mdi:waveform
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      return garage::button_rf_raw_text_for_ha(4);
+
+script:
+  - id: rf_boot_sync
+    mode: restart
+    then:
+      - switch.turn_off: rf_receiver_enabled
+      - lambda: |-
+          garage::leave_rf_learning_mode();
+          garage::clear_lcd_message();
+      - component.update: rf_raw_btn_1_sensor
+      - component.update: rf_raw_btn_2_sensor
+      - component.update: rf_raw_btn_3_sensor
+      - component.update: rf_raw_btn_4_sensor
+
+  - id: rf_send_btn_1
+    mode: restart
+    then:
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(1);
+                then:
+                  - lambda: |-
+                      garage::show_assigned_rf_for_button(1);
+                  - component.update: lcd_display
+                  - remote_transmitter.transmit_raw:
+                      code: !lambda |-
+                        return garage::button_rf_raw_timings(1);
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: rf_send_btn_2
+    mode: restart
+    then:
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(2);
+                then:
+                  - lambda: |-
+                      garage::show_assigned_rf_for_button(2);
+                  - component.update: lcd_display
+                  - remote_transmitter.transmit_raw:
+                      code: !lambda |-
+                        return garage::button_rf_raw_timings(2);
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: rf_send_btn_3
+    mode: restart
+    then:
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(3);
+                then:
+                  - lambda: |-
+                      garage::show_assigned_rf_for_button(3);
+                  - component.update: lcd_display
+                  - remote_transmitter.transmit_raw:
+                      code: !lambda |-
+                        return garage::button_rf_raw_timings(3);
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: rf_send_btn_4
+    mode: restart
+    then:
+      - if:
+          condition:
+            switch.is_on: rf_emulation_enabled
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_rf_enabled(4);
+                then:
+                  - lambda: |-
+                      garage::show_assigned_rf_for_button(4);
+                  - component.update: lcd_display
+                  - remote_transmitter.transmit_raw:
+                      code: !lambda |-
+                        return garage::button_rf_raw_timings(4);
+                      repeat:
+                        times: ${rf_repeat_times}
+                        wait_time: ${rf_repeat_wait}
+
+  - id: rf_test_btn_1
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_rf_enabled(1);
+          then:
+            - lambda: |-
+                garage::show_rf_test_result(1, true);
+            - component.update: lcd_display
+            - remote_transmitter.transmit_raw:
+                code: !lambda |-
+                  return garage::button_rf_raw_timings(1);
+                repeat:
+                  times: ${rf_repeat_times}
+                  wait_time: ${rf_repeat_wait}
+          else:
+            - lambda: |-
+                garage::show_rf_test_result(1, false);
+            - component.update: lcd_display
+
+  - id: rf_test_btn_2
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_rf_enabled(2);
+          then:
+            - lambda: |-
+                garage::show_rf_test_result(2, true);
+            - component.update: lcd_display
+            - remote_transmitter.transmit_raw:
+                code: !lambda |-
+                  return garage::button_rf_raw_timings(2);
+                repeat:
+                  times: ${rf_repeat_times}
+                  wait_time: ${rf_repeat_wait}
+          else:
+            - lambda: |-
+                garage::show_rf_test_result(2, false);
+            - component.update: lcd_display
+
+  - id: rf_test_btn_3
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_rf_enabled(3);
+          then:
+            - lambda: |-
+                garage::show_rf_test_result(3, true);
+            - component.update: lcd_display
+            - remote_transmitter.transmit_raw:
+                code: !lambda |-
+                  return garage::button_rf_raw_timings(3);
+                repeat:
+                  times: ${rf_repeat_times}
+                  wait_time: ${rf_repeat_wait}
+          else:
+            - lambda: |-
+                garage::show_rf_test_result(3, false);
+            - component.update: lcd_display
+
+  - id: rf_test_btn_4
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - if:
+          condition:
+            lambda: |-
+              return garage::button_rf_enabled(4);
+          then:
+            - lambda: |-
+                garage::show_rf_test_result(4, true);
+            - component.update: lcd_display
+            - remote_transmitter.transmit_raw:
+                code: !lambda |-
+                  return garage::button_rf_raw_timings(4);
+                repeat:
+                  times: ${rf_repeat_times}
+                  wait_time: ${rf_repeat_wait}
+          else:
+            - lambda: |-
+                garage::show_rf_test_result(4, false);
+            - component.update: lcd_display
+
+  - id: rf_assign_btn_1
+    mode: restart
+    then:
+      - lambda: |-
+          garage::on_button_long_action(1);
+      - component.update: rf_raw_btn_1_sensor
+      - component.update: lcd_display
+
+  - id: rf_assign_btn_2
+    mode: restart
+    then:
+      - lambda: |-
+          garage::on_button_long_action(2);
+      - component.update: rf_raw_btn_2_sensor
+      - component.update: lcd_display
+
+  - id: rf_assign_btn_3
+    mode: restart
+    then:
+      - lambda: |-
+          garage::on_button_long_action(3);
+      - component.update: rf_raw_btn_3_sensor
+      - component.update: lcd_display
+
+  - id: rf_assign_btn_4
+    mode: restart
+    then:
+      - lambda: |-
+          garage::on_button_long_action(4);
+      - component.update: rf_raw_btn_4_sensor
+      - component.update: lcd_display
+
+  - id: rf_toggle_receiver
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - if:
+          condition:
+            switch.is_on: rf_receiver_enabled
+          then:
+            - switch.turn_off: rf_receiver_enabled
+          else:
+            - switch.turn_on: rf_receiver_enabled

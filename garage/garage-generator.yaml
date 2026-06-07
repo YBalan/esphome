@@ -24,14 +24,6 @@ substitutions:
   gpio_uart_rx: "16"
   gpio_uart_tx: "17"
 
-  # 433 MHz ASK receiver/transmitter pins
-  gpio_rf_rx: "27"
-  gpio_rf_tx: "26"
-
-  # Servo PWM outputs (mirrored choke pair for stronger stop force)
-  gpio_servo_1: "12" #Left / Black
-  gpio_servo_2: "13" #Right / White
-
   # Environmental sensor input
   gpio_dht: "4"
 
@@ -47,44 +39,17 @@ substitutions:
   voltage_running_threshold: "200.0"
 
   # Action timing
-  servo_step_delay: 100ms
   motor_hours_update_interval: 30s
-
-  # Servo signal parameters
-  servo_pwm_frequency: "50 Hz"
-  servo_auto_detach_time: 800ms
-  servo_max_angle_deg: "270.0"
-  # DS3230 Pro 30kg 270 deg pulse range at 50 Hz: 500us..2500us
-  servo_min_level: "2.5%"
-  servo_max_level: "12.5%"
 
   # LCD and DHT refresh settings
   lcd_i2c_address: "0x27"
   lcd_update_interval: 5s
   dht_update_interval: 15s
 
-  # Servo angles in degrees. 
-  # Left servo (GPIO12)
-  servo_deg_start: "150.0"
-  servo_deg_end: "0.0"
-
-  # Right servo (GPIO13). 
-  servo_deg_start_m: "120.0"
-  servo_deg_end_m: "270.0"
-
-  # RF defaults
-  # Protocol timing and repeat behavior
-  rf_pulse_length: "350"
-  rf_repeat_times: "8"
-  rf_repeat_wait: 20ms
-
-  # Receiver decode parameters
-  rf_tolerance: 50%
-  rf_filter: 250us
-  rf_idle: 4ms
-
 packages:
   mqtt_feature: !include garage-generator-mqtt.yaml
+  rf_feature: !include garage-generator-rf.yaml
+  servos_feature: !include garage-generator-servos.yaml
 
 esphome:
   name: ${device_name}
@@ -96,10 +61,7 @@ esphome:
     then:
       - lambda: |-
           garage::wake_backlight();
-      - component.update: rf_code_btn_1_text
-      - component.update: rf_code_btn_2_text
-      - component.update: rf_code_btn_3_text
-      - component.update: rf_code_btn_4_text
+      - script.execute: rf_boot_sync
       - component.update: last_run_start_sensor
       - component.update: last_run_stop_sensor
       - component.update: current_run_duration_sensor
@@ -207,54 +169,6 @@ globals:
     type: float
     restore_value: yes
     initial_value: "0.25"
-  - id: rf_code_btn_1
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_code_btn_2
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_code_btn_3
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_code_btn_4
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_protocol_btn_1
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_protocol_btn_2
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_protocol_btn_3
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_protocol_btn_4
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_learning_mode
-    type: bool
-    restore_value: no
-    initial_value: "false"
-  - id: rf_pending_code
-    type: std::string
-    restore_value: no
-    initial_value: '""'
-  - id: rf_pending_protocol
-    type: int
-    restore_value: no
-    initial_value: "1"
   - id: display_backlight_until_ms
     type: uint32_t
     restore_value: no
@@ -275,50 +189,6 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
-  - id: servo_1_near_start
-    type: bool
-    restore_value: yes
-    initial_value: "true"
-  - id: servo_2_near_start
-    type: bool
-    restore_value: yes
-    initial_value: "true"
-  - id: servo_step_delay_ms
-    type: float
-    restore_value: yes
-    initial_value: "100.0"
-  - id: servo_1_current_deg
-    type: float
-    restore_value: no
-    initial_value: "${servo_deg_start}"
-  - id: servo_2_current_deg
-    type: float
-    restore_value: no
-    initial_value: "${servo_deg_start_m}"
-  - id: servo_1_target_deg_input_value
-    type: float
-    restore_value: yes
-    initial_value: "${servo_deg_start}"
-  - id: servo_2_target_deg_input_value
-    type: float
-    restore_value: yes
-    initial_value: "${servo_deg_start_m}"
-  - id: servo_1_start_deg
-    type: float
-    restore_value: yes
-    initial_value: "${servo_deg_start}"
-  - id: servo_2_start_deg
-    type: float
-    restore_value: yes
-    initial_value: "${servo_deg_start_m}"
-  - id: servo_1_stop_deg
-    type: float
-    restore_value: yes
-    initial_value: "${servo_deg_end}"
-  - id: servo_2_stop_deg
-    type: float
-    restore_value: yes
-    initial_value: "${servo_deg_end_m}"
   - id: lcd_line2_mode
     type: int
     restore_value: yes
@@ -339,55 +209,6 @@ uart:
 #   id: modbus_pzem
 #   uart_id: uart_pzem
 #   send_wait_time: 200ms
-
-remote_receiver:
-  pin:
-    number: ${gpio_rf_rx}
-    mode:
-      input: true
-  dump: []
-  tolerance: ${rf_tolerance}
-  filter: ${rf_filter}
-  idle: ${rf_idle}
-  buffer_size: 8kb
-  on_rc_switch:
-    then:
-      - if:
-          condition:
-            and:
-              - switch.is_on: rf_receiver_enabled
-              - lambda: |-
-                  return garage::on_rf_signal_received(x.code, x.protocol);
-          then:
-            - component.update: lcd_display
-
-remote_transmitter:
-  pin: ${gpio_rf_tx}
-  carrier_duty_percent: 100%
-  non_blocking: true
-
-output:
-  - platform: ledc
-    pin: ${gpio_servo_1}
-    id: pwm_servo_1
-    frequency: ${servo_pwm_frequency}
-  - platform: ledc
-    pin: ${gpio_servo_2}
-    id: pwm_servo_2
-    frequency: ${servo_pwm_frequency}
-
-servo:
-  # Two mirrored choke servos are used together to increase force when stopping.
-  - id: servo_1
-    output: pwm_servo_1
-    min_level: ${servo_min_level}
-    max_level: ${servo_max_level}
-    auto_detach_time: ${servo_auto_detach_time}
-  - id: servo_2
-    output: pwm_servo_2
-    min_level: ${servo_min_level}
-    max_level: ${servo_max_level}
-    auto_detach_time: ${servo_auto_detach_time}
 
 switch:
   # Relay 1: stop pulse output for the generator stop action.
@@ -435,36 +256,10 @@ switch:
     on_turn_off:
       - script.execute: publish_relay_states
   - platform: template
-    id: rf_emulation_enabled
-    name: ${friendly_name} Use RF
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-  - platform: template
     id: display_enabled
     name: ${friendly_name} Display Enabled
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-  - platform: template
-    id: rf_receiver_enabled
-    name: ${friendly_name} RF Receiver Enabled
-    icon: mdi:radio-tower
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    on_turn_on:
-      - lambda: |-
-          if (!garage::is_rf_learning_mode()) {
-            garage::enter_rf_learning_mode();
-          }
-      - component.update: lcd_display
-    on_turn_off:
-      - lambda: |-
-          if (garage::is_rf_learning_mode()) {
-            garage::leave_rf_learning_mode();
-            garage::wake_backlight();
-            garage::clear_lcd_message();
-          }
-      - component.update: lcd_display
   - platform: template
     id: mqtt_runtime_enabled
     name: ${friendly_name} MQTT Enabled
@@ -472,40 +267,6 @@ switch:
     entity_category: config
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-  - platform: template
-    id: use_servos_enabled
-    name: ${friendly_name} Use Servos
-    icon: mdi:engine
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-  - platform: template
-    id: use_servo_action_stop
-    name: ${friendly_name} Servo On Stop Action
-    icon: mdi:checkbox-marked-circle-outline
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-  - platform: template
-    id: use_servo_action_eco
-    name: ${friendly_name} Servo On Eco Action
-    icon: mdi:checkbox-marked-circle-outline
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-  - platform: template
-    id: use_servo_action_start
-    name: ${friendly_name} Servo On Start Action
-    icon: mdi:checkbox-marked-circle-outline
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-  - platform: template
-    id: use_servo_action_rollete
-    name: ${friendly_name} Servo On Rollete Action
-    icon: mdi:checkbox-marked-circle-outline
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
   - platform: template
     id: physical_buttons_enabled
     name: ${friendly_name} Physical Buttons Enabled
@@ -557,22 +318,6 @@ button:
           garage::reset_all_counters();
       - component.update: motor_hours
 
-  - platform: template
-    id: reset_rf_codes_btn
-    name: ${friendly_name} Reset RF Codes
-    icon: mdi:radio-tower-off
-    entity_category: config
-    on_press:
-      - lambda: |-
-          garage::set_button_rf_data(1, "", 1);
-          garage::set_button_rf_data(2, "", 1);
-          garage::set_button_rf_data(3, "", 1);
-          garage::set_button_rf_data(4, "", 1);
-      - component.update: rf_code_btn_1_text
-      - component.update: rf_code_btn_2_text
-      - component.update: rf_code_btn_3_text
-      - component.update: rf_code_btn_4_text
-
   # HA action parity for physical buttons
   - platform: template
     id: ha_btn_stop
@@ -586,7 +331,7 @@ button:
     name: ${friendly_name} Action Stop Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_1_long_action
+      - script.execute: rf_assign_btn_1
 
   - platform: template
     id: ha_btn_eco_toggle
@@ -600,7 +345,7 @@ button:
     name: ${friendly_name} Action Eco Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_2_long_action
+      - script.execute: rf_assign_btn_2
 
   - platform: template
     id: ha_btn_start
@@ -614,7 +359,7 @@ button:
     name: ${friendly_name} Action Start Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_3_long_action
+      - script.execute: rf_assign_btn_3
 
   - platform: template
     id: ha_btn_rollete
@@ -628,7 +373,7 @@ button:
     name: ${friendly_name} Action Rollete Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_4_long_action
+      - script.execute: rf_assign_btn_4
 
   - platform: template
     id: ha_btn_settings_short
@@ -643,91 +388,6 @@ button:
     icon: mdi:radio-tower
     on_press:
       - script.execute: button_5_long_action
-
-  - platform: template
-    id: ha_btn_run_servos
-    name: ${friendly_name} Run Servos
-    icon: mdi:sync
-    on_press:
-      - script.execute: run_servos_manual
-
-  - platform: template
-    id: ha_btn_servos_min
-    name: ${friendly_name} Servos To Start
-    icon: mdi:arrow-collapse-down
-    on_press:
-      - script.execute: servo_move_to_min
-
-  - platform: template
-    id: ha_btn_servos_stop
-    name: ${friendly_name} Servos To Stop
-    icon: mdi:arrow-collapse-up
-    on_press:
-      - script.execute: servo_move_to_end
-
-  - platform: template
-    id: ha_btn_move_servo_1_to_angle
-    name: ${friendly_name} Move Left Servo To Angle
-    icon: mdi:axis-z-rotate-clockwise
-    on_press:
-      - lambda: |-
-          garage::note_user_action();
-          id(servo_1_current_deg) = garage::clamp_servo_angle(
-              id(servo_1_target_deg_input_value),
-              ${servo_max_angle_deg});
-          id(servo_1_near_start) = garage::is_servo_near_start(
-              id(servo_1_current_deg),
-              id(servo_1_start_deg),
-              id(servo_1_stop_deg));
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - script.execute: servo_release_both
-
-  - platform: template
-    id: ha_btn_move_servo_2_to_angle
-    name: ${friendly_name} Move Right Servo To Angle
-    icon: mdi:axis-z-rotate-counterclockwise
-    on_press:
-      - lambda: |-
-          garage::note_user_action();
-          id(servo_2_current_deg) = garage::clamp_servo_angle(
-              id(servo_2_target_deg_input_value),
-              ${servo_max_angle_deg});
-          id(servo_2_near_start) = garage::is_servo_near_start(
-              id(servo_2_current_deg),
-              id(servo_2_start_deg),
-              id(servo_2_stop_deg));
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - script.execute: servo_release_both
-
-  - platform: template
-    id: ha_btn_save_values_as_start_position
-    name: ${friendly_name} Save Values As Start Position
-    icon: mdi:content-save-edit
-    entity_category: config
-    on_press:
-      - lambda: |-
-          garage::note_user_action();
-          garage::save_target_angles_as_start(${servo_max_angle_deg});
-      - component.update: servo_1_target_deg_input
-      - component.update: servo_2_target_deg_input
-      - component.update: servo_start_stop_values_sensor
-
-  - platform: template
-    id: ha_btn_save_values_as_stop_position
-    name: ${friendly_name} Save Values As Stop Position
-    icon: mdi:content-save-check
-    entity_category: config
-    on_press:
-      - lambda: |-
-          garage::note_user_action();
-          garage::save_target_angles_as_stop(${servo_max_angle_deg});
-      - component.update: servo_1_target_deg_input
-      - component.update: servo_2_target_deg_input
-      - component.update: servo_start_stop_values_sensor
 
 sensor:
   - platform: wifi_signal
@@ -824,147 +484,8 @@ text_sensor:
     update_interval: 60s
     lambda: |-
       return garage::current_run_duration_text(id(ha_time).now(), id(generator_running).state);
-  - platform: template
-    id: servo_start_stop_values_sensor
-    name: ${friendly_name} Servo Start Stop Values
-    icon: mdi:table-eye
-    entity_category: diagnostic
-    update_interval: never
-    lambda: |-
-      char buffer[96];
-      std::snprintf(
-          buffer,
-          sizeof(buffer),
-          "Stop: %.1f/%.1f ; Start: %.1f/%.1f",
-          id(servo_1_stop_deg),
-          id(servo_2_stop_deg),
-          id(servo_1_start_deg),
-          id(servo_2_start_deg));
-      return std::string(buffer);
-
-text:
-  - platform: template
-    id: rf_code_btn_1_text
-    name: ${friendly_name} RF Code Stop
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(1);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(1, x);
-      - component.update: rf_code_btn_1_text
-
-  - platform: template
-    id: rf_code_btn_2_text
-    name: ${friendly_name} RF Code Eco
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(2);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(2, x);
-      - component.update: rf_code_btn_2_text
-
-  - platform: template
-    id: rf_code_btn_3_text
-    name: ${friendly_name} RF Code Start
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(3);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(3, x);
-      - component.update: rf_code_btn_3_text
-
-  - platform: template
-    id: rf_code_btn_4_text
-    name: ${friendly_name} RF Code Rollete
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(4);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(4, x);
-      - component.update: rf_code_btn_4_text
 
 number:
-  - platform: template
-    id: servo_step_delay_input
-    name: ${friendly_name} Servo Step Delay
-    icon: mdi:speedometer
-    entity_category: config
-    mode: box
-    min_value: 10.0
-    max_value: 1000.0
-    step: 5.0
-    unit_of_measurement: ms
-    lambda: |-
-      return id(servo_step_delay_ms);
-    set_action:
-      - lambda: |-
-          if (!std::isfinite(x)) {
-            return;
-          }
-          if (x < 10.0f) {
-            x = 10.0f;
-          }
-          if (x > 1000.0f) {
-            x = 1000.0f;
-          }
-          id(servo_step_delay_ms) = x;
-
-  - platform: template
-    id: servo_1_target_deg_input
-    name: ${friendly_name} Left Servo Target Angle
-    icon: mdi:angle-acute
-    entity_category: config
-    mode: box
-    min_value: 0.0
-    max_value: ${servo_max_angle_deg}
-    step: 1.0
-    unit_of_measurement: deg
-    lambda: |-
-      return id(servo_1_target_deg_input_value);
-    set_action:
-      - lambda: |-
-          id(servo_1_target_deg_input_value) = garage::clamp_servo_angle(x, ${servo_max_angle_deg});
-
-  - platform: template
-    id: servo_2_target_deg_input
-    name: ${friendly_name} Right Servo Target Angle
-    icon: mdi:angle-acute
-    entity_category: config
-    mode: box
-    min_value: 0.0
-    max_value: ${servo_max_angle_deg}
-    step: 1.0
-    unit_of_measurement: deg
-    lambda: |-
-      return id(servo_2_target_deg_input_value);
-    set_action:
-      - lambda: |-
-          id(servo_2_target_deg_input_value) = garage::clamp_servo_angle(x, ${servo_max_angle_deg});
-
   - platform: template
     id: motor_hours_offset_input
     name: ${friendly_name} Motor Hours Offset
@@ -1088,7 +609,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_1_long_action
+                - script.execute: rf_assign_btn_1
 
   # Button 2: Eco mode.
   # Action: turn Relay 2 on and send learned RF if set.
@@ -1118,7 +639,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_2_long_action
+                - script.execute: rf_assign_btn_2
 
   # Button 3: Start generator.
   # Action: pulse Relay 3 and send learned RF if set.
@@ -1148,7 +669,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_3_long_action
+                - script.execute: rf_assign_btn_3
 
   # Button 4: Garage rollete.
   # Action: pulse Relay 4 and send learned RF if set.
@@ -1178,7 +699,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_4_long_action
+                - script.execute: rf_assign_btn_4
 
   # Button 5: Settings and display control.
   # Action: short press wakes LCD backlight, long press enters/exits RF learn mode.
@@ -1235,190 +756,6 @@ interval:
           garage::accumulate_runtime_tick(id(generator_running).state);
 
 script:
-  - id: run_servo_1_manual
-    mode: restart
-    then:
-      - lambda: |-
-          garage::note_user_action();
-      - if:
-          condition:
-            lambda: |-
-              return id(servo_1_near_start);
-          then:
-            - lambda: |-
-                garage::move_left_servo_to_angle(id(servo_1_stop_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_1
-                level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-          else:
-            - lambda: |-
-                garage::move_left_servo_to_angle(id(servo_1_start_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_1
-                level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - script.execute: servo_release_both
-
-  - id: run_servo_2_manual
-    mode: restart
-    then:
-      - lambda: |-
-          garage::note_user_action();
-      - if:
-          condition:
-            lambda: |-
-              return id(servo_2_near_start);
-          then:
-            - lambda: |-
-                garage::move_right_servo_to_angle(id(servo_2_stop_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_2
-                level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-          else:
-            - lambda: |-
-                garage::move_right_servo_to_angle(id(servo_2_start_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_2
-                level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - script.execute: servo_release_both
-
-  - id: run_servos_manual
-    mode: restart
-    then:
-      - lambda: |-
-          garage::note_user_action();
-      - script.execute: servo_move_to_start
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - script.execute: servo_sweep_to_stop
-      - script.execute: servo_release_both
-
-  - id: servo_move_to_start
-    mode: restart
-    then:
-      - lambda: |-
-          garage::move_left_servo_to_angle(id(servo_1_start_deg), ${servo_max_angle_deg});
-          garage::move_right_servo_to_angle(id(servo_2_start_deg), ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - script.execute: servo_release_both
-
-  - id: servo_move_to_end
-    mode: restart
-    then:
-      - lambda: |-
-          garage::move_left_servo_to_angle(id(servo_1_stop_deg), ${servo_max_angle_deg});
-          garage::move_right_servo_to_angle(id(servo_2_stop_deg), ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - script.execute: servo_release_both
-
-  - id: servo_move_to_min
-    mode: restart
-    then:
-      - script.execute: servo_move_to_start
-
-  - id: servo_sweep_to_stop
-    mode: restart
-    then:
-      - lambda: |-
-          garage::step_servos_toward_stop(1.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(2.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(3.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(4.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(5.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(6.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(7.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(8.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
-      - lambda: |-
-          garage::step_servos_toward_stop(1.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
-      - lambda: |-
-          id(servo_1_near_start) = garage::is_servo_near_start(id(servo_1_current_deg), id(servo_1_start_deg), id(servo_1_stop_deg));
-          id(servo_2_near_start) = garage::is_servo_near_start(id(servo_2_current_deg), id(servo_2_start_deg), id(servo_2_stop_deg));
-      - script.execute: servo_release_both
-
-  - id: servo_release_both
-    mode: restart
-    then:
-      - delay: ${servo_auto_detach_time}
-      - servo.detach: servo_1
-      - servo.detach: servo_2
-
   - id: relay_1_pulse
     mode: restart
     then:
@@ -1521,25 +858,7 @@ script:
               - switch.is_on: use_servo_action_stop
           then:
             - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
-            - if:
-                condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(1);
-                then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(1);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(1);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+      - script.execute: rf_send_btn_1
 
   - id: button_2_action
     mode: single
@@ -1554,25 +873,7 @@ script:
               - switch.is_on: use_servo_action_eco
           then:
             - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
-            - if:
-                condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(2);
-                then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(2);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(2);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+      - script.execute: rf_send_btn_2
 
   - id: button_3_action
     mode: single
@@ -1587,25 +888,7 @@ script:
               - switch.is_on: use_servo_action_start
           then:
             - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
-            - if:
-                condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(3);
-                then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(3);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(3);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+      - script.execute: rf_send_btn_3
 
   - id: button_4_action
     mode: single
@@ -1620,57 +903,7 @@ script:
               - switch.is_on: use_servo_action_rollete
           then:
             - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
-            - if:
-                condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(4);
-                then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(4);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(4);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
-
-  - id: button_1_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(1);
-      - component.update: rf_code_btn_1_text
-      - component.update: lcd_display
-
-  - id: button_2_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(2);
-      - component.update: rf_code_btn_2_text
-      - component.update: lcd_display
-
-  - id: button_3_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(3);
-      - component.update: rf_code_btn_3_text
-      - component.update: lcd_display
-
-  - id: button_4_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(4);
-      - component.update: rf_code_btn_4_text
-      - component.update: lcd_display
+      - script.execute: rf_send_btn_4
 
   - id: button_5_short_action
     mode: restart
@@ -1683,12 +916,4 @@ script:
   - id: button_5_long_action
     mode: restart
     then:
-      - lambda: |-
-          garage::note_user_action();
-      - if:
-          condition:
-            switch.is_on: rf_receiver_enabled
-          then:
-            - switch.turn_off: rf_receiver_enabled
-          else:
-            - switch.turn_on: rf_receiver_enabled
+      - script.execute: rf_toggle_receiver

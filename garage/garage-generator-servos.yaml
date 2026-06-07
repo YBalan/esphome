@@ -1,0 +1,477 @@
+substitutions:
+  # Servo PWM outputs (mirrored choke pair for stronger stop force)
+  gpio_servo_1: "12" #Left / Black
+  gpio_servo_2: "13" #Right / White
+
+  # Action timing
+  servo_step_delay: 100ms
+
+  # Servo signal parameters
+  servo_pwm_frequency: "50 Hz"
+  servo_auto_detach_time: 800ms
+  servo_max_angle_deg: "270.0"
+  # DS3230 Pro 30kg 270 deg pulse range at 50 Hz: 500us..2500us
+  servo_min_level: "2.5%"
+  servo_max_level: "12.5%"
+
+  # Servo angles in degrees.
+  # Left servo (GPIO12)
+  servo_deg_start: "150.0"
+  servo_deg_end: "0.0"
+
+  # Right servo (GPIO13).
+  servo_deg_start_m: "120.0"
+  servo_deg_end_m: "270.0"
+
+globals:
+  - id: servo_1_near_start
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: servo_2_near_start
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: servo_step_delay_ms
+    type: float
+    restore_value: yes
+    initial_value: "100.0"
+  - id: servo_1_current_deg
+    type: float
+    restore_value: no
+    initial_value: "${servo_deg_start}"
+  - id: servo_2_current_deg
+    type: float
+    restore_value: no
+    initial_value: "${servo_deg_start_m}"
+  - id: servo_1_target_deg_input_value
+    type: float
+    restore_value: yes
+    initial_value: "${servo_deg_start}"
+  - id: servo_2_target_deg_input_value
+    type: float
+    restore_value: yes
+    initial_value: "${servo_deg_start_m}"
+  - id: servo_1_start_deg
+    type: float
+    restore_value: yes
+    initial_value: "${servo_deg_start}"
+  - id: servo_2_start_deg
+    type: float
+    restore_value: yes
+    initial_value: "${servo_deg_start_m}"
+  - id: servo_1_stop_deg
+    type: float
+    restore_value: yes
+    initial_value: "${servo_deg_end}"
+  - id: servo_2_stop_deg
+    type: float
+    restore_value: yes
+    initial_value: "${servo_deg_end_m}"
+
+output:
+  - platform: ledc
+    pin: ${gpio_servo_1}
+    id: pwm_servo_1
+    frequency: ${servo_pwm_frequency}
+  - platform: ledc
+    pin: ${gpio_servo_2}
+    id: pwm_servo_2
+    frequency: ${servo_pwm_frequency}
+
+servo:
+  # Two mirrored choke servos are used together to increase force when stopping.
+  - id: servo_1
+    output: pwm_servo_1
+    min_level: ${servo_min_level}
+    max_level: ${servo_max_level}
+    auto_detach_time: ${servo_auto_detach_time}
+  - id: servo_2
+    output: pwm_servo_2
+    min_level: ${servo_min_level}
+    max_level: ${servo_max_level}
+    auto_detach_time: ${servo_auto_detach_time}
+
+switch:
+  - platform: template
+    id: use_servos_enabled
+    name: ${friendly_name} Use Servos
+    icon: mdi:engine
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: template
+    id: use_servo_action_stop
+    name: ${friendly_name} Servo On Stop Action
+    icon: mdi:checkbox-marked-circle-outline
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: template
+    id: use_servo_action_eco
+    name: ${friendly_name} Servo On Eco Action
+    icon: mdi:checkbox-marked-circle-outline
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    id: use_servo_action_start
+    name: ${friendly_name} Servo On Start Action
+    icon: mdi:checkbox-marked-circle-outline
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: template
+    id: use_servo_action_rollete
+    name: ${friendly_name} Servo On Rollete Action
+    icon: mdi:checkbox-marked-circle-outline
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+button:
+  - platform: template
+    id: ha_btn_run_servos
+    name: ${friendly_name} Run Servos
+    icon: mdi:sync
+    on_press:
+      - script.execute: run_servos_manual
+
+  - platform: template
+    id: ha_btn_servos_min
+    name: ${friendly_name} Servos To Start
+    icon: mdi:arrow-collapse-down
+    on_press:
+      - script.execute: servo_move_to_min
+
+  - platform: template
+    id: ha_btn_servos_stop
+    name: ${friendly_name} Servos To Stop
+    icon: mdi:arrow-collapse-up
+    on_press:
+      - script.execute: servo_move_to_end
+
+  - platform: template
+    id: ha_btn_move_servo_1_to_angle
+    name: ${friendly_name} Move Left Servo To Angle
+    icon: mdi:axis-z-rotate-clockwise
+    on_press:
+      - lambda: |-
+          garage::note_user_action();
+          id(servo_1_current_deg) = garage::clamp_servo_angle(
+              id(servo_1_target_deg_input_value),
+              ${servo_max_angle_deg});
+          id(servo_1_near_start) = garage::is_servo_near_start(
+              id(servo_1_current_deg),
+              id(servo_1_start_deg),
+              id(servo_1_stop_deg));
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - script.execute: servo_release_both
+
+  - platform: template
+    id: ha_btn_move_servo_2_to_angle
+    name: ${friendly_name} Move Right Servo To Angle
+    icon: mdi:axis-z-rotate-counterclockwise
+    on_press:
+      - lambda: |-
+          garage::note_user_action();
+          id(servo_2_current_deg) = garage::clamp_servo_angle(
+              id(servo_2_target_deg_input_value),
+              ${servo_max_angle_deg});
+          id(servo_2_near_start) = garage::is_servo_near_start(
+              id(servo_2_current_deg),
+              id(servo_2_start_deg),
+              id(servo_2_stop_deg));
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - script.execute: servo_release_both
+
+  - platform: template
+    id: ha_btn_save_values_as_start_position
+    name: ${friendly_name} Save Values As Start Position
+    icon: mdi:content-save-edit
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::note_user_action();
+          garage::save_target_angles_as_start(${servo_max_angle_deg});
+      - component.update: servo_1_target_deg_input
+      - component.update: servo_2_target_deg_input
+      - component.update: servo_start_stop_values_sensor
+
+  - platform: template
+    id: ha_btn_save_values_as_stop_position
+    name: ${friendly_name} Save Values As Stop Position
+    icon: mdi:content-save-check
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::note_user_action();
+          garage::save_target_angles_as_stop(${servo_max_angle_deg});
+      - component.update: servo_1_target_deg_input
+      - component.update: servo_2_target_deg_input
+      - component.update: servo_start_stop_values_sensor
+
+number:
+  - platform: template
+    id: servo_step_delay_input
+    name: ${friendly_name} Servo Step Delay
+    icon: mdi:speedometer
+    entity_category: config
+    mode: box
+    min_value: 10.0
+    max_value: 1000.0
+    step: 5.0
+    unit_of_measurement: ms
+    lambda: |-
+      return id(servo_step_delay_ms);
+    set_action:
+      - lambda: |-
+          if (!std::isfinite(x)) {
+            return;
+          }
+          if (x < 10.0f) {
+            x = 10.0f;
+          }
+          if (x > 1000.0f) {
+            x = 1000.0f;
+          }
+          id(servo_step_delay_ms) = x;
+
+  - platform: template
+    id: servo_1_target_deg_input
+    name: ${friendly_name} Left Servo Target Angle
+    icon: mdi:angle-acute
+    entity_category: config
+    mode: box
+    min_value: 0.0
+    max_value: ${servo_max_angle_deg}
+    step: 1.0
+    unit_of_measurement: deg
+    lambda: |-
+      return id(servo_1_target_deg_input_value);
+    set_action:
+      - lambda: |-
+          id(servo_1_target_deg_input_value) = garage::clamp_servo_angle(x, ${servo_max_angle_deg});
+
+  - platform: template
+    id: servo_2_target_deg_input
+    name: ${friendly_name} Right Servo Target Angle
+    icon: mdi:angle-acute
+    entity_category: config
+    mode: box
+    min_value: 0.0
+    max_value: ${servo_max_angle_deg}
+    step: 1.0
+    unit_of_measurement: deg
+    lambda: |-
+      return id(servo_2_target_deg_input_value);
+    set_action:
+      - lambda: |-
+          id(servo_2_target_deg_input_value) = garage::clamp_servo_angle(x, ${servo_max_angle_deg});
+
+text_sensor:
+  - platform: template
+    id: servo_start_stop_values_sensor
+    name: ${friendly_name} Servo Start Stop Values
+    icon: mdi:table-eye
+    entity_category: diagnostic
+    update_interval: never
+    lambda: |-
+      char buffer[96];
+      std::snprintf(
+          buffer,
+          sizeof(buffer),
+          "Stop: %.1f/%.1f ; Start: %.1f/%.1f",
+          id(servo_1_stop_deg),
+          id(servo_2_stop_deg),
+          id(servo_1_start_deg),
+          id(servo_2_start_deg));
+      return std::string(buffer);
+
+script:
+  - id: run_servo_1_manual
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - if:
+          condition:
+            lambda: |-
+              return id(servo_1_near_start);
+          then:
+            - lambda: |-
+                garage::move_left_servo_to_angle(id(servo_1_stop_deg), ${servo_max_angle_deg});
+            - servo.write:
+                id: servo_1
+                level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+          else:
+            - lambda: |-
+                garage::move_left_servo_to_angle(id(servo_1_start_deg), ${servo_max_angle_deg});
+            - servo.write:
+                id: servo_1
+                level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - script.execute: servo_release_both
+
+  - id: run_servo_2_manual
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - if:
+          condition:
+            lambda: |-
+              return id(servo_2_near_start);
+          then:
+            - lambda: |-
+                garage::move_right_servo_to_angle(id(servo_2_stop_deg), ${servo_max_angle_deg});
+            - servo.write:
+                id: servo_2
+                level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+          else:
+            - lambda: |-
+                garage::move_right_servo_to_angle(id(servo_2_start_deg), ${servo_max_angle_deg});
+            - servo.write:
+                id: servo_2
+                level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - script.execute: servo_release_both
+
+  - id: run_servos_manual
+    mode: restart
+    then:
+      - lambda: |-
+          garage::note_user_action();
+      - script.execute: servo_move_to_start
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - script.execute: servo_sweep_to_stop
+      - script.execute: servo_release_both
+
+  - id: servo_move_to_start
+    mode: restart
+    then:
+      - lambda: |-
+          garage::move_left_servo_to_angle(id(servo_1_start_deg), ${servo_max_angle_deg});
+          garage::move_right_servo_to_angle(id(servo_2_start_deg), ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - script.execute: servo_release_both
+
+  - id: servo_move_to_end
+    mode: restart
+    then:
+      - lambda: |-
+          garage::move_left_servo_to_angle(id(servo_1_stop_deg), ${servo_max_angle_deg});
+          garage::move_right_servo_to_angle(id(servo_2_stop_deg), ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - script.execute: servo_release_both
+
+  - id: servo_move_to_min
+    mode: restart
+    then:
+      - script.execute: servo_move_to_start
+
+  - id: servo_sweep_to_stop
+    mode: restart
+    then:
+      - lambda: |-
+          garage::step_servos_toward_stop(1.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(2.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(3.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(4.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(5.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(6.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(7.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(8.0f / 9.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
+      - lambda: |-
+          garage::step_servos_toward_stop(1.0f, ${servo_max_angle_deg});
+      - servo.write:
+          id: servo_1
+          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - servo.write:
+          id: servo_2
+          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1_near_start) = garage::is_servo_near_start(id(servo_1_current_deg), id(servo_1_start_deg), id(servo_1_stop_deg));
+          id(servo_2_near_start) = garage::is_servo_near_start(id(servo_2_current_deg), id(servo_2_start_deg), id(servo_2_stop_deg));
+      - script.execute: servo_release_both
+
+  - id: servo_release_both
+    mode: restart
+    then:
+      - delay: ${servo_auto_detach_time}
+      - servo.detach: servo_1
+      - servo.detach: servo_2
