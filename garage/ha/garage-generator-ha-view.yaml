@@ -152,20 +152,6 @@ sections:
                 name: Rollete
             show_header_toggle: false
             state_color: true
-      - square: false
-        type: grid
-        cards:
-          - type: entities
-            entities:
-              - entity: button.generator_generator_run_servos
-                name:
-                  type: entity
-              - entity: button.generator_generator_run_servo_1
-                name: Run Servo 1
-              - entity: button.generator_generator_run_servo_2
-                name: Run Servo 2
-                icon: ""
-        columns: 1
   - type: grid
     cards:
       - type: heading
@@ -327,16 +313,109 @@ sections:
             name: Start Timeout
           - entity: number.generator_generator_timeout_rollete
             name: Rollete Timeout
+  - type: grid
+    cards:
+      - type: heading
+        heading: Servos
+        heading_style: title
+      - square: false
+        type: grid
+        cards:
+          - type: entities
+            entities:
+              - entity: button.generator_generator_run_servos
+                name:
+                  type: entity
+              - entity: number.garage_generator_generator_servo_step_delay
+                name: Servo Speed
+              - entity: button.garage_generator_generator_servos_to_start
+                name:
+                  type: entity
+              - entity: button.garage_generator_generator_servos_to_stop
+                name:
+                  type: entity
+              - entity: number.garage_generator_generator_left_servo_target_angle
+                name:
+                  type: entity
+              - entity: button.garage_generator_generator_move_left_servo_to_angle
+                name:
+                  type: entity
+              - entity: number.garage_generator_generator_right_servo_target_angle
+                name:
+                  type: entity
+              - entity: button.garage_generator_generator_move_right_servo_to_angle
+                name:
+                  type: entity
+              - entity: >-
+                  button.garage_generator_generator_save_values_as_start_position
+                name:
+                  type: entity
+              - entity: button.garage_generator_generator_save_values_as_stop_position
+                name:
+                  type: entity
+              - entity: sensor.garage_generator_generator_servo_start_stop_values
+                icon: ""
+                name:
+                  type: entity
+        columns: 1
+  - type: grid
+    cards:
+      - type: heading
+        heading: RF Learned
+        heading_style: title
+        icon: mdi:radio-tower
+      - type: entities
+        title: RF
+        show_header_toggle: false
+        entities:
           - type: section
             label: Learned
-          - entity: text.generator_generator_rf_code_stop
+          - entity: button.garage_generator_generator_rf_test_stop
+            name:
+              type: entity
+          - entity: sensor.garage_generator_generator_rf_raw_stop
             name: RF Code Stop
-          - entity: text.generator_generator_rf_code_eco
+          - entity: button.garage_generator_generator_rf_test_eco
+            name:
+              type: entity
+          - entity: sensor.garage_generator_generator_rf_raw_eco
             name: RF Code Eco
-          - entity: text.generator_generator_rf_code_start
+          - entity: button.garage_generator_generator_rf_test_start
+            name:
+              type: entity
+          - entity: sensor.garage_generator_generator_rf_raw_start
             name: RF Code Start
-          - entity: text.generator_generator_rf_code_rollete
+          - entity: button.garage_generator_generator_rf_test_rollete
+            name:
+              type: entity
+          - entity: sensor.garage_generator_generator_rf_raw_rollete
             name: RF Code Rollete
+          - entity: button.garage_generator_generator_reset_rf_raw_stop
+            name:
+              type: entity
+          - entity: button.garage_generator_generator_reset_rf_raw_eco
+            name:
+              type: entity
+          - entity: button.garage_generator_generator_reset_rf_raw_start
+            name:
+              type: entity
+          - entity: button.garage_generator_generator_reset_rf_raw_rollete
+            name:
+              type: entity
+      - type: tile
+        entity: button.garage_generator_test_raw
+        features:
+          - type: button
+        grid_options:
+          columns: 12
+          rows: 2
+      - type: tile
+        entity: button.garage_generator_rollete_test_button
+        features:
+          - type: button
+        grid_options:
+          columns: 12
+          rows: 2
 cards: []
 path: garage
 icon: mdi:generator-stationary

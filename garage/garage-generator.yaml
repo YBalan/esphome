@@ -40,6 +40,7 @@ substitutions:
 
   # Action timing
   motor_hours_update_interval: 30s
+  relay_pulse_pre_delay: 1000ms
 
   # LCD and DHT refresh settings
   lcd_i2c_address: "0x27"
@@ -100,8 +101,8 @@ wifi:
 captive_portal:
 
 # Simple web server to change settings if already connected
-web_server:
-  port: 80
+#web_server:
+  #port: 80
 
 api: #For Home Assistant
   # Keep batching moderate to avoid large bursts of queued state updates.
@@ -761,95 +762,130 @@ script:
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(1);
+            switch.is_off: relay_1
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_1
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_1
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(1);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(1);
+                  - switch.turn_off: relay_1
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(1);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_1
                 else:
                   - switch.turn_on: relay_1
-          else:
-            - switch.turn_on: relay_1
-            - delay: !lambda |-
-                return garage::button_timeout_ms(1);
-            - switch.turn_off: relay_1
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(1);
+                  - switch.turn_off: relay_1
 
   - id: relay_2_pulse
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(2);
+            switch.is_off: relay_2
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_2
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_2
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(2);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(2);
+                  - switch.turn_off: relay_2
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(2);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_2
                 else:
                   - switch.turn_on: relay_2
-          else:
-            - switch.turn_on: relay_2
-            - delay: !lambda |-
-                return garage::button_timeout_ms(2);
-            - switch.turn_off: relay_2
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(2);
+                  - switch.turn_off: relay_2
 
   - id: relay_3_pulse
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(3);
+            switch.is_off: relay_3
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_3
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_3
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(3);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(3);
+                  - switch.turn_off: relay_3
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(3);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_3
                 else:
                   - switch.turn_on: relay_3
-          else:
-            - switch.turn_on: relay_3
-            - delay: !lambda |-
-                return garage::button_timeout_ms(3);
-            - switch.turn_off: relay_3
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(3);
+                  - switch.turn_off: relay_3
 
   - id: relay_4_pulse
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(4);
+            switch.is_off: relay_4
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_4
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_4
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(4);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(4);
+                  - switch.turn_off: relay_4
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(4);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_4
                 else:
                   - switch.turn_on: relay_4
-          else:
-            - switch.turn_on: relay_4
-            - delay: !lambda |-
-                return garage::button_timeout_ms(4);
-            - switch.turn_off: relay_4
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(4);
+                  - switch.turn_off: relay_4
 
   - id: button_1_action
     mode: single
     then:
       - lambda: |-
-          garage::note_user_action();          
-      - delay: 1000ms
+          garage::note_user_action(); 
       - script.execute: relay_1_pulse
       - if:
           condition:
@@ -857,6 +893,12 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_stop
           then:
+            - if:
+                condition:
+                  switch.is_off: relay_1
+                then:
+                  - switch.turn_on: relay_1
+                  - delay: ${relay_pulse_pre_delay}
             - script.execute: servo_sweep_to_stop
       - script.execute: rf_send_btn_1
 
@@ -872,6 +914,12 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_eco
           then:
+            - if:
+                condition:
+                  switch.is_off: relay_2
+                then:
+                  - switch.turn_on: relay_2
+                  - delay: ${relay_pulse_pre_delay}
             - script.execute: servo_sweep_to_stop
       - script.execute: rf_send_btn_2
 
@@ -887,6 +935,12 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_start
           then:
+            - if:
+                condition:
+                  switch.is_off: relay_3
+                then:
+                  - switch.turn_on: relay_3
+                  - delay: ${relay_pulse_pre_delay}
             - script.execute: servo_sweep_to_stop
       - script.execute: rf_send_btn_3
 
@@ -902,6 +956,12 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_rollete
           then:
+            - if:
+                condition:
+                  switch.is_off: relay_4
+                then:
+                  - switch.turn_on: relay_4
+                  - delay: ${relay_pulse_pre_delay}
             - script.execute: servo_sweep_to_stop
       - script.execute: rf_send_btn_4
 

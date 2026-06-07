@@ -1,6 +1,16 @@
 # Garage Generator Controller
 
-ESPHome configuration for an ESP32-based generator controller with power monitoring, mirrored choke servos, relay outputs, RF learn/transmit, LCD status, and Home Assistant integration.
+ESPHome configuration for an ESP32-based generator controller with power monitoring, relay outputs, RF learn/transmit, LCD status, Home Assistant integration, and a mirrored choke-servo pair built from two DS3230 Pro 30 kg 270 degree servos.
+
+## YAML layout
+
+The device config is intentionally split into focused package files:
+
+- `garage-generator.yaml`: base device identity, Wi-Fi/API/logger, globals, relays, physical and HA action buttons, core sensors, and high-level action scripts.
+- `garage-generator-rf.yaml`: RF receiver/transmitter pins and tuning, persisted raw RF storage, learn/test/reset buttons, RF raw text sensors, and RF send/assign scripts.
+- `garage-generator-servos.yaml`: servo pins and PWM parameters, servo switches/buttons/numbers, persisted servo positions, and servo movement scripts.
+- `garage-generator-mqtt.yaml`: broker settings plus explicit `cmd`, `tele`, and `stat` topics.
+- `garage_generator_logic.h`: shared runtime helpers used by the YAML lambdas.
 
 ## Screenshots
 
@@ -25,11 +35,12 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - Physical GPIO buttons are gated by `Physical Buttons Enabled` and default to OFF for safe bring-up.
 - RF learn/capture is accepted only when learn mode is active.
 - RF receive handling is controlled by `Generator RF Receiver Enabled` (OFF blocks capture handling to reduce noise).
-- RF code text entities publish once at boot, then only on real changes (manual set or learn assignment).
+- RF raw text sensors publish on boot and when a stored RF payload changes.
+- Each learned RF raw payload now has its own reset button in Home Assistant, in addition to the full `Reset RF Codes` action.
 - LCD update interval is slowed for lower runtime pressure.
 - LCD line 2 no longer rotates automatically; short Settings press cycles line 2 view (V/P <-> I/PF).
 - When fallback AP mode is active (captive portal), LCD line 2 shows `AP:<ssid>`.
-- API batching is intentionally limited (`batch_delay: 250ms`) to reduce burst pressure.
+- API queue sizing is tuned, while batch delay is left at the YAML/default behavior.
 - MQTT auto-published entities are disabled (`topic_prefix: null`, `discovery: false`); only explicit `cmd` and `tele` topics are used.
 - MQTT behavior is runtime-controlled from HA by `Generator MQTT Enabled` (no recompile required).
 - Servo manual controls are exposed as `Run Servos`, `Servos To Start`, `Servos To Stop`, `Move Left Servo To Angle`, and `Move Right Servo To Angle`.
@@ -38,6 +49,16 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - `Generator Servo Start Stop Values` is refreshed on boot and when `Save Values As Start Position` or `Save Values As Stop Position` is pressed.
 
 ## Hardware summary
+
+- ESP32 DevKit
+- PZEM-004T V3.0 on UART2
+- 4-channel active-low relay module
+- 433.92 MHz ASK pair: SYN480R receiver and FS1000A/SYN115-class transmitter
+- Two DS3230 Pro 30 kg 270 degree servos used as mirrored choke servos
+- Servo pulse range configured for DS3230 Pro 270 degree travel: 500us to 2500us at 50 Hz (`2.5%` to `12.5%`)
+- 16x2 LCD over PCF8574 I2C backpack
+- DHT22 sensor
+- Five physical buttons
 
 | Function | GPIO |
 | :--- | :--- |
@@ -80,6 +101,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 ### Config and operational entities
 
 - `Generator Use RF`
+- `Generator RF Receiver Enabled`
 - `Generator MQTT Enabled`
 - `Generator Use Servos`
 - `Generator Servo On <Action> Action` switches
@@ -88,6 +110,11 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - `Generator Motor Hours Offset`
 - `Generator Reset Motor Hours`
 - `Generator Reset All Counters`
+- `Generator Reset RF Codes`
+- `Generator Reset RF Raw Stop`
+- `Generator Reset RF Raw Eco`
+- `Generator Reset RF Raw Start`
+- `Generator Reset RF Raw Rollete`
 
 ### Runtime/diagnostic entities
 
@@ -101,7 +128,7 @@ ESPHome configuration for an ESP32-based generator controller with power monitor
 - `Generator Last Run Duration`
 - `Generator Current Run Duration`
 - `Generator Servo Start Stop Values` (`Stop: Left/Right ; Start: Left/Right`)
-- RF code text entities for Stop/Eco/Start/Rollete
+- RF raw text sensors for Stop/Eco/Start/Rollete
 - `Generator WiFi RSSI`
 
 ## MQTT contract
@@ -136,8 +163,9 @@ The device uses manual MQTT topics only.
 
 1. Enter learn mode from Settings long action (physical or HA action button).
 2. Send remote RF signal.
-3. Assign captured code by long action for button 1, 2, 3, or 4.
-4. Use RF action transmission occurs only when `Use RF` is ON and a code is assigned.
+3. Assign captured raw timing payload by long action for button 1, 2, 3, or 4.
+4. Use RF action transmission occurs only when `Use RF` is ON and a raw payload is assigned.
+5. Clear one stored payload with the matching `Reset RF Raw ...` button, or clear all four with `Reset RF Codes`.
 
 ## Operational notes from recent work
 
@@ -149,6 +177,9 @@ The device uses manual MQTT topics only.
 ## Files
 
 - Main config: [garage-generator.yaml](garage-generator.yaml)
+- RF package: [garage-generator-rf.yaml](garage-generator-rf.yaml)
+- Servo package: [garage-generator-servos.yaml](garage-generator-servos.yaml)
+- MQTT package: [garage-generator-mqtt.yaml](garage-generator-mqtt.yaml)
 - Runtime helper logic: [garage_generator_logic.h](garage_generator_logic.h)
 - Requirements/spec notes: [requirements.md](requirements.md)
 

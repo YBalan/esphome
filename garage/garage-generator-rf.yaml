@@ -282,6 +282,46 @@ button:
       - script.execute: rf_boot_sync
 
   - platform: template
+    id: reset_rf_raw_stop_btn
+    name: ${friendly_name} Reset RF Raw Stop
+    icon: mdi:playlist-remove
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::set_button_rf_raw_text(1, "");
+      - component.update: rf_raw_btn_1_sensor
+
+  - platform: template
+    id: reset_rf_raw_eco_btn
+    name: ${friendly_name} Reset RF Raw Eco
+    icon: mdi:playlist-remove
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::set_button_rf_raw_text(2, "");
+      - component.update: rf_raw_btn_2_sensor
+
+  - platform: template
+    id: reset_rf_raw_start_btn
+    name: ${friendly_name} Reset RF Raw Start
+    icon: mdi:playlist-remove
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::set_button_rf_raw_text(3, "");
+      - component.update: rf_raw_btn_3_sensor
+
+  - platform: template
+    id: reset_rf_raw_rollete_btn
+    name: ${friendly_name} Reset RF Raw Rollete
+    icon: mdi:playlist-remove
+    entity_category: config
+    on_press:
+      - lambda: |-
+          garage::set_button_rf_raw_text(4, "");
+      - component.update: rf_raw_btn_4_sensor
+
+  - platform: template
     id: ha_btn_rf_test_stop
     name: ${friendly_name} RF Test Stop
     icon: mdi:radio-tower

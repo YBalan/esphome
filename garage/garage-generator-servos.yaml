@@ -141,6 +141,8 @@ button:
     name: ${friendly_name} Servos To Start
     icon: mdi:arrow-collapse-down
     on_press:
+      - script.execute: ensure_relays_for_enabled_servo_actions
+      - script.wait: ensure_relays_for_enabled_servo_actions
       - script.execute: servo_move_to_min
 
   - platform: template
@@ -148,6 +150,8 @@ button:
     name: ${friendly_name} Servos To Stop
     icon: mdi:arrow-collapse-up
     on_press:
+      - script.execute: ensure_relays_for_enabled_servo_actions
+      - script.wait: ensure_relays_for_enabled_servo_actions
       - script.execute: servo_move_to_end
 
   - platform: template
@@ -164,6 +168,8 @@ button:
               id(servo_1_current_deg),
               id(servo_1_start_deg),
               id(servo_1_stop_deg));
+      - script.execute: ensure_relays_for_enabled_servo_actions
+      - script.wait: ensure_relays_for_enabled_servo_actions
       - servo.write:
           id: servo_1
           level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
@@ -183,6 +189,8 @@ button:
               id(servo_2_current_deg),
               id(servo_2_start_deg),
               id(servo_2_stop_deg));
+      - script.execute: ensure_relays_for_enabled_servo_actions
+      - script.wait: ensure_relays_for_enabled_servo_actions
       - servo.write:
           id: servo_2
           level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
@@ -292,11 +300,61 @@ text_sensor:
       return std::string(buffer);
 
 script:
+  - id: ensure_relays_for_enabled_servo_actions
+    mode: restart
+    then:
+      - if:
+          condition:
+            switch.is_on: use_servos_enabled
+          then:
+            - if:
+                condition:
+                  switch.is_on: use_servo_action_stop
+                then:
+                  - if:
+                      condition:
+                        switch.is_off: relay_1
+                      then:
+                        - switch.turn_on: relay_1
+                        - delay: ${relay_pulse_pre_delay}
+            - if:
+                condition:
+                  switch.is_on: use_servo_action_eco
+                then:
+                  - if:
+                      condition:
+                        switch.is_off: relay_2
+                      then:
+                        - switch.turn_on: relay_2
+                        - delay: ${relay_pulse_pre_delay}
+            - if:
+                condition:
+                  switch.is_on: use_servo_action_start
+                then:
+                  - if:
+                      condition:
+                        switch.is_off: relay_3
+                      then:
+                        - switch.turn_on: relay_3
+                        - delay: ${relay_pulse_pre_delay}
+            - if:
+                condition:
+                  switch.is_on: use_servo_action_rollete
+                then:
+                  - if:
+                      condition:
+                        switch.is_off: relay_4
+                      then:
+                        - switch.turn_on: relay_4
+                        - delay: ${relay_pulse_pre_delay}
+
   - id: run_servo_1_manual
     mode: restart
     then:
       - lambda: |-
           garage::note_user_action();
+      - script.execute: ensure_relays_for_enabled_servo_actions
+      - script.wait: ensure_relays_for_enabled_servo_actions
       - if:
           condition:
             lambda: |-
@@ -320,6 +378,8 @@ script:
     then:
       - lambda: |-
           garage::note_user_action();
+      - script.execute: ensure_relays_for_enabled_servo_actions
+      - script.wait: ensure_relays_for_enabled_servo_actions
       - if:
           condition:
             lambda: |-
@@ -343,6 +403,8 @@ script:
     then:
       - lambda: |-
           garage::note_user_action();
+      - script.execute: ensure_relays_for_enabled_servo_actions
+      - script.wait: ensure_relays_for_enabled_servo_actions
       - script.execute: servo_move_to_start
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - script.execute: servo_sweep_to_stop
