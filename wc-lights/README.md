@@ -32,7 +32,7 @@ An ESPHome-based smart lighting controller for WC and Bath rooms. Automatically 
 - **Visit statistics** — tracks visit count, time spent inside, last visit duration, and maximum visit duration per room; all values persist across reboots
 - **Endstop mode** — supports both NC and NO door switches, configurable per room from Home Assistant
 - **Reset counters** — hardware button (GPIO) and Home Assistant button to reset all visit counters
-- **Captive portal + Web server** — works without Wi-Fi; GPIO logic is fully independent of network connectivity
+- **Captive portal fallback** — web server is disabled by default; GPIO logic is fully independent of network connectivity
 - **OTA updates** — supports ESPHome OTA
 
 ---
@@ -53,8 +53,8 @@ An ESPHome-based smart lighting controller for WC and Bath rooms. Automatically 
 |--------|------|---------|
 | WC main light (MOSFET) | GPIO18 | — |
 | Bath main light (MOSFET) | GPIO19 | — |
-| WC door switch | GPIO16 | NC, pull-up |
-| Bath door switch | GPIO17 | NC, pull-up |
+| WC door switch | GPIO21 | NC, pull-up |
+| Bath door switch | GPIO22 | NC, pull-up |
 | RGB status strip data | GPIO23 | — |
 | Reset counters button | GPIO4 | active-low |
 
@@ -82,8 +82,8 @@ All settings are exposed via ESPHome substitutions in [`wc-lights.yaml`](wc-ligh
 |---|---|---|
 | `wc_light_pin` | GPIO18 | WC light MOSFET pin |
 | `bath_light_pin` | GPIO19 | Bath light MOSFET pin |
-| `wc_door_pin` | GPIO16 | WC door sensor pin |
-| `bath_door_pin` | GPIO17 | Bath door sensor pin |
+| `wc_door_pin` | GPIO21 | WC door sensor pin |
+| `bath_door_pin` | GPIO22 | Bath door sensor pin |
 | `rgb_strip_pin` | GPIO23 | RGB strip data pin |
 | `reset_counters_pin` | GPIO4 | Hardware counter reset button |
 | `wc_endstop_mode_default` | NC | WC switch mode (NC/NO) |

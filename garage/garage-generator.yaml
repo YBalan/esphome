@@ -2,6 +2,8 @@ substitutions:
   # Device identity in ESPHome/Home Assistant
   device_name: generator
   friendly_name: Generator
+  # Timezone
+  time_zone: "Europe/Kyiv"
 
   # Fallback AP credentials (used when normal WiFi is unavailable)
   ap_ssid: "AP Generator"
@@ -22,14 +24,6 @@ substitutions:
   gpio_uart_rx: "16"
   gpio_uart_tx: "17"
 
-  # 433 MHz ASK receiver/transmitter pins
-  gpio_rf_rx: "27"
-  gpio_rf_tx: "26"
-
-  # Servo PWM outputs (mirrored choke pair for stronger stop force)
-  gpio_servo_1: "12"
-  gpio_servo_2: "13"
-
   # Environmental sensor input
   gpio_dht: "4"
 
@@ -45,43 +39,18 @@ substitutions:
   voltage_running_threshold: "200.0"
 
   # Action timing
-  servo_step_delay: 250ms
   motor_hours_update_interval: 30s
-
-  # Servo signal parameters
-  servo_pwm_frequency: "50 Hz"
-  servo_auto_detach_time: 800ms
+  relay_pulse_pre_delay: 1000ms
 
   # LCD and DHT refresh settings
   lcd_i2c_address: "0x27"
   lcd_update_interval: 5s
   dht_update_interval: 15s
 
-  # Servo positions (0.00 .. 1.00)
-  # Choke servo A direction
-  servo_pos_start: "0.00"
-  servo_pos_q1: "0.25"
-  servo_pos_mid: "0.50"
-  servo_pos_q3: "0.75"
-  servo_pos_end: "1.00"
-
-  # Choke servo B mirrored direction (facing servo A)
-  servo_pos_start_m: "1.00"
-  servo_pos_q1_m: "0.75"
-  servo_pos_mid_m: "0.50"
-  servo_pos_q3_m: "0.25"
-  servo_pos_end_m: "0.00"
-
-  # RF defaults
-  # Protocol timing and repeat behavior
-  rf_pulse_length: "350"
-  rf_repeat_times: "8"
-  rf_repeat_wait: 20ms
-
-  # Receiver decode parameters
-  rf_tolerance: 50%
-  rf_filter: 250us
-  rf_idle: 4ms
+packages:
+  mqtt_feature: !include garage-generator-mqtt.yaml
+  rf_feature: !include garage-generator-rf.yaml
+  servos_feature: !include garage-generator-servos.yaml
 
 esphome:
   name: ${device_name}
@@ -93,15 +62,21 @@ esphome:
     then:
       - lambda: |-
           garage::wake_backlight();
-      - component.update: rf_code_btn_1_text
-      - component.update: rf_code_btn_2_text
-      - component.update: rf_code_btn_3_text
-      - component.update: rf_code_btn_4_text
+      - script.execute: rf_boot_sync
+      - component.update: last_run_start_sensor
+      - component.update: last_run_stop_sensor
+      - component.update: current_run_duration_sensor
+      - component.update: servo_start_stop_values_sensor
 
 esp32:
   board: esp32dev
   framework:
     type: esp-idf # Stable for BLE + WiFi coexistence
+    advanced:
+      minimum_chip_revision: "3.1"
+    sdkconfig_options:
+      # Add headroom for occasional heavy loop iterations under RF/network bursts.
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "15"
     
 ota:
   - platform: esphome
@@ -109,7 +84,7 @@ ota:
 # 1. Connection settings
 wifi:
   #ssid: !secret wifi_ssid
-  #password: !secret wifi_password
+  #password: !secret wifi_password 
   # Fallback access point if WiFi disappears
   ap:
     ssid: ${ap_ssid}
@@ -117,6 +92,10 @@ wifi:
     
   # Allow saving new credentials to flash memory
   fast_connect: true 
+   # Keep Wi-Fi radio fully awake to reduce random disconnects.
+  power_save_mode: NONE
+  # If reconnect logic stalls for too long, reboot the node to self-heal.
+  reboot_timeout: 1min
 
 # Enables the web interface when in AP mode
 captive_portal:
@@ -126,18 +105,23 @@ captive_portal:
   #port: 80
 
 api: #For Home Assistant
-  # Keep batching close to default to avoid large bursts of queued state updates.
-  #batch_delay: 100ms
-  # Prevent periodic reboots when HA is briefly unreachable.
-  #reboot_timeout: 0s
+  # Keep batching moderate to avoid large bursts of queued state updates.
+  #batch_delay: 250ms
+  # Allow short bursts when HA/network is briefly slow.
+  max_send_queue: 64
+  # Keep enough room for HA + temporary logger sessions.
+  max_connections: 5
+  # If API stays disconnected too long, reboot to self-heal WiFi/API stack.
+  reboot_timeout: 10min
 
 preferences:
   # Persist assigned RF codes quickly so they survive reboot/power cycles.
   flash_write_interval: 30s
 
 time:
-  - platform: homeassistant
+  - platform: sntp
     id: ha_time
+    timezone: ${time_zone}
 
 logger:
   level: INFO
@@ -154,11 +138,11 @@ globals:
     type: float
     restore_value: yes
     initial_value: "0.0"
-  - id: total_energy_kwh
-    type: float
+  - id: last_run_start_text_value
+    type: std::string
     restore_value: yes
-    initial_value: "0.0"
-  - id: last_run_timestamp
+    initial_value: '""'
+  - id: last_run_stop_text_value
     type: std::string
     restore_value: yes
     initial_value: '""'
@@ -186,54 +170,6 @@ globals:
     type: float
     restore_value: yes
     initial_value: "0.25"
-  - id: rf_code_btn_1
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_code_btn_2
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_code_btn_3
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_code_btn_4
-    type: std::string
-    restore_value: yes
-    initial_value: '""'
-    max_restore_data_length: 64
-  - id: rf_protocol_btn_1
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_protocol_btn_2
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_protocol_btn_3
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_protocol_btn_4
-    type: int
-    restore_value: yes
-    initial_value: "1"
-  - id: rf_learning_mode
-    type: bool
-    restore_value: no
-    initial_value: "false"
-  - id: rf_pending_code
-    type: std::string
-    restore_value: no
-    initial_value: '""'
-  - id: rf_pending_protocol
-    type: int
-    restore_value: no
-    initial_value: "1"
   - id: display_backlight_until_ms
     type: uint32_t
     restore_value: no
@@ -254,6 +190,10 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
+  - id: lcd_line2_mode
+    type: int
+    restore_value: yes
+    initial_value: "0"
 
 i2c:
   sda: ${gpio_i2c_sda}
@@ -266,53 +206,10 @@ uart:
   tx_pin: ${gpio_uart_tx}
   baud_rate: 9600
 
-modbus:
-  id: modbus_pzem
-  uart_id: uart_pzem
-  send_wait_time: 200ms
-
-remote_receiver:
-  pin:
-    number: ${gpio_rf_rx}
-    mode:
-      input: true
-  dump: []
-  tolerance: ${rf_tolerance}
-  filter: ${rf_filter}
-  idle: ${rf_idle}
-  buffer_size: 8kb
-  on_rc_switch:
-    then:
-      - if:
-          condition:
-            lambda: |-
-              return garage::on_rf_signal_received(x.code, x.protocol);
-          then:
-            - component.update: lcd_display
-
-remote_transmitter:
-  pin: ${gpio_rf_tx}
-  carrier_duty_percent: 100%
-  non_blocking: true
-
-output:
-  - platform: ledc
-    pin: ${gpio_servo_1}
-    id: pwm_servo_1
-    frequency: ${servo_pwm_frequency}
-  - platform: ledc
-    pin: ${gpio_servo_2}
-    id: pwm_servo_2
-    frequency: ${servo_pwm_frequency}
-
-servo:
-  # Two mirrored choke servos are used together to increase force when stopping.
-  - id: servo_1
-    output: pwm_servo_1
-    auto_detach_time: ${servo_auto_detach_time}
-  - id: servo_2
-    output: pwm_servo_2
-    auto_detach_time: ${servo_auto_detach_time}
+# modbus:
+#   id: modbus_pzem
+#   uart_id: uart_pzem
+#   send_wait_time: 200ms
 
 switch:
   # Relay 1: stop pulse output for the generator stop action.
@@ -322,6 +219,10 @@ switch:
     pin:
       number: ${gpio_relay_1}
       inverted: true
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   # Relay 2: eco mode output.
   - platform: gpio
     id: relay_2
@@ -329,6 +230,10 @@ switch:
     pin:
       number: ${gpio_relay_2}
       inverted: true
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   # Relay 3: start pulse output for the generator start action.
   - platform: gpio
     id: relay_3
@@ -336,6 +241,10 @@ switch:
     pin:
       number: ${gpio_relay_3}
       inverted: true
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   # Relay 4: rollete output used for the garage rollete action.
   - platform: gpio
     id: relay_4
@@ -343,50 +252,22 @@ switch:
     pin:
       number: ${gpio_relay_4}
       inverted: true
-  - platform: template
-    id: rf_emulation_enabled
-    name: ${friendly_name} Use RF
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
+    on_turn_on:
+      - script.execute: publish_relay_states
+    on_turn_off:
+      - script.execute: publish_relay_states
   - platform: template
     id: display_enabled
     name: ${friendly_name} Display Enabled
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
   - platform: template
-    id: use_servos_enabled
-    name: ${friendly_name} Use Servos
-    icon: mdi:engine
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_ON
-  - platform: template
-    id: use_servo_action_stop
-    name: ${friendly_name} Servo On Stop Action
-    icon: mdi:checkbox-marked-circle-outline
+    id: mqtt_runtime_enabled
+    name: ${friendly_name} MQTT Enabled
+    icon: mdi:mqtt
     entity_category: config
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
-  - platform: template
-    id: use_servo_action_eco
-    name: ${friendly_name} Servo On Eco Action
-    icon: mdi:checkbox-marked-circle-outline
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-  - platform: template
-    id: use_servo_action_start
-    name: ${friendly_name} Servo On Start Action
-    icon: mdi:checkbox-marked-circle-outline
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-  - platform: template
-    id: use_servo_action_rollete
-    name: ${friendly_name} Servo On Rollete Action
-    icon: mdi:checkbox-marked-circle-outline
-    entity_category: config
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
   - platform: template
     id: physical_buttons_enabled
     name: ${friendly_name} Physical Buttons Enabled
@@ -396,16 +277,16 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
 
 button:
-  # - platform: template
-  #   id: ha_btn_wifi_reset
-  #   name: ${friendly_name} WiFi Reset
-  #   icon: mdi:wifi-refresh
-  #   entity_category: diagnostic
-  #   on_press:
-  #     # Force WiFi reconnection without full device reboot.
-  #     - wifi.disable:
-  #     - delay: 2s
-  #     - wifi.enable:
+  - platform: template
+    id: ha_btn_wifi_reset
+    name: ${friendly_name} WiFi Reset
+    icon: mdi:wifi-refresh
+    entity_category: diagnostic
+    on_press:
+      # Force WiFi reconnection without full device reboot.
+      - wifi.disable:
+      - delay: 2s
+      - wifi.enable:
 
     # WiFi Reset Button
   - platform: factory_reset
@@ -429,16 +310,6 @@ button:
       - component.update: motor_hours
 
   - platform: template
-    id: reset_total_energy_counter_btn
-    name: ${friendly_name} Reset Total Energy
-    icon: mdi:lightning-bolt-circle
-    entity_category: config
-    on_press:
-      - lambda: |-
-          garage::reset_total_energy_counter();
-      - component.update: total_energy_counter
-
-  - platform: template
     id: reset_all_counters_btn
     name: ${friendly_name} Reset All Counters
     icon: mdi:restore
@@ -447,7 +318,6 @@ button:
       - lambda: |-
           garage::reset_all_counters();
       - component.update: motor_hours
-      - component.update: total_energy_counter
 
   # HA action parity for physical buttons
   - platform: template
@@ -462,7 +332,7 @@ button:
     name: ${friendly_name} Action Stop Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_1_long_action
+      - script.execute: rf_assign_btn_1
 
   - platform: template
     id: ha_btn_eco_toggle
@@ -476,7 +346,7 @@ button:
     name: ${friendly_name} Action Eco Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_2_long_action
+      - script.execute: rf_assign_btn_2
 
   - platform: template
     id: ha_btn_start
@@ -490,7 +360,7 @@ button:
     name: ${friendly_name} Action Start Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_3_long_action
+      - script.execute: rf_assign_btn_3
 
   - platform: template
     id: ha_btn_rollete
@@ -504,7 +374,7 @@ button:
     name: ${friendly_name} Action Rollete Long
     icon: mdi:gesture-tap-hold
     on_press:
-      - script.execute: button_4_long_action
+      - script.execute: rf_assign_btn_4
 
   - platform: template
     id: ha_btn_settings_short
@@ -527,8 +397,8 @@ sensor:
     update_interval: 30s
 
   - platform: pzemac
-    modbus_id: modbus_pzem
-    address: 0x01
+    #modbus_id: modbus_pzem
+    #address: 0x01
     update_interval: 2s
     voltage:
       id: pzem_voltage
@@ -567,7 +437,7 @@ sensor:
 
   - platform: dht
     pin: ${gpio_dht}
-    model: DHT11  # Temporary per request
+    model: DHT22
     update_interval: ${dht_update_interval}
     temperature:
       id: dht_temperature
@@ -585,26 +455,22 @@ sensor:
     update_interval: ${motor_hours_update_interval}
     lambda: |-
       return garage::motor_hours_total_value();  
-  - platform: template
-    id: total_energy_counter
-    name: ${friendly_name} Total Energy
-    unit_of_measurement: kWh
-    accuracy_decimals: 3
-    icon: mdi:lightning-bolt
-    device_class: energy
-    state_class: total_increasing
-    update_interval: 30s
-    lambda: |-
-      return garage::total_energy_counter_kwh();
 
 text_sensor:
   - platform: template
-    id: last_run_timestamp_sensor
-    name: ${friendly_name} Last Run Timestamp
+    id: last_run_start_sensor
+    name: ${friendly_name} Last Run Start
+    icon: mdi:clock-start
+    update_interval: 60s
+    lambda: |-
+      return garage::last_run_start_text();
+  - platform: template
+    id: last_run_stop_sensor
+    name: ${friendly_name} Last Run Stop
     icon: mdi:clock-end
     update_interval: 60s
     lambda: |-
-      return garage::last_run_timestamp_text();
+      return garage::last_run_stop_text();
   - platform: template
     id: last_run_duration_sensor
     name: ${friendly_name} Last Run Duration
@@ -619,71 +485,6 @@ text_sensor:
     update_interval: 60s
     lambda: |-
       return garage::current_run_duration_text(id(ha_time).now(), id(generator_running).state);
-
-text:
-  - platform: template
-    id: rf_code_btn_1_text
-    name: ${friendly_name} RF Code Stop
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(1);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(1, x);
-      - component.update: rf_code_btn_1_text
-
-  - platform: template
-    id: rf_code_btn_2_text
-    name: ${friendly_name} RF Code Eco
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(2);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(2, x);
-      - component.update: rf_code_btn_2_text
-
-  - platform: template
-    id: rf_code_btn_3_text
-    name: ${friendly_name} RF Code Start
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(3);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(3, x);
-      - component.update: rf_code_btn_3_text
-
-  - platform: template
-    id: rf_code_btn_4_text
-    name: ${friendly_name} RF Code Rollete
-    icon: mdi:radio-tower
-    entity_category: config
-    mode: text
-    min_length: 0
-    max_length: 64
-    update_interval: never
-    lambda: |-
-      return garage::button_rf_code_or_default(4);
-    set_action:
-      - lambda: |-
-          garage::set_button_rf_code_from_text(4, x);
-      - component.update: rf_code_btn_4_text
 
 number:
   - platform: template
@@ -772,11 +573,12 @@ binary_sensor:
     on_press:
       - lambda: |-
           garage::on_generator_run_started(id(ha_time).now());
+      - component.update: last_run_start_sensor
       - component.update: current_run_duration_sensor
     on_release:
       - lambda: |-
           garage::on_generator_run_stopped(id(ha_time).now());
-      - component.update: last_run_timestamp_sensor
+      - component.update: last_run_stop_sensor
       - component.update: last_run_duration_sensor
       - component.update: current_run_duration_sensor
 
@@ -808,7 +610,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_1_long_action
+                - script.execute: rf_assign_btn_1
 
   # Button 2: Eco mode.
   # Action: turn Relay 2 on and send learned RF if set.
@@ -838,7 +640,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_2_long_action
+                - script.execute: rf_assign_btn_2
 
   # Button 3: Start generator.
   # Action: pulse Relay 3 and send learned RF if set.
@@ -868,7 +670,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_3_long_action
+                - script.execute: rf_assign_btn_3
 
   # Button 4: Garage rollete.
   # Action: pulse Relay 4 and send learned RF if set.
@@ -898,7 +700,7 @@ binary_sensor:
               condition:
                 switch.is_on: physical_buttons_enabled
               then:
-                - script.execute: button_4_long_action
+                - script.execute: rf_assign_btn_4
 
   # Button 5: Settings and display control.
   # Action: short press wakes LCD backlight, long press enters/exits RF learn mode.
@@ -910,7 +712,8 @@ binary_sensor:
       number: ${gpio_btn_5}
       mode:
         input: true
-      inverted: false
+        #pullup: true
+      inverted: true
     on_multi_click:
       - timing:
           - ON for at most 350ms
@@ -951,166 +754,138 @@ interval:
     then:
       - lambda: |-
           garage::zero_pzem_sensors_if_stale();
-      - if:
-          condition:
-            binary_sensor.is_on: generator_running
-          then:
-            - lambda: |-
-                garage::accumulate_total_energy_kwh(id(pzem_power).state, 1.0f);
-                garage::accumulate_motor_hours(true, 1.0f);
+          garage::accumulate_runtime_tick(id(generator_running).state);
 
 script:
-  - id: servo_move_to_start
-    mode: restart
-    then:
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_start}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_start_m}
-
-  - id: servo_move_to_end
-    mode: restart
-    then:
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_end}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_end_m}
-
-  - id: servo_sweep_to_stop
-    mode: restart
-    then:
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_start}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_start_m}
-      - delay: ${servo_step_delay}
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_q1}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_q1_m}
-      - delay: ${servo_step_delay}
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_mid}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_mid_m}
-      - delay: ${servo_step_delay}
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_q3}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_q3_m}
-      - delay: ${servo_step_delay}
-      - servo.write:
-          id: servo_1
-          level: ${servo_pos_end}
-      - servo.write:
-          id: servo_2
-          level: ${servo_pos_end_m}
-
   - id: relay_1_pulse
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(1);
+            switch.is_off: relay_1
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_1
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_1
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(1);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(1);
+                  - switch.turn_off: relay_1
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(1);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_1
                 else:
                   - switch.turn_on: relay_1
-          else:
-            - switch.turn_on: relay_1
-            - delay: !lambda |-
-                return garage::button_timeout_ms(1);
-            - switch.turn_off: relay_1
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(1);
+                  - switch.turn_off: relay_1
 
   - id: relay_2_pulse
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(2);
+            switch.is_off: relay_2
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_2
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_2
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(2);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(2);
+                  - switch.turn_off: relay_2
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(2);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_2
                 else:
                   - switch.turn_on: relay_2
-          else:
-            - switch.turn_on: relay_2
-            - delay: !lambda |-
-                return garage::button_timeout_ms(2);
-            - switch.turn_off: relay_2
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(2);
+                  - switch.turn_off: relay_2
 
   - id: relay_3_pulse
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(3);
+            switch.is_off: relay_3
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_3
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_3
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(3);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(3);
+                  - switch.turn_off: relay_3
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(3);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_3
                 else:
                   - switch.turn_on: relay_3
-          else:
-            - switch.turn_on: relay_3
-            - delay: !lambda |-
-                return garage::button_timeout_ms(3);
-            - switch.turn_off: relay_3
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(3);
+                  - switch.turn_off: relay_3
 
   - id: relay_4_pulse
     mode: restart
     then:
       - if:
           condition:
-            lambda: |-
-              return garage::button_timeout_is_infinite(4);
+            switch.is_off: relay_4
           then:
-            # -1 means infinite timeout: treat action as relay toggle.
+            - switch.turn_on: relay_4
+            - delay: ${relay_pulse_pre_delay}
             - if:
                 condition:
-                  switch.is_on: relay_4
+                  lambda: |-
+                    return !garage::button_timeout_is_infinite(4);
                 then:
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(4);
+                  - switch.turn_off: relay_4
+          else:
+            - if:
+                condition:
+                  lambda: |-
+                    return garage::button_timeout_is_infinite(4);
+                then:
+                  # -1 means infinite timeout: treat action as relay toggle.
                   - switch.turn_off: relay_4
                 else:
                   - switch.turn_on: relay_4
-          else:
-            - switch.turn_on: relay_4
-            - delay: !lambda |-
-                return garage::button_timeout_ms(4);
-            - switch.turn_off: relay_4
+                  - delay: !lambda |-
+                      return garage::button_timeout_ms(4);
+                  - switch.turn_off: relay_4
 
   - id: button_1_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
-          garage::note_user_action();
+          garage::note_user_action(); 
       - script.execute: relay_1_pulse
       - if:
           condition:
@@ -1118,29 +893,17 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_stop
           then:
-            - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
             - if:
                 condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(1);
+                  switch.is_off: relay_1
                 then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(1);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(1);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+                  - switch.turn_on: relay_1
+                  - delay: ${relay_pulse_pre_delay}
+            - script.execute: servo_sweep_to_stop
+      - script.execute: rf_send_btn_1
 
   - id: button_2_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
           garage::note_user_action();
@@ -1151,29 +914,17 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_eco
           then:
-            - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
             - if:
                 condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(2);
+                  switch.is_off: relay_2
                 then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(2);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(2);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+                  - switch.turn_on: relay_2
+                  - delay: ${relay_pulse_pre_delay}
+            - script.execute: servo_sweep_to_stop
+      - script.execute: rf_send_btn_2
 
   - id: button_3_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
           garage::note_user_action();
@@ -1184,29 +935,17 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_start
           then:
-            - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
             - if:
                 condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(3);
+                  switch.is_off: relay_3
                 then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(3);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(3);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+                  - switch.turn_on: relay_3
+                  - delay: ${relay_pulse_pre_delay}
+            - script.execute: servo_sweep_to_stop
+      - script.execute: rf_send_btn_3
 
   - id: button_4_action
-    mode: restart
+    mode: single
     then:
       - lambda: |-
           garage::note_user_action();
@@ -1217,69 +956,24 @@ script:
               - switch.is_on: use_servos_enabled
               - switch.is_on: use_servo_action_rollete
           then:
-            - script.execute: servo_sweep_to_stop
-      - if:
-          condition:
-            switch.is_on: rf_emulation_enabled
-          then:
             - if:
                 condition:
-                  lambda: |-
-                    return garage::button_rf_enabled(4);
+                  switch.is_off: relay_4
                 then:
-                  - lambda: |-
-                      garage::show_assigned_rf_for_button(4);
-                  - component.update: lcd_display
-                  - remote_transmitter.transmit_rc_switch_raw:
-                      code: !lambda |-
-                        return garage::button_rf_code(4);
-                      protocol: 1
-                      repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
-
-  - id: button_1_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(1);
-      - component.update: rf_code_btn_1_text
-      - component.update: lcd_display
-
-  - id: button_2_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(2);
-      - component.update: rf_code_btn_2_text
-      - component.update: lcd_display
-
-  - id: button_3_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(3);
-      - component.update: rf_code_btn_3_text
-      - component.update: lcd_display
-
-  - id: button_4_long_action
-    mode: restart
-    then:
-      - lambda: |-
-          garage::on_button_long_action(4);
-      - component.update: rf_code_btn_4_text
-      - component.update: lcd_display
+                  - switch.turn_on: relay_4
+                  - delay: ${relay_pulse_pre_delay}
+            - script.execute: servo_sweep_to_stop
+      - script.execute: rf_send_btn_4
 
   - id: button_5_short_action
     mode: restart
     then:
       - lambda: |-
           garage::wake_backlight();
+          garage::cycle_lcd_line2_mode();
       - component.update: lcd_display
 
   - id: button_5_long_action
     mode: restart
     then:
-      - lambda: |-
-          garage::toggle_rf_learning_mode();
-      - component.update: lcd_display
+      - script.execute: rf_toggle_receiver

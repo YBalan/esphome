@@ -1,0 +1,154 @@
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  port: 1883
+  # Tolerate short RF/WiFi scheduler hiccups before declaring MQTT dead.
+  keepalive: 60s
+  # If MQTT cannot recover for a while, reboot to self-heal connectivity.
+  reboot_timeout: 2min
+  topic_prefix: null
+  discovery: false
+  on_connect:
+    then:
+      - if:
+          condition:
+            switch.is_on: mqtt_runtime_enabled
+          then:
+            - script.execute: publish_relay_states
+  on_message:
+    - topic: ${device_name}/cmd/wifi_reset
+      payload: "PRESS"
+      then:
+        - if:
+            condition:
+              switch.is_on: mqtt_runtime_enabled
+            then:
+              - wifi.disable:
+              - delay: 2s
+              - wifi.enable:
+    - topic: ${device_name}/cmd/restart
+      payload: "PRESS"
+      then:
+        - if:
+            condition:
+              switch.is_on: mqtt_runtime_enabled
+            then:
+              - button.press: restart_btn
+    - topic: ${device_name}/cmd/reset_rf_codes
+      payload: "PRESS"
+      then:
+        - if:
+            condition:
+              switch.is_on: mqtt_runtime_enabled
+            then:
+              - button.press: reset_rf_codes_btn
+    - topic: ${device_name}/cmd/start
+      payload: "PRESS"
+      then:
+        - if:
+            condition:
+              switch.is_on: mqtt_runtime_enabled
+            then:
+              - script.execute: button_3_action
+    - topic: ${device_name}/cmd/stop
+      payload: "PRESS"
+      then:
+        - if:
+            condition:
+              switch.is_on: mqtt_runtime_enabled
+            then:
+              - script.execute: button_1_action
+    - topic: ${device_name}/cmd/eco
+      payload: "PRESS"
+      then:
+        - if:
+            condition:
+              switch.is_on: mqtt_runtime_enabled
+            then:
+              - script.execute: button_2_action
+    - topic: ${device_name}/cmd/rollete
+      payload: "PRESS"
+      then:
+        - if:
+            condition:
+              switch.is_on: mqtt_runtime_enabled
+            then:
+              - script.execute: button_4_action
+
+interval:
+  - interval: 10s
+    then:
+      - if:
+          condition:
+            and:
+              - mqtt.connected:
+              - switch.is_on: mqtt_runtime_enabled
+          then:
+            - mqtt.publish:
+                topic: ${device_name}/tele/voltage
+                payload: !lambda |-
+                  const float v = id(pzem_voltage).state;
+                  if (!std::isfinite(v)) return std::string("nan");
+                  char buf[16];
+                  std::snprintf(buf, sizeof(buf), "%.1f", v);
+                  return std::string(buf);
+            - mqtt.publish:
+                topic: ${device_name}/tele/current
+                payload: !lambda |-
+                  const float c = id(pzem_current).state;
+                  if (!std::isfinite(c)) return std::string("nan");
+                  char buf[16];
+                  std::snprintf(buf, sizeof(buf), "%.2f", c);
+                  return std::string(buf);
+            - mqtt.publish:
+                topic: ${device_name}/tele/power
+                payload: !lambda |-
+                  const float p = id(pzem_power).state;
+                  if (!std::isfinite(p)) return std::string("nan");
+                  char buf[16];
+                  std::snprintf(buf, sizeof(buf), "%.0f", p);
+                  return std::string(buf);
+            - mqtt.publish:
+                topic: ${device_name}/tele/wifi_rssi
+                payload: !lambda |-
+                  const float rssi = id(wifi_rssi).state;
+                  if (!std::isfinite(rssi)) return std::string("nan");
+                  char buf[16];
+                  std::snprintf(buf, sizeof(buf), "%.0f", rssi);
+                  return std::string(buf);
+            - mqtt.publish:
+                topic: ${device_name}/tele/current_run_duration
+                payload: !lambda |-
+                  return garage::current_run_duration_text(id(ha_time).now(), id(generator_running).state);
+
+script:
+  - id: publish_relay_states
+    mode: restart
+    then:
+      - if:
+          condition:
+            and:
+              - mqtt.connected:
+              - switch.is_on: mqtt_runtime_enabled
+          then:
+            - mqtt.publish:
+                topic: ${device_name}/stat/stop
+                payload: !lambda |-
+                  return id(relay_1).state ? std::string("PRESSED") : std::string("RELEASED");
+                retain: true
+            - mqtt.publish:
+                topic: ${device_name}/stat/eco
+                payload: !lambda |-
+                  return id(relay_2).state ? std::string("PRESSED") : std::string("RELEASED");
+                retain: true
+            - mqtt.publish:
+                topic: ${device_name}/stat/start
+                payload: !lambda |-
+                  return id(relay_3).state ? std::string("PRESSED") : std::string("RELEASED");
+                retain: true
+            - mqtt.publish:
+                topic: ${device_name}/stat/rollete
+                payload: !lambda |-
+                  return id(relay_4).state ? std::string("PRESSED") : std::string("RELEASED");
+                retain: true
