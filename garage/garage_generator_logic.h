@@ -39,6 +39,7 @@ inline bool time_until_in_future(const uint32_t &timestamp_ms) {
 
 inline void wake_backlight(const uint32_t &timeout_ms = 60000U) {
   id(display_backlight_until_ms) = now_ms() + timeout_ms;
+  id(lcd_display).backlight();
 }
 
 inline bool is_backlight_active() {
