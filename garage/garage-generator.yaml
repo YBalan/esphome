@@ -899,7 +899,11 @@ script:
                 then:
                   - switch.turn_on: relay_1
                   - delay: ${relay_pulse_pre_delay}
+            - script.execute: servo_move_to_start
+            - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
             - script.execute: servo_sweep_to_stop
+            - script.wait: servo_sweep_to_stop
+            - switch.turn_off: relay_1
       - script.execute: rf_send_btn_1
 
   - id: button_2_action
