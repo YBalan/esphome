@@ -632,7 +632,10 @@ inline bool assign_pending_rf_to_button(const uint8_t button) {
   return true;
 }
 
-inline void show_assigned_rf_for_button(const uint8_t button) {
+inline void show_assigned_rf_for_button(
+    const uint8_t button,
+    const uint32_t repeat_times,
+    const uint32_t repeat_wait_ms) {
   if (!button_rf_enabled(button)) {
     return;
   }
@@ -640,7 +643,14 @@ inline void show_assigned_rf_for_button(const uint8_t button) {
   char line_1[17] = {0};
   char line_2[17] = {0};
   std::snprintf(line_1, sizeof(line_1), "Btn %u RAW Sent", button);
-  std::snprintf(line_2, sizeof(line_2), "%u raw items", static_cast<unsigned int>(button_rf_raw_item_count(button)));
+    const unsigned int raw_items = static_cast<unsigned int>(button_rf_raw_item_count(button));
+  std::snprintf(
+      line_2,
+      sizeof(line_2),
+      "N:%u R:%u W:%u",
+      raw_items,
+      static_cast<unsigned int>(repeat_times),
+      static_cast<unsigned int>(repeat_wait_ms));
 
   wake_backlight();
   set_lcd_message(line_1, line_2, 4000U);
