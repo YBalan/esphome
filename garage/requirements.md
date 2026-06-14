@@ -90,6 +90,9 @@ The following items are implemented and considered baseline behavior:
 - RF receive handling can be runtime-gated by `Generator RF Receiver Enabled` to reduce noise processing when not learning.
 - Learned RF raw payloads can be assigned to buttons 1 to 4 from the physical buttons or the matching Home Assistant long-press buttons.
 - Each assigned RF raw payload can be cleared independently with `Generator Reset RF Raw Stop/Eco/Start/Rollete`.
+- RF repeat behavior is configurable per action in HA:
+	- `Generator RF Repeat Times Stop/Eco/Start/Rollete`
+	- `Generator RF Repeat Wait Stop/Eco/Start/Rollete` (ms)
 - Use RF is a master enable for transmitting learned RF raw payloads; it does not block relay actions.
 - LCD shows DHT values on line 1 and keeps a manual line 2 page selected.
 - Short Settings press cycles LCD line 2 between voltage/power and current/power factor.
@@ -110,6 +113,7 @@ The following items are implemented and considered baseline behavior:
 - Current run duration is minute-based (`HH:MM`) and updates every 60 seconds.
 - If reboot happens during active run, current duration continues from the preserved run start timestamp.
 - Buttons 1 to 4 trigger their matching relay action and, when Use RF is enabled, send the stored RF raw payload if one exists.
+- During RF send, LCD temporary message shows action on line 1 and RF details on line 2 in format `N:<raw_items> R:<repeat_times> W:<repeat_wait_ms>`.
 - Each relay has configurable timeout in Home Assistant value fields; `-1` makes action behave as relay toggle.
 - MQTT command topics: `${device_name}/cmd/start`, `${device_name}/cmd/stop`, `${device_name}/cmd/eco`, `${device_name}/cmd/rollete`, `${device_name}/cmd/restart`, `${device_name}/cmd/wifi_reset`, `${device_name}/cmd/reset_rf_codes` (payload `PRESS`).
 - MQTT telemetry topics (10s publish interval): `${device_name}/tele/voltage`, `${device_name}/tele/current`, `${device_name}/tele/power`, `${device_name}/tele/wifi_rssi`, `${device_name}/tele/current_run_duration`.
@@ -162,6 +166,8 @@ Additional HA controls are exposed for convenience:
 - `Generator Physical Buttons Enabled` controls whether physical GPIO button presses can trigger actions.
 - `Generator Reset RF Codes` clears all stored RF raw payloads.
 - `Generator Reset RF Raw Stop`, `Eco`, `Start`, and `Rollete` clear individual stored RF raw payloads.
+- `Generator RF Repeat Times Stop`, `Eco`, `Start`, and `Rollete` configure RF repeat count per action.
+- `Generator RF Repeat Wait Stop`, `Eco`, `Start`, and `Rollete` configure RF repeat wait time (ms) per action.
 
 Additional HA entities are exposed for automation and analytics:
 
