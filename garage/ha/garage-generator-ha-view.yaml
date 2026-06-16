@@ -365,57 +365,62 @@ sections:
         heading_style: title
         icon: mdi:radio-tower
       - type: entities
-        title: RF
         show_header_toggle: false
         entities:
           - type: section
-            label: Learned
-          - entity: button.garage_generator_generator_rf_test_stop
-            name:
-              type: entity
-          - entity: sensor.garage_generator_generator_rf_raw_stop
-            name: RF Code Stop
-          - entity: button.garage_generator_generator_rf_test_eco
-            name:
-              type: entity
-          - entity: sensor.garage_generator_generator_rf_raw_eco
-            name: RF Code Eco
+            label: "------------- START ----------------"
           - entity: button.garage_generator_generator_rf_test_start
-            name:
-              type: entity
+            name: Test
           - entity: sensor.garage_generator_generator_rf_raw_start
-            name: RF Code Start
+            name: RAW
+          - entity: number.garage_generator_generator_rf_repeat_times_start
+            name: Repeat Times
+          - entity: number.garage_generator_generator_rf_repeat_wait_start
+            name: Repeat Wait
+          - type: section
+            label: "------------- STOP -----------------"
+          - entity: button.garage_generator_generator_rf_test_stop
+            name: Test
+          - entity: sensor.garage_generator_generator_rf_raw_stop
+            name: RAW
+          - entity: number.garage_generator_generator_rf_repeat_times_stop
+            name: Repeat Times
+          - entity: number.garage_generator_generator_rf_repeat_wait_stop
+            name: Repeat Wait
+          - type: section
+            label: "-------------- ECO -----------------"
+          - entity: button.garage_generator_generator_rf_test_eco
+            name: Test
+          - entity: sensor.garage_generator_generator_rf_raw_eco
+            name: RAW
+          - entity: number.garage_generator_generator_rf_repeat_times_eco
+            name: Repeat Times
+          - entity: number.garage_generator_generator_rf_repeat_wait_eco
+            name: Repeat Wait
+          - type: section
+            label: "------------ ROLLETE ---------------"
           - entity: button.garage_generator_generator_rf_test_rollete
+            name: Test
+          - entity: sensor.garage_generator_generator_rf_raw_rollete
+            name: RF RAW
+          - entity: number.garage_generator_generator_rf_repeat_times_rollete
+            name: Repeat Times
+          - entity: number.garage_generator_generator_rf_repeat_wait_rollete
+            name: Repeat Wait
+          - type: section
+            label: "------------- RESETS ---------------"
+          - entity: button.garage_generator_generator_reset_rf_raw_start
             name:
               type: entity
-          - entity: sensor.garage_generator_generator_rf_raw_rollete
-            name: RF Code Rollete
           - entity: button.garage_generator_generator_reset_rf_raw_stop
             name:
               type: entity
           - entity: button.garage_generator_generator_reset_rf_raw_eco
             name:
               type: entity
-          - entity: button.garage_generator_generator_reset_rf_raw_start
-            name:
-              type: entity
           - entity: button.garage_generator_generator_reset_rf_raw_rollete
             name:
               type: entity
-      - type: tile
-        entity: button.garage_generator_test_raw
-        features:
-          - type: button
-        grid_options:
-          columns: 12
-          rows: 2
-      - type: tile
-        entity: button.garage_generator_rollete_test_button
-        features:
-          - type: button
-        grid_options:
-          columns: 12
-          rows: 2
 cards: []
 path: garage
 icon: mdi:generator-stationary

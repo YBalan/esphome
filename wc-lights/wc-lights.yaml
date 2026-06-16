@@ -21,8 +21,8 @@ substitutions:
   # Door input settings (NO/NC per room)
   wc_endstop_mode_default: "NC"
   bath_endstop_mode_default: "NC"
-  door_debounce_on: 20ms
-  door_debounce_off: 20ms
+  door_debounce_on: 150ms
+  door_debounce_off: 150ms
 
   # MOSFET PWM dimming
   # Increase if you notice visible flicker, decrease if MOSFET gets warm.
@@ -73,8 +73,8 @@ esphome:
       - light.turn_on:
           id: status_strip
           effect: Rainbow
-          brightness: 50%
-      - delay: 20s
+          brightness: 20%
+      - delay: 5s
       - lambda: |-
           wc_lights::set_test_mode(id(status_strip_test_active), false);
       - light.turn_off:
@@ -229,8 +229,8 @@ script:
       - light.turn_on:
           id: status_strip
           effect: Rainbow
-          brightness: 100%
-      - delay: 60s
+          brightness: 35%
+      - delay: 15s
       - lambda: |-
           wc_lights::set_test_mode(id(status_strip_test_active), false);
       - script.execute: update_status_strip
@@ -462,7 +462,7 @@ light:
     effects:
       - addressable_rainbow:
           name: Rainbow
-          speed: 10
+          speed: 8
           width: 50
       - addressable_color_wipe:
           name: Color Wipe
@@ -492,21 +492,21 @@ light:
       - addressable_twinkle:
           name: Twinkle
           twinkle_probability: 5%
-          progress_interval: 4ms
+          progress_interval: 16ms
       - addressable_random_twinkle:
           name: Random Twinkle
           twinkle_probability: 5%
-          progress_interval: 32ms
+          progress_interval: 64ms
       - addressable_fireworks:
           name: Fireworks
-          update_interval: 32ms
-          spark_probability: 10%
+          update_interval: 64ms
+          spark_probability: 5%
           use_random_color: true
           fade_out_rate: 120
       - addressable_flicker:
           name: Flicker
-          update_interval: 16ms
-          intensity: 5%
+          update_interval: 33ms
+          intensity: 2%
       - strobe:
           name: Strobe
           colors:
@@ -515,19 +515,19 @@ light:
               red: 100%
               green: 100%
               blue: 100%
-              duration: 100ms
+              duration: 250ms
             - state: false
-              duration: 100ms
+              duration: 250ms
       - pulse:
           name: Pulse
-          transition_length: 1s
-          update_interval: 1s
-          min_brightness: 0%
-          max_brightness: 100%
+          transition_length: 2s
+          update_interval: 2s
+          min_brightness: 10%
+          max_brightness: 60%
       - flicker:
           name: Soft Flicker
-          alpha: 95%
-          intensity: 1.5%
+          alpha: 97%
+          intensity: 0.8%
 
 binary_sensor:
   - platform: gpio

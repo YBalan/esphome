@@ -6,8 +6,9 @@ substitutions:
   # RF defaults
   # Pulse length and repeat behavior from original remote profile.
   rf_pulse_length: "350"
-  rf_repeat_times: "10"
-  rf_repeat_wait: 15ms
+  rf_repeat_times_default: "16"
+  # Wait is configured in milliseconds via HA number entities.
+  rf_repeat_wait_default: "10"
 
   # Receiver decode parameters
   rf_tolerance: 50%
@@ -189,7 +190,7 @@ remote_receiver:
 remote_transmitter:
   pin: ${gpio_rf_tx}
   carrier_duty_percent: ${rf_carrier_duty_percent}
-  non_blocking: true
+  non_blocking: false
 
 switch:
   - platform: template
@@ -219,55 +220,164 @@ switch:
           }
       - component.update: lcd_display
 
+number:
+  - platform: template
+    id: rf_repeat_times_btn_1_number
+    name: ${friendly_name} RF Repeat Times Stop
+    icon: mdi:repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 50
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_times_default}
+
+  - platform: template
+    id: rf_repeat_wait_btn_1_number
+    name: ${friendly_name} RF Repeat Wait Stop
+    icon: mdi:timer-outline
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_wait_default}
+
+  - platform: template
+    id: rf_repeat_times_btn_2_number
+    name: ${friendly_name} RF Repeat Times Eco
+    icon: mdi:repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 50
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_times_default}
+
+  - platform: template
+    id: rf_repeat_wait_btn_2_number
+    name: ${friendly_name} RF Repeat Wait Eco
+    icon: mdi:timer-outline
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_wait_default}
+
+  - platform: template
+    id: rf_repeat_times_btn_3_number
+    name: ${friendly_name} RF Repeat Times Start
+    icon: mdi:repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 50
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_times_default}
+
+  - platform: template
+    id: rf_repeat_wait_btn_3_number
+    name: ${friendly_name} RF Repeat Wait Start
+    icon: mdi:timer-outline
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_wait_default}
+
+  - platform: template
+    id: rf_repeat_times_btn_4_number
+    name: ${friendly_name} RF Repeat Times Rollete
+    icon: mdi:repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 50
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_times_default}
+
+  - platform: template
+    id: rf_repeat_wait_btn_4_number
+    name: ${friendly_name} RF Repeat Wait Rollete
+    icon: mdi:timer-outline
+    unit_of_measurement: ms
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 1
+    max_value: 100
+    step: 1
+    mode: box
+    initial_value: ${rf_repeat_wait_default}
+
 button:
-  - platform: template
-    name: "Test (Raw)"
-    icon: "mdi:engine-start"
-    on_press:
-      - remote_transmitter.transmit_raw:
-          code: [
-            1248, -480, 382, -1376, 1262, -459, 407, -1361, 407, -1361, 
-            1261, -458, 409, -1359, 1263, -456, 1266, -454, 1264, -455, 
-            410, -1358, 401, -1380, 389, -1377, 392, -1376, 1246, -473, 
-            392, -1378, 392, -1373, 1251, -468, 396, -1372, 396, -1372, 
-            398, -1370, 398, -1369, 401, -1366, 1256, -463, 403
-          ]
-          repeat:
-            times: 10
-            wait_time: 15ms
-  - platform: template
-    name: "Rollete Test Button"
-    icon: "mdi:window-shutter"
-    on_press:
-      - remote_transmitter.transmit_raw:
-          # This code includes the Sync Preamble, the Gap, and the Data Packet
-          code: [
-            # Preamble (Sync)
-            379, -442, 377, -443, 379, -442, 378, -443, 378, -442, 
-            378, -443, 378, -442, 378, -442, 379, -443, 378, -441, 
-            379, -442, 379, 
-            # Long Gap
-            -4173, 
-            # Data Packet
-            788, -444, 787, -443, 787, -444, 787, -443, 380, -852, 
-            782, -456, 774, -456, 781, -467, 779, -444, 787, -445, 
-            784, -446, 378, -852, 379, -853, 379, -852, 379, -850, 
-            381, -868, 786, -443, 787, -453, 368, -855, 786, -444, 
-            787, -445, 785, -446, 785, -445, 785, -464, 377, -853, 
-            785, -446, 378, -852, 379, -852, 378, -853, 378, -852, 
-            380, -850, 381, -868, 379, -857, 368, -856, 788, -444, 
-            787, -445, 372, -858, 380, -851, 379, -853, 786, -459, 
-            787, -445, 786, -444, 379, -851, 381, -850, 381, -850, 
-            787, -445, 786, -445, 786, -461, 379, -852, 786, -445, 
-            379, -852, 786, -445, 786, -443, 380, -851, 381, -851, 
-            379, -867, 381, -851, 786, -446, 379, -852, 785, -446, 
-            378, -850, 788, -443, 788, -444, 786, -460, 379, -850, 
-            380, -852, 379, -852, 786, -443, 788, -445, 785, -445, 
-            378, -853, 786
-          ]
-          repeat:
-            times: 10
-            wait_time: 10ms
+  # - platform: template
+  #   name: "Test (Raw)"
+  #   icon: "mdi:engine-start"
+  #   on_press:
+  #     - remote_transmitter.transmit_raw:
+  #         code: [
+  #           1248, -480, 382, -1376, 1262, -459, 407, -1361, 407, -1361, 
+  #           1261, -458, 409, -1359, 1263, -456, 1266, -454, 1264, -455, 
+  #           410, -1358, 401, -1380, 389, -1377, 392, -1376, 1246, -473, 
+  #           392, -1378, 392, -1373, 1251, -468, 396, -1372, 396, -1372, 
+  #           398, -1370, 398, -1369, 401, -1366, 1256, -463, 403
+  #         ]
+  #         repeat:
+  #           times: 10
+  #           wait_time: 15ms
+  # - platform: template
+  #   name: "Rollete Test Button"
+  #   icon: "mdi:window-shutter"
+  #   on_press:
+  #     - remote_transmitter.transmit_raw:
+  #         # This code includes the Sync Preamble, the Gap, and the Data Packet
+  #         code: [
+  #           # Preamble (Sync)
+  #           379, -442, 377, -443, 379, -442, 378, -443, 378, -442, 
+  #           378, -443, 378, -442, 378, -442, 379, -443, 378, -441, 
+  #           379, -442, 379, 
+  #           # Long Gap
+  #           -4173, 
+  #           # Data Packet
+  #           788, -444, 787, -443, 787, -444, 787, -443, 380, -852, 
+  #           782, -456, 774, -456, 781, -467, 779, -444, 787, -445, 
+  #           784, -446, 378, -852, 379, -853, 379, -852, 379, -850, 
+  #           381, -868, 786, -443, 787, -453, 368, -855, 786, -444, 
+  #           787, -445, 785, -446, 785, -445, 785, -464, 377, -853, 
+  #           785, -446, 378, -852, 379, -852, 378, -853, 378, -852, 
+  #           380, -850, 381, -868, 379, -857, 368, -856, 788, -444, 
+  #           787, -445, 372, -858, 380, -851, 379, -853, 786, -459, 
+  #           787, -445, 786, -444, 379, -851, 381, -850, 381, -850, 
+  #           787, -445, 786, -445, 786, -461, 379, -852, 786, -445, 
+  #           379, -852, 786, -445, 786, -443, 380, -851, 381, -851, 
+  #           379, -867, 381, -851, 786, -446, 379, -852, 785, -446, 
+  #           378, -850, 788, -443, 788, -444, 786, -460, 379, -850, 
+  #           380, -852, 379, -852, 786, -443, 788, -445, 785, -445, 
+  #           378, -853, 786
+  #         ]
+  #         repeat:
+  #           times: 10
+  #           wait_time: 10ms
   - platform: template
     id: reset_rf_codes_btn
     name: ${friendly_name} Reset RF Codes
@@ -440,14 +550,19 @@ script:
                     return garage::button_rf_enabled(1);
                 then:
                   - lambda: |-
-                      garage::show_assigned_rf_for_button(1);
+                      garage::show_assigned_rf_for_button(
+                          1,
+                          (uint32_t) id(rf_repeat_times_btn_1_number).state,
+                          (uint32_t) id(rf_repeat_wait_btn_1_number).state);
                   - component.update: lcd_display
                   - remote_transmitter.transmit_raw:
                       code: !lambda |-
                         return garage::button_rf_raw_timings(1);
                       repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+                        times: !lambda |-
+                          return (uint32_t) id(rf_repeat_times_btn_1_number).state;
+                        wait_time: !lambda |-
+                          return (uint32_t) id(rf_repeat_wait_btn_1_number).state;
 
   - id: rf_send_btn_2
     mode: restart
@@ -462,14 +577,19 @@ script:
                     return garage::button_rf_enabled(2);
                 then:
                   - lambda: |-
-                      garage::show_assigned_rf_for_button(2);
+                      garage::show_assigned_rf_for_button(
+                          2,
+                          (uint32_t) id(rf_repeat_times_btn_2_number).state,
+                          (uint32_t) id(rf_repeat_wait_btn_2_number).state);
                   - component.update: lcd_display
                   - remote_transmitter.transmit_raw:
                       code: !lambda |-
                         return garage::button_rf_raw_timings(2);
                       repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+                        times: !lambda |-
+                          return (uint32_t) id(rf_repeat_times_btn_2_number).state;
+                        wait_time: !lambda |-
+                          return (uint32_t) id(rf_repeat_wait_btn_2_number).state;
 
   - id: rf_send_btn_3
     mode: restart
@@ -484,14 +604,19 @@ script:
                     return garage::button_rf_enabled(3);
                 then:
                   - lambda: |-
-                      garage::show_assigned_rf_for_button(3);
+                      garage::show_assigned_rf_for_button(
+                          3,
+                          (uint32_t) id(rf_repeat_times_btn_3_number).state,
+                          (uint32_t) id(rf_repeat_wait_btn_3_number).state);
                   - component.update: lcd_display
                   - remote_transmitter.transmit_raw:
                       code: !lambda |-
                         return garage::button_rf_raw_timings(3);
                       repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+                        times: !lambda |-
+                          return (uint32_t) id(rf_repeat_times_btn_3_number).state;
+                        wait_time: !lambda |-
+                          return (uint32_t) id(rf_repeat_wait_btn_3_number).state;
 
   - id: rf_send_btn_4
     mode: restart
@@ -506,14 +631,19 @@ script:
                     return garage::button_rf_enabled(4);
                 then:
                   - lambda: |-
-                      garage::show_assigned_rf_for_button(4);
+                      garage::show_assigned_rf_for_button(
+                          4,
+                          (uint32_t) id(rf_repeat_times_btn_4_number).state,
+                          (uint32_t) id(rf_repeat_wait_btn_4_number).state);
                   - component.update: lcd_display
                   - remote_transmitter.transmit_raw:
                       code: !lambda |-
                         return garage::button_rf_raw_timings(4);
                       repeat:
-                        times: ${rf_repeat_times}
-                        wait_time: ${rf_repeat_wait}
+                        times: !lambda |-
+                          return (uint32_t) id(rf_repeat_times_btn_4_number).state;
+                        wait_time: !lambda |-
+                          return (uint32_t) id(rf_repeat_wait_btn_4_number).state;
 
   - id: rf_test_btn_1
     mode: restart
@@ -532,8 +662,10 @@ script:
                 code: !lambda |-
                   return garage::button_rf_raw_timings(1);
                 repeat:
-                  times: ${rf_repeat_times}
-                  wait_time: ${rf_repeat_wait}
+                  times: !lambda |-
+                    return (uint32_t) id(rf_repeat_times_btn_1_number).state;
+                  wait_time: !lambda |-
+                    return (uint32_t) id(rf_repeat_wait_btn_1_number).state;
           else:
             - lambda: |-
                 garage::show_rf_test_result(1, false);
@@ -556,8 +688,10 @@ script:
                 code: !lambda |-
                   return garage::button_rf_raw_timings(2);
                 repeat:
-                  times: ${rf_repeat_times}
-                  wait_time: ${rf_repeat_wait}
+                  times: !lambda |-
+                    return (uint32_t) id(rf_repeat_times_btn_2_number).state;
+                  wait_time: !lambda |-
+                    return (uint32_t) id(rf_repeat_wait_btn_2_number).state;
           else:
             - lambda: |-
                 garage::show_rf_test_result(2, false);
@@ -580,8 +714,10 @@ script:
                 code: !lambda |-
                   return garage::button_rf_raw_timings(3);
                 repeat:
-                  times: ${rf_repeat_times}
-                  wait_time: ${rf_repeat_wait}
+                  times: !lambda |-
+                    return (uint32_t) id(rf_repeat_times_btn_3_number).state;
+                  wait_time: !lambda |-
+                    return (uint32_t) id(rf_repeat_wait_btn_3_number).state;
           else:
             - lambda: |-
                 garage::show_rf_test_result(3, false);
@@ -604,8 +740,10 @@ script:
                 code: !lambda |-
                   return garage::button_rf_raw_timings(4);
                 repeat:
-                  times: ${rf_repeat_times}
-                  wait_time: ${rf_repeat_wait}
+                  times: !lambda |-
+                    return (uint32_t) id(rf_repeat_times_btn_4_number).state;
+                  wait_time: !lambda |-
+                    return (uint32_t) id(rf_repeat_wait_btn_4_number).state;
           else:
             - lambda: |-
                 garage::show_rf_test_result(4, false);

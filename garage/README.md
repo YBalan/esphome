@@ -37,9 +37,11 @@ The device config is intentionally split into focused package files:
 - RF receive handling is controlled by `Generator RF Receiver Enabled` (OFF blocks capture handling to reduce noise).
 - RF raw text sensors publish on boot and when a stored RF payload changes.
 - Each learned RF raw payload now has its own reset button in Home Assistant, in addition to the full `Reset RF Codes` action.
+- RF send repeat behavior is configurable per action in HA via `RF Repeat Times ...` and `RF Repeat Wait ...` number entities.
 - LCD update interval is slowed for lower runtime pressure.
 - LCD line 2 no longer rotates automatically; short Settings press cycles line 2 view (V/P <-> I/PF).
 - When fallback AP mode is active (captive portal), LCD line 2 shows `AP:<ssid>`.
+- During RF send, LCD temporary message line 2 shows RF send details as `N:<raw_items> R:<repeat_times> W:<repeat_wait_ms>`.
 - API queue sizing is tuned, while batch delay is left at the YAML/default behavior.
 - MQTT auto-published entities are disabled (`topic_prefix: null`, `discovery: false`); only explicit `cmd` and `tele` topics are used.
 - MQTT behavior is runtime-controlled from HA by `Generator MQTT Enabled` (no recompile required).
@@ -115,6 +117,14 @@ The device config is intentionally split into focused package files:
 - `Generator Reset RF Raw Eco`
 - `Generator Reset RF Raw Start`
 - `Generator Reset RF Raw Rollete`
+- `Generator RF Repeat Times Stop`
+- `Generator RF Repeat Times Eco`
+- `Generator RF Repeat Times Start`
+- `Generator RF Repeat Times Rollete`
+- `Generator RF Repeat Wait Stop`
+- `Generator RF Repeat Wait Eco`
+- `Generator RF Repeat Wait Start`
+- `Generator RF Repeat Wait Rollete`
 
 ### Runtime/diagnostic entities
 
