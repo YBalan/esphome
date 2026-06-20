@@ -12,6 +12,10 @@ The device config is intentionally split into focused package files:
 - `garage-generator-mqtt.yaml`: broker settings plus explicit `cmd`, `tele`, and `stat` topics.
 - `garage_generator_logic.h`: shared runtime helpers used by the YAML lambdas.
 
+## Video
+
+[![Garage Generator demo](https://img.youtube.com/vi/_yVp8V9mzK4/0.jpg)](https://youtu.be/_yVp8V9mzK4)
+
 ## Screenshots
 
 ![Garage Generator screenshot 1](images/Screenshot%202026-06-05%20175842.png)
