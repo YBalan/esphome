@@ -2,6 +2,8 @@
 
 ESPHome configuration for an ESP32-based generator controller with power monitoring, relay outputs, RF learn/transmit, LCD status, Home Assistant integration, and a mirrored choke-servo pair built from two DS3230 Pro 30 kg 270 degree servos.
 
+Project location in this repository: `garage/generator/`.
+
 ## YAML layout
 
 The device config is intentionally split into focused package files:
