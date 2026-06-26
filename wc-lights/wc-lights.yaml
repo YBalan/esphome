@@ -14,8 +14,8 @@ substitutions:
   wc_light_pin: GPIO18
   bath_light_pin: GPIO19
   wc_door_pin: GPIO21
-  bath_door_pin: GPIO22
-  rgb_strip_pin: GPIO23
+  bath_door_pin: GPIO22  
+  rgb_strip_pin: GPIO27
   reset_counters_pin: GPIO4
 
   # Door input settings (NO/NC per room)
@@ -31,21 +31,26 @@ substitutions:
   # RGB strip
   rgb_led_count: "50"
   rgb_default_active_led_count: "26"
-  strip_wc_inside_brightness_pct: "100"
-  strip_flash_brightness_pct: "100"
+  strip_wc_inside_brightness_pct: "35"
+  strip_flash_brightness_pct: "35"
+  strip_flash_fade_duration_ms: "1200"
   rgb_order: GRB
 
   # Night mode schedule
-  night_start_hour: "0"
+  night_start_hour: "23"
   night_start_minute: "0"
-  night_end_hour: "6"
+  night_end_hour: "7"
   night_end_minute: "0"
 
+  # Blink reminder settings
+  wc_inside_blink_interval_minutes: "5"
+  wc_inside_blink_count: "3"
+
   # Main lights brightness (%)
-  wc_day_brightness_pct: "100"
+  wc_day_brightness_pct: "90"
   wc_night_brightness_pct: "30"
   bath_day_brightness_pct: "100"
-  bath_night_brightness_pct: "30"
+  bath_night_brightness_pct: "100"
 
   # Door-open timeout before next close is treated as no-entry (seconds)
   wc_open_timeout_seconds: "10"
@@ -77,12 +82,33 @@ esphome:
       - delay: 5s
       - lambda: |-
           wc_lights::set_test_mode(id(status_strip_test_active), false);
-      - light.turn_off:
-          id: status_strip
+
+          const uint32_t now_ms = millis();
+
+          wc_lights::restore_room_state_after_boot(
+            id(wc_user_inside_flag),
+            id(wc_door_open_started_ms),
+            id(wc_entry_started_ms),
+            id(wc_door_sensor),
+            id(wc_user_inside),
+            id(wc_time_inside_sensor),
+            now_ms
+          );
+
+          wc_lights::restore_room_state_after_boot(
+            id(bath_user_inside_flag),
+            id(bath_door_open_started_ms),
+            id(bath_entry_started_ms),
+            id(bath_door_sensor),
+            id(bath_user_inside),
+            id(bath_time_inside_sensor),
+            now_ms
+          );
+      - script.execute: update_status_strip
 
 esp32:
   board: esp32dev
-  framework:
+  framework:  
     type: esp-idf
 
 logger:
@@ -102,6 +128,7 @@ wifi:
     ssid: ${ap_ssid}
     password: ${ap_password}
   fast_connect: true
+  reboot_timeout: 0s
 
 captive_portal:
 
@@ -113,11 +140,11 @@ api:
 globals:
   - id: wc_user_inside_flag
     type: bool
-    restore_value: no
+    restore_value: yes
     initial_value: "false"
   - id: bath_user_inside_flag
     type: bool
-    restore_value: no
+    restore_value: yes
     initial_value: "false"
 
   - id: wc_door_open_started_ms
@@ -219,7 +246,7 @@ script:
     mode: restart
     then:
       - lambda: |-
-          wc_lights::update_status_strip_from_presets(id(status_strip), id(status_strip_test_active), id(wc_user_inside_flag), id(wc_flash_active), id(bath_flash_active), wc_lights::to_int(id(num_strip_wc_inside_brightness).state), wc_lights::to_int(id(num_strip_flash_brightness).state), id(wc_inside_color_preset).current_option(), id(wc_flash_color_preset).current_option(), id(bath_flash_color_preset).current_option(), wc_lights::to_int(id(num_status_strip_length).state));
+          wc_lights::update_status_strip_from_presets(id(status_strip), id(status_strip_test_active), id(wc_user_inside_flag), id(wc_flash_active), id(bath_flash_active), id(wc_flash_started_ms), id(bath_flash_started_ms), millis(), wc_lights::to_int(id(num_strip_wc_inside_brightness).state), wc_lights::to_int(id(num_strip_flash_brightness).state), wc_lights::to_int(id(num_wc_flashlight_duration).state), wc_lights::to_int(id(num_bath_flashlight_duration).state), ${strip_flash_fade_duration_ms}, id(wc_inside_color_preset).current_option(), id(wc_flash_color_preset).current_option(), id(bath_flash_color_preset).current_option(), wc_lights::to_int(id(num_status_strip_length).state));
 
   - id: test_status_strip_rainbow
     mode: restart
@@ -243,9 +270,10 @@ script:
       - script.execute: update_status_strip
       - while:
           condition:
-            lambda: return wc_lights::should_continue_flash_loop(id(wc_flash_started_ms), millis(), wc_lights::to_int(id(num_wc_flashlight_duration).state));
+            lambda: return !wc_lights::flash_completed(id(wc_flash_started_ms), millis(), wc_lights::to_int(id(num_wc_flashlight_duration).state), ${strip_flash_fade_duration_ms});
           then:
-            - delay: 1000ms
+            - delay: 100ms
+            - script.execute: update_status_strip
       - lambda: |-
           wc_lights::stop_flash(id(wc_flash_active));
       - script.execute: update_status_strip
@@ -294,9 +322,10 @@ script:
       - script.execute: update_status_strip
       - while:
           condition:
-            lambda: return wc_lights::should_continue_flash_loop(id(bath_flash_started_ms), millis(), wc_lights::to_int(id(num_bath_flashlight_duration).state));
+            lambda: return !wc_lights::flash_completed(id(bath_flash_started_ms), millis(), wc_lights::to_int(id(num_bath_flashlight_duration).state), ${strip_flash_fade_duration_ms});
           then:
-            - delay: 1000ms
+            - delay: 100ms
+            - script.execute: update_status_strip
       - lambda: |-
           wc_lights::stop_flash(id(bath_flash_active));
       - script.execute: update_status_strip
@@ -424,6 +453,15 @@ interval:
       - lambda: |-
           wc_lights::handle_wc_inside_blink_schedule(id(wc_user_inside_flag), id(wc_inside_blink_running), id(wc_inside_blink_next_ms), id(wc_entry_started_ms), wc_lights::to_int(id(num_wc_inside_blink_interval_minutes).state), millis(), id(wc_inside_periodic_blink_script));
 
+  - interval: 100ms
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(wc_flash_active) || id(bath_flash_active);
+          then:
+            - script.execute: update_status_strip
+
 output:
   - platform: ledc
     id: wc_light_output
@@ -441,14 +479,14 @@ light:
     name: WC - Light
     output: wc_light_output
     default_transition_length: ${main_light_transition}
-    restore_mode: ALWAYS_OFF
+    restore_mode: RESTORE_DEFAULT_OFF
 
   - platform: monochromatic
     id: bath_main_light
     name: Bath - Light
     output: bath_light_output
     default_transition_length: ${main_light_transition}
-    restore_mode: ALWAYS_OFF
+    restore_mode: RESTORE_DEFAULT_OFF
 
   - platform: esp32_rmt_led_strip
     id: status_strip
@@ -836,7 +874,7 @@ select:
     entity_category: config
     optimistic: true
     restore_value: true
-    initial_option: "Yellow"
+    initial_option: "Green"
     options:
       - "Red"
       - "Green"
@@ -855,7 +893,7 @@ select:
     entity_category: config
     optimistic: true
     restore_value: true
-    initial_option: "Yellow"
+    initial_option: "Blue"
     options:
       - "Red"
       - "Green"
@@ -1065,7 +1103,7 @@ number:
     unit_of_measurement: min
     optimistic: true
     restore_value: true
-    initial_value: 5
+    initial_value: ${wc_inside_blink_interval_minutes}
     min_value: 1
     max_value: 180
     step: 1
@@ -1077,7 +1115,7 @@ number:
     icon: mdi:counter
     optimistic: true
     restore_value: true
-    initial_value: 2
+    initial_value: ${wc_inside_blink_count}
     min_value: 1
     max_value: 10
     step: 1
