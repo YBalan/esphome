@@ -38,6 +38,12 @@ substitutions:
   sem_init_beep_on_ms: "150"
   sem_init_beep_off_ms: "120"
 
+esphome:
+  on_boot:
+    priority: -5
+    then:
+      - script.execute: sem_publish_text_states
+
 api:
   actions:
     - action: set_ai_status
@@ -130,6 +136,8 @@ output:
 light:
   - platform: esp32_rmt_led_strip
     id: sem_status_led_raw
+    name: ${friendly_name} Action Full Strip LED
+    internal: false
     chipset: WS2812
     pin: ${sem_led_data_pin}
     num_leds: 4
@@ -139,7 +147,7 @@ light:
     flash_transition_length: 0s
     effects:
       - addressable_rainbow:
-          name: Semaphor Rainbow
+          name: Rainbow
           speed: 8
           width: 30
 
@@ -171,6 +179,14 @@ light:
         to: 3
 
 script:
+  - id: sem_publish_text_states
+    mode: restart
+    then:
+      - lambda: |-
+          id(sem_ai_status_text).publish_state(ai_helper::semaphore::status_text_from_code(id(sem_status_code)));
+          id(sem_led_output_mode_text).publish_state(
+              ai_helper::semaphore::led_output_mode_text(id(sem_status_code), id(sem_active_rainbow_effect), id(sem_active_led_slot)));
+
   - id: sem_play_alert_beep
     mode: restart
     then:
@@ -280,7 +296,7 @@ script:
           then:
             - light.turn_on:
                 id: sem_status_led_raw
-                effect: Semaphor Rainbow
+                effect: Rainbow
                 brightness: !lambda return id(sem_num_rainbow_brightness).state / 100.0f;
 
       - if:
@@ -324,6 +340,7 @@ script:
             lambda: return id(sem_active_beep_enabled);
           then:
             - script.execute: sem_play_alert_beep
+      - script.execute: sem_publish_text_states
 
 switch:
   - platform: template
@@ -422,6 +439,7 @@ select:
     name: ${friendly_name} Reasoning Color
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
     initial_option: ${sem_init_reasoning_color_option}
     set_action:
@@ -432,6 +450,7 @@ select:
     name: ${friendly_name} Reasoning LED
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green" ]
     initial_option: ${sem_init_reasoning_led_assignment}
     set_action:
@@ -442,6 +461,7 @@ select:
     name: ${friendly_name} Done Color
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
     initial_option: ${sem_init_done_color_option}
     set_action:
@@ -452,6 +472,7 @@ select:
     name: ${friendly_name} Done LED
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green" ]
     initial_option: ${sem_init_done_led_assignment}
     set_action:
@@ -462,6 +483,7 @@ select:
     name: ${friendly_name} Need Action Color
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
     initial_option: ${sem_init_need_action_color_option}
     set_action:
@@ -472,6 +494,7 @@ select:
     name: ${friendly_name} Need Action LED
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green" ]
     initial_option: ${sem_init_need_action_led_assignment}
     set_action:
@@ -482,6 +505,7 @@ select:
     name: ${friendly_name} Allow Action Color
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
     initial_option: ${sem_init_allow_action_color_option}
     set_action:
@@ -492,6 +516,7 @@ select:
     name: ${friendly_name} Allow Action LED
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green" ]
     initial_option: ${sem_init_allow_action_led_assignment}
     set_action:
@@ -502,6 +527,7 @@ select:
     name: ${friendly_name} Custom1 Color
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
     initial_option: ${sem_init_custom1_color_option}
     set_action:
@@ -512,6 +538,7 @@ select:
     name: ${friendly_name} Custom1 LED
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green" ]
     initial_option: ${sem_init_custom1_led_assignment}
     set_action:
@@ -522,6 +549,7 @@ select:
     name: ${friendly_name} Custom2 Color
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
     initial_option: ${sem_init_custom2_color_option}
     set_action:
@@ -532,6 +560,7 @@ select:
     name: ${friendly_name} Custom2 LED
     optimistic: true
     restore_value: true
+    entity_category: config
     options: [ "Red", "Yellow", "Green" ]
     initial_option: ${sem_init_custom2_led_assignment}
     set_action:
@@ -982,14 +1011,10 @@ text_sensor:
     id: sem_ai_status_text
     name: ${friendly_name} Status Text
     icon: mdi:robot
-    lambda: |-
-      return {ai_helper::semaphore::status_text_from_code(id(sem_status_code))};
-    update_interval: 1s
+    update_interval: never
 
   - platform: template
     id: sem_led_output_mode_text
     name: ${friendly_name} LED Output Mode
     icon: mdi:led-strip-variant
-    lambda: |-
-      return {ai_helper::semaphore::led_output_mode_text(id(sem_status_code), id(sem_active_rainbow_effect), id(sem_active_led_slot))};
-    update_interval: 1s
+    update_interval: never

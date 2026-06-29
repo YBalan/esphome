@@ -2,6 +2,7 @@ substitutions:
   # Device identity
   device_name: ai-helper
   friendly_name: AI Helper
+  mouse_mover_compile_enabled: "1"
 
   # Fallback AP
   ap_ssid: AP-AI-Helper
@@ -16,6 +17,9 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
+  platformio_options:
+    build_flags:
+      - -DAI_HELPER_MOUSE_MOVER_BUILD_ENABLED=${mouse_mover_compile_enabled}
   includes:
     - ai-helper-semaphore.h
     - ai-helper-mouse-mover.h
@@ -55,6 +59,11 @@ captive_portal:
 
 web_server:
   port: 80
+
+http_request:
+  useragent: esphome-ai-helper
+  timeout: 5s
+  verify_ssl: true
 
 sensor:
   - platform: wifi_signal
