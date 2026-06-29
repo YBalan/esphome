@@ -13,7 +13,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 | [`electrolux-boiler-remote/`](electrolux-boiler-remote/) | Boiler Rotary Remote | ESP32 | TFT display + rotary encoder for local boiler control |
 | [`jbdbms_v2/`](jbdbms_v2/) | JBD / XiaoXiang BMS | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
 | [`jkbms_v2/`](jkbms_v2/) | JK-BMS (Jikong) | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
-| [`garage/`](garage/) | Garage Generator Controller | ESP32 | Generator control + PZEM telemetry + RF learn/transmit + mirrored servos |
+| [`garage/generator/`](garage/generator/) | Garage Generator Controller | ESP32 | Generator control + PZEM telemetry + RF learn/transmit + mirrored servos |
 | [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
 
 ---
@@ -108,7 +108,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 
 ---
 
-## garage
+## garage/generator
 
 **Garage generator controller** with relay actions, RF learn/transmit support, mirrored choke servos, and runtime tracking.
 
@@ -117,7 +117,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 - `Current Run Duration` is preserved across restart when reboot happens during an active run
 - MQTT uses explicit command/telemetry topics only (`topic_prefix: null`, `discovery: false`)
 
-📁 [garage/README.md](garage/README.md)
+📁 [garage/generator/README.md](garage/generator/README.md)
 
 ---
 
@@ -136,6 +136,10 @@ All projects share the same pattern:
 2. **Flash** via USB first, then OTA for subsequent updates:
    ```cmd
    esphome run <project>/<config>.yaml
+   ```
+   Garage generator example from repository root:
+   ```cmd
+   esphome run garage/generator/garage-generator.yaml
    ```
 3. **Home Assistant / MQTT** — most devices use MQTT discovery; the garage generator project uses manual MQTT topics with discovery disabled.
 4. **Fallback AP** — if WiFi is unavailable, each device broadcasts a fallback access point for recovery.

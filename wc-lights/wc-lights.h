@@ -23,6 +23,7 @@ inline float pct_to_unit(const int pct) {
 }
 
 inline bool flash_elapsed(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds);
+inline bool flash_completed(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds, const int fade_duration_ms);
 inline uint32_t total_time_inside_seconds(
   const uint32_t total_visit_seconds,
   const bool user_inside,
@@ -156,10 +157,11 @@ inline RgbPct color_from_preset(const std::string &preset) {
 inline void update_status_strip(
   esphome::light::AddressableLightState *strip,
   const bool wc_user_inside,
-  const bool wc_flash_active,
-  const bool bath_flash_active,
+  const int wc_flash_brightness_pct,
+  const int bath_flash_brightness_pct,
+  const uint32_t wc_flash_started_ms,
+  const uint32_t bath_flash_started_ms,
   const int wc_inside_brightness_pct,
-  const int flash_brightness_pct,
   const int wc_inside_red_pct,
   const int wc_inside_green_pct,
   const int wc_inside_blue_pct,
@@ -183,16 +185,16 @@ inline void update_status_strip(
     green_pct = wc_inside_green_pct;
     blue_pct = wc_inside_blue_pct;
     brightness_pct = wc_inside_brightness_pct;
-  } else if (wc_flash_active) {
+  } else if (wc_flash_brightness_pct > 0 && (wc_flash_brightness_pct > bath_flash_brightness_pct || (wc_flash_brightness_pct == bath_flash_brightness_pct && wc_flash_started_ms >= bath_flash_started_ms))) {
     red_pct = wc_flash_red_pct;
     green_pct = wc_flash_green_pct;
     blue_pct = wc_flash_blue_pct;
-    brightness_pct = flash_brightness_pct;
-  } else if (bath_flash_active) {
+    brightness_pct = wc_flash_brightness_pct;
+  } else if (bath_flash_brightness_pct > 0) {
     red_pct = bath_flash_red_pct;
     green_pct = bath_flash_green_pct;
     blue_pct = bath_flash_blue_pct;
-    brightness_pct = flash_brightness_pct;
+    brightness_pct = bath_flash_brightness_pct;
   }
 
   if (brightness_pct < 0) {
@@ -223,7 +225,6 @@ inline void update_status_strip(
   // ESPHome renders solid color to all LEDs; we then zero out inactive ones.
   auto strip_call = strip->turn_on();
   strip_call.set_effect("None");
-  strip_call.set_transition_length(0);
   strip_call.set_red(pct_to_unit(red_pct));
   strip_call.set_green(pct_to_unit(green_pct));
   strip_call.set_blue(pct_to_unit(blue_pct));
@@ -274,6 +275,39 @@ inline void stop_flash(bool &flash_active) {
 
 inline bool should_continue_flash_loop(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds) {
   return !flash_elapsed(started_ms, now_ms, duration_seconds);
+}
+
+inline int current_flash_brightness_pct(
+  const bool flash_active,
+  const uint32_t started_ms,
+  const uint32_t now_ms,
+  const int full_brightness_pct,
+  const int duration_seconds,
+  const int fade_duration_ms
+) {
+  if (!flash_active || full_brightness_pct <= 0) {
+    return 0;
+  }
+
+  if (fade_duration_ms <= 0) {
+    return flash_elapsed(started_ms, now_ms, duration_seconds) ? 0 : full_brightness_pct;
+  }
+
+  const uint32_t hold_ms = static_cast<uint32_t>(duration_seconds) * MS_PER_SECOND;
+  const uint32_t elapsed_ms = seconds_since_ms(started_ms, now_ms);
+
+  if (elapsed_ms < hold_ms) {
+    return full_brightness_pct;
+  }
+
+  const uint32_t fade_elapsed_ms = elapsed_ms - hold_ms;
+  const uint32_t fade_ms = static_cast<uint32_t>(fade_duration_ms);
+  if (fade_elapsed_ms >= fade_ms) {
+    return 0;
+  }
+
+  const uint32_t remaining_ms = fade_ms - fade_elapsed_ms;
+  return static_cast<int>((static_cast<uint64_t>(full_brightness_pct) * remaining_ms) / fade_ms);
 }
 
 template<typename TLight>
@@ -354,8 +388,14 @@ inline void update_status_strip_from_presets(
   const bool wc_user_inside,
   const bool wc_flash_active,
   const bool bath_flash_active,
+  const uint32_t wc_flash_started_ms,
+  const uint32_t bath_flash_started_ms,
+  const uint32_t now_ms,
   const int wc_inside_brightness_pct,
   const int flash_brightness_pct,
+  const int wc_flash_duration_seconds,
+  const int bath_flash_duration_seconds,
+  const int flash_fade_duration_ms,
   const std::string &wc_inside_color_preset,
   const std::string &wc_flash_color_preset,
   const std::string &bath_flash_color_preset,
@@ -368,14 +408,31 @@ inline void update_status_strip_from_presets(
   const auto wc_inside_color = color_from_preset(wc_inside_color_preset);
   const auto wc_flash_color = color_from_preset(wc_flash_color_preset);
   const auto bath_flash_color = color_from_preset(bath_flash_color_preset);
+  const int wc_flash_current_brightness = current_flash_brightness_pct(
+    wc_flash_active,
+    wc_flash_started_ms,
+    now_ms,
+    flash_brightness_pct,
+    wc_flash_duration_seconds,
+    flash_fade_duration_ms
+  );
+  const int bath_flash_current_brightness = current_flash_brightness_pct(
+    bath_flash_active,
+    bath_flash_started_ms,
+    now_ms,
+    flash_brightness_pct,
+    bath_flash_duration_seconds,
+    flash_fade_duration_ms
+  );
 
   update_status_strip(
     strip,
     wc_user_inside,
-    wc_flash_active,
-    bath_flash_active,
+    wc_flash_current_brightness,
+    bath_flash_current_brightness,
+    wc_flash_started_ms,
+    bath_flash_started_ms,
     wc_inside_brightness_pct,
-    flash_brightness_pct,
     wc_inside_color.red,
     wc_inside_color.green,
     wc_inside_color.blue,
@@ -389,8 +446,39 @@ inline void update_status_strip_from_presets(
   );
 }
 
+template<typename TDoorSensor, typename TBinarySensor, typename TTimeSensor>
+inline void restore_room_state_after_boot(
+  const bool restored_user_inside_flag,
+  uint32_t &door_open_started_ms,
+  uint32_t &entry_started_ms,
+  TDoorSensor door_sensor,
+  TBinarySensor user_inside_sensor,
+  TTimeSensor time_inside_sensor,
+  const uint32_t now_ms
+) {
+  if (door_sensor->state) {
+    door_open_started_ms = now_ms;
+  } else {
+    door_open_started_ms = 0U;
+  }
+
+  if (restored_user_inside_flag) {
+    entry_started_ms = now_ms;
+  } else {
+    entry_started_ms = 0U;
+  }
+
+  user_inside_sensor->publish_state(restored_user_inside_flag);
+  time_inside_sensor->publish_state(0.0f);
+}
+
 inline bool flash_elapsed(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds) {
   return (now_ms - started_ms) >= (static_cast<uint32_t>(duration_seconds) * MS_PER_SECOND);
+}
+
+inline bool flash_completed(const uint32_t started_ms, const uint32_t now_ms, const int duration_seconds, const int fade_duration_ms) {
+  const uint32_t total_duration_ms = (static_cast<uint32_t>(duration_seconds) * MS_PER_SECOND) + static_cast<uint32_t>(fade_duration_ms > 0 ? fade_duration_ms : 0);
+  return seconds_since_ms(started_ms, now_ms) >= total_duration_ms;
 }
 
 inline float room_time_inside_seconds(
