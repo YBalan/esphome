@@ -1,0 +1,66 @@
+# Placeholder mouse mover package for future functionality split.
+# Included by ai-helper.yaml to keep feature boundaries explicit.
+
+globals:
+  - id: mouse_mover_tick_s
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+switch:
+  - platform: template
+    id: mouse_mover_enabled
+    name: ${friendly_name} Mouse Mover Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+
+number:
+  - platform: template
+    id: num_mouse_mover_period_s
+    name: ${friendly_name} Mouse Mover Period
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 5
+    max_value: 3600
+    step: 1
+    unit_of_measurement: s
+    initial_value: 120
+
+button:
+  - platform: template
+    id: mouse_mover_trigger_now
+    name: ${friendly_name} Mouse Mover Trigger Now
+    entity_category: config
+    on_press:
+      - script.execute: mouse_mover_emit_activity
+
+script:
+  - id: mouse_mover_emit_activity
+    mode: restart
+    then:
+      - logger.log:
+          level: INFO
+          format: "mouse_mover activity pulse (%s)"
+          args: [ 'ai_helper::mouse_mover::mode_text(id(mouse_mover_enabled).state)' ]
+
+text_sensor:
+  - platform: template
+    id: mouse_mover_mode_text
+    name: ${friendly_name} Mouse Mover Mode
+    icon: mdi:mouse
+    lambda: |-
+      return {ai_helper::mouse_mover::mode_text(id(mouse_mover_enabled).state)};
+    update_interval: 1s
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (ai_helper::mouse_mover::tick_and_should_emit(
+              id(mouse_mover_tick_s),
+              id(mouse_mover_enabled).state,
+              (uint32_t) id(num_mouse_mover_period_s).state)) {
+            id(mouse_mover_emit_activity).execute();
+          }
