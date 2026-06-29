@@ -1,5 +1,5 @@
 substitutions:
-  sem_led_data_pin: GPIO27
+  sem_led_data_pin: GPIO26
   sem_buzzer_pin: GPIO25
   sem_init_status_code: "0"
   sem_init_active_led_slot: "0"

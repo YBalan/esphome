@@ -3,16 +3,72 @@ substitutions:
   mm_lcd_sda_pin: GPIO21
   mm_lcd_scl_pin: GPIO22
   mm_lcd_address: "0x27"
-  mm_btn_ok_pin: GPIO32
-  mm_btn_up_pin: GPIO33
-  mm_btn_down_pin: GPIO26
-  mm_btn_right_pin: GPIO14
+  mm_btn_ok_pin: GPIO27
+  mm_btn_up_pin: GPIO14
+  mm_btn_down_pin: GPIO12
+  mm_btn_right_pin: GPIO13
 
   mm_backlight_delay_ms: "60000"
   mm_long_press_ms: "2000"
+  mm_short_press_min_ms: "30"
+  mm_short_press_max_ms: "800"
+  mm_long_press_max_s: "10s"
+
+  mm_boot_priority: "-5"
+  mm_servo_pwm_frequency: "50 Hz"
+  mm_display_update_interval: "1s"
+  mm_main_interval: "1s"
+
+  mm_angle_min: "0"
+  mm_angle_max: "270"
+  mm_angle_step: "1"
+  mm_max_angle_min: "90"
+  mm_max_angle_step: "90"
+
+  mm_period_cfg_min_s: "5"
+  mm_period_cfg_max_s: "3600"
+  mm_period_cfg_step_s: "1"
+
+  mm_move_step_cfg_min: "1"
+  mm_move_step_cfg_max: "10"
+  mm_move_step_cfg_step: "1"
+
+  mm_move_delay_cfg_min_ms: "20"
+  mm_move_delay_cfg_max_ms: "2000"
+  mm_move_delay_cfg_step_ms: "10"
+
+  mm_bound_step_cfg_min: "1"
+  mm_bound_step_cfg_max: "20"
+  mm_bound_step_cfg_step: "1"
+
+  mm_period_min_cfg_max_s: "3600"
+  mm_period_min_cfg_step_s: "1"
+  mm_period_min_cfg_initial_s: "120"
+  mm_period_max_cfg_min_s: "5"
+  mm_period_max_cfg_max_s: "7200"
+  mm_period_max_cfg_step_s: "1"
+  mm_period_max_cfg_initial_s: "360"
+
+  mm_step_min_cfg_max: "10"
+  mm_step_min_cfg_step: "1"
+  mm_step_min_cfg_initial: "1"
+  mm_step_max_cfg_min: "1"
+  mm_step_max_cfg_max: "20"
+  mm_step_max_cfg_step: "1"
+  mm_step_max_cfg_initial: "5"
+
+  mm_delay_min_cfg_max_ms: "3000"
+  mm_delay_min_cfg_step_ms: "10"
+  mm_delay_min_cfg_initial_ms: "100"
+  mm_delay_max_cfg_min_ms: "20"
+  mm_delay_max_cfg_max_ms: "5000"
+  mm_delay_max_cfg_step_ms: "10"
+  mm_delay_max_cfg_initial_ms: "700"
 
   mm_init_start_angle: "150"
   mm_init_end_angle: "180"
+  mm_init_max_angle: "180"
+  mm_init_manual_angle: "150"
   mm_init_move_angle: "175"
   mm_init_move_step: "1"
   mm_init_move_speed_delay_ms: "200"
@@ -21,7 +77,7 @@ substitutions:
 
 esphome:
   on_boot:
-    priority: -5
+    priority: ${mm_boot_priority}
     then:
       - script.execute: mm_backlight_on
       - script.execute: mm_servo_to_current
@@ -83,7 +139,7 @@ output:
   - platform: ledc
     id: mm_servo_pwm
     pin: ${mm_servo_pin}
-    frequency: 50 Hz
+    frequency: ${mm_servo_pwm_frequency}
 
 servo:
   - id: mm_servo
@@ -94,7 +150,7 @@ display:
     id: mm_lcd
     dimensions: 16x2
     address: ${mm_lcd_address}
-    update_interval: 1s
+    update_interval: ${mm_display_update_interval}
     lambda: |-
       const bool captive_active = !esphome::network::is_connected();
       const char *ap_name = "${ap_ssid}";
@@ -167,9 +223,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 5
-    max_value: 3600
-    step: 1
+    min_value: ${mm_period_cfg_min_s}
+    max_value: ${mm_period_cfg_max_s}
+    step: ${mm_period_cfg_step_s}
     unit_of_measurement: s
     initial_value: ${mm_init_period_s}
 
@@ -179,17 +235,20 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 180
-    step: 1
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
     unit_of_measurement: "deg"
     initial_value: ${mm_init_start_angle}
     set_action:
       - lambda: |-
-          int start = ai_helper::mouse_mover::normalize_start_angle((int) x, (int) id(mm_num_end_angle).state);
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          int start = ai_helper::mouse_mover::normalize_start_angle((int) x, (int) id(mm_num_end_angle).state, max_angle);
           int end = (int) id(mm_num_end_angle).state;
           id(mm_num_start_angle).publish_state(start);
-          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) id(mm_num_manual_angle).state, max_angle));
       - script.execute: mm_publish_text_states
 
   - platform: template
@@ -198,18 +257,63 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 180
-    step: 1
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
     unit_of_measurement: "deg"
     initial_value: ${mm_init_end_angle}
     set_action:
       - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
           int start = (int) id(mm_num_start_angle).state;
-          int end = ai_helper::mouse_mover::normalize_end_angle((int) x, start);
+          int end = ai_helper::mouse_mover::normalize_end_angle((int) x, start, max_angle);
           id(mm_num_end_angle).publish_state(end);
-          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) id(mm_num_manual_angle).state, max_angle));
       - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mm_num_max_angle
+    name: ${friendly_name} Mouse Mover Max Angle
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_max_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_max_angle_step}
+    unit_of_measurement: "deg"
+    initial_value: ${mm_init_max_angle}
+    set_action:
+      - lambda: |-
+          const int max_angle = ai_helper::mouse_mover::normalize_max_angle((int) x);
+          id(mm_num_max_angle).publish_state(max_angle);
+
+          int start = ai_helper::mouse_mover::normalize_start_angle((int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state, max_angle);
+          int end = ai_helper::mouse_mover::normalize_end_angle((int) id(mm_num_end_angle).state, start, max_angle);
+          id(mm_num_start_angle).publish_state(start);
+          id(mm_num_end_angle).publish_state(end);
+
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) id(mm_num_manual_angle).state, max_angle));
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+      - script.execute: mm_servo_to_current
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mm_num_manual_angle
+    name: ${friendly_name} Mouse Mover Manual Angle
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
+    unit_of_measurement: "deg"
+    initial_value: ${mm_init_manual_angle}
+    set_action:
+      - lambda: |-
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) x, (int) id(mm_num_max_angle).state));
 
   - platform: template
     id: mm_num_move_angle
@@ -217,14 +321,18 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 180
-    step: 1
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
     unit_of_measurement: "deg"
     initial_value: ${mm_init_move_angle}
     set_action:
       - lambda: |-
-          const int target = ai_helper::mouse_mover::normalize_target_angle((int) x, (int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state);
+          const int target = ai_helper::mouse_mover::normalize_target_angle(
+              (int) x,
+              (int) id(mm_num_start_angle).state,
+              (int) id(mm_num_end_angle).state,
+              (int) id(mm_num_max_angle).state);
           id(mm_num_move_angle).publish_state(target);
 
   - platform: template
@@ -233,9 +341,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
+    min_value: ${mm_move_step_cfg_min}
+    max_value: ${mm_move_step_cfg_max}
+    step: ${mm_move_step_cfg_step}
     initial_value: ${mm_init_move_step}
 
   - platform: template
@@ -244,9 +352,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 20
-    max_value: 2000
-    step: 10
+    min_value: ${mm_move_delay_cfg_min_ms}
+    max_value: ${mm_move_delay_cfg_max_ms}
+    step: ${mm_move_delay_cfg_step_ms}
     unit_of_measurement: ms
     initial_value: ${mm_init_move_speed_delay_ms}
 
@@ -256,9 +364,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 20
-    step: 1
+    min_value: ${mm_bound_step_cfg_min}
+    max_value: ${mm_bound_step_cfg_max}
+    step: ${mm_bound_step_cfg_step}
     initial_value: ${mm_init_bound_step}
 
   - platform: template
@@ -267,11 +375,11 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 5
-    max_value: 3600
-    step: 1
+    min_value: ${mm_period_cfg_min_s}
+    max_value: ${mm_period_min_cfg_max_s}
+    step: ${mm_period_min_cfg_step_s}
     unit_of_measurement: s
-    initial_value: 120
+    initial_value: ${mm_period_min_cfg_initial_s}
 
   - platform: template
     id: mm_num_period_max_s
@@ -279,11 +387,11 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 5
-    max_value: 7200
-    step: 1
+    min_value: ${mm_period_max_cfg_min_s}
+    max_value: ${mm_period_max_cfg_max_s}
+    step: ${mm_period_max_cfg_step_s}
     unit_of_measurement: s
-    initial_value: 360
+    initial_value: ${mm_period_max_cfg_initial_s}
 
   - platform: template
     id: mm_num_step_min
@@ -291,10 +399,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
-    initial_value: 1
+    min_value: ${mm_move_step_cfg_min}
+    max_value: ${mm_step_min_cfg_max}
+    step: ${mm_step_min_cfg_step}
+    initial_value: ${mm_step_min_cfg_initial}
 
   - platform: template
     id: mm_num_step_max
@@ -302,10 +410,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 20
-    step: 1
-    initial_value: 5
+    min_value: ${mm_step_max_cfg_min}
+    max_value: ${mm_step_max_cfg_max}
+    step: ${mm_step_max_cfg_step}
+    initial_value: ${mm_step_max_cfg_initial}
 
   - platform: template
     id: mm_num_delay_min_ms
@@ -313,11 +421,11 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 20
-    max_value: 3000
-    step: 10
+    min_value: ${mm_move_delay_cfg_min_ms}
+    max_value: ${mm_delay_min_cfg_max_ms}
+    step: ${mm_delay_min_cfg_step_ms}
     unit_of_measurement: ms
-    initial_value: 100
+    initial_value: ${mm_delay_min_cfg_initial_ms}
 
   - platform: template
     id: mm_num_delay_max_ms
@@ -325,11 +433,11 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 20
-    max_value: 5000
-    step: 10
+    min_value: ${mm_delay_max_cfg_min_ms}
+    max_value: ${mm_delay_max_cfg_max_ms}
+    step: ${mm_delay_max_cfg_step_ms}
     unit_of_measurement: ms
-    initial_value: 700
+    initial_value: ${mm_delay_max_cfg_initial_ms}
 
 button:
   - platform: template
@@ -338,6 +446,41 @@ button:
     entity_category: config
     on_press:
       - script.execute: mouse_mover_emit_activity
+
+  - platform: template
+    id: mouse_mover_manual_goto
+    name: ${friendly_name} Mouse Mover Go To Manual Angle
+    entity_category: config
+    on_press:
+      - script.execute: mm_servo_to_manual
+
+  - platform: template
+    id: mouse_mover_set_manual_as_start
+    name: ${friendly_name} Mouse Mover Set Manual As Start
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          const int end = (int) id(mm_num_end_angle).state;
+          const int start = ai_helper::mouse_mover::normalize_start_angle((int) id(mm_num_manual_angle).state, end, max_angle);
+          id(mm_num_start_angle).publish_state(start);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mouse_mover_set_manual_as_stop
+    name: ${friendly_name} Mouse Mover Set Manual As Stop
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          const int start = (int) id(mm_num_start_angle).state;
+          const int end = ai_helper::mouse_mover::normalize_end_angle((int) id(mm_num_manual_angle).state, start, max_angle);
+          id(mm_num_end_angle).publish_state(end);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+      - script.execute: mm_publish_text_states
 
   - platform: template
     id: mouse_mover_randomize_now
@@ -360,8 +503,8 @@ binary_sensor:
     on_press:
       - script.execute: mm_backlight_on
     on_click:
-      - min_length: 30ms
-        max_length: 800ms
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
         then:
           - if:
               condition:
@@ -371,7 +514,7 @@ binary_sensor:
               else:
                 - script.execute: mouse_mover_emit_activity
       - min_length: ${mm_long_press_ms}ms
-        max_length: 10s
+        max_length: ${mm_long_press_max_s}
         then:
           - switch.toggle: mouse_mover_enabled
           - script.execute: mm_backlight_on
@@ -389,8 +532,8 @@ binary_sensor:
     on_press:
       - script.execute: mm_backlight_on
     on_click:
-      - min_length: 30ms
-        max_length: 800ms
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
         then:
           - lambda: |-
               ai_helper::mouse_mover::enter_bound_menu(id(mm_bound_menu_active), id(mm_bound_edit_min), true);
@@ -398,9 +541,9 @@ binary_sensor:
               int end = (int) id(mm_num_end_angle).state;
               int next = ai_helper::mouse_mover::next_bound_angle(id(mm_current_angle), start, end, (int) id(mm_num_bound_step).state, -1);
               id(mm_current_angle) = next;
-              ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), next);
+              ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), next, (int) id(mm_num_max_angle).state);
       - min_length: ${mm_long_press_ms}ms
-        max_length: 10s
+        max_length: ${mm_long_press_max_s}
         then:
           - if:
               condition:
@@ -426,8 +569,8 @@ binary_sensor:
     on_press:
       - script.execute: mm_backlight_on
     on_click:
-      - min_length: 30ms
-        max_length: 800ms
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
         then:
           - lambda: |-
               ai_helper::mouse_mover::enter_bound_menu(id(mm_bound_menu_active), id(mm_bound_edit_min), false);
@@ -435,9 +578,9 @@ binary_sensor:
               int end = (int) id(mm_num_end_angle).state;
               int next = ai_helper::mouse_mover::next_bound_angle(id(mm_current_angle), start, end, (int) id(mm_num_bound_step).state, 1);
               id(mm_current_angle) = next;
-              ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), next);
+              ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), next, (int) id(mm_num_max_angle).state);
       - min_length: ${mm_long_press_ms}ms
-        max_length: 10s
+        max_length: ${mm_long_press_max_s}
         then:
           - if:
               condition:
@@ -462,13 +605,13 @@ binary_sensor:
     on_press:
       - script.execute: mm_backlight_on
     on_click:
-      - min_length: 30ms
-        max_length: 800ms
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
         then:
           - lambda: |-
               id(mm_bound_menu_active) = false;
       - min_length: ${mm_long_press_ms}ms
-        max_length: 10s
+        max_length: ${mm_long_press_max_s}
         then:
           - switch.toggle: mouse_mover_enabled
           - script.execute: mm_backlight_on
@@ -485,9 +628,26 @@ script:
     mode: restart
     then:
       - lambda: |-
-          int current = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), (int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state);
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          int current = ai_helper::mouse_mover::normalize_current_angle(
+              id(mm_current_angle),
+              (int) id(mm_num_start_angle).state,
+              (int) id(mm_num_end_angle).state,
+              max_angle);
           id(mm_current_angle) = current;
-          ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), current);
+          ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), current, max_angle);
+
+  - id: mm_servo_to_manual
+    mode: restart
+    then:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          const int start = (int) id(mm_num_start_angle).state;
+          const int end = (int) id(mm_num_end_angle).state;
+          const int manual = ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_manual_angle).state, start, end, max_angle);
+          id(mm_num_manual_angle).publish_state(manual);
+          id(mm_current_angle) = manual;
+          ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), manual, max_angle);
 
   - id: mm_publish_text_states
     mode: restart
@@ -673,6 +833,7 @@ script:
               (int) id(mm_num_end_angle).state,
               (int) id(mm_num_move_angle).state,
               (int) id(mm_num_move_step).state,
+              (int) id(mm_num_max_angle).state,
               id(mm_current_angle),
               target,
               step);
@@ -684,7 +845,7 @@ script:
           then:
             - lambda: |-
                 ESP_LOGI("mouse_mover", "servo forward angle=%d", id(mm_current_angle));
-                ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle));
+                ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle), (int) id(mm_num_max_angle).state);
             - delay: !lambda return (uint32_t) id(mm_num_move_speed_delay_ms).state;
             - lambda: |-
                 id(mm_current_angle) = ai_helper::mouse_mover::next_forward_angle(id(mm_current_angle), (int) id(mm_num_move_step).state);
@@ -696,7 +857,7 @@ script:
           then:
             - lambda: |-
                 ESP_LOGI("mouse_mover", "servo backward angle=%d", id(mm_current_angle));
-                ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle));
+                ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle), (int) id(mm_num_max_angle).state);
             - delay: !lambda return (uint32_t) id(mm_num_move_speed_delay_ms).state;
             - lambda: |-
                 id(mm_current_angle) = ai_helper::mouse_mover::next_backward_angle(id(mm_current_angle), (int) id(mm_num_move_step).state);
@@ -729,7 +890,7 @@ text_sensor:
     update_interval: never
 
 interval:
-  - interval: 1s
+  - interval: ${mm_main_interval}
     then:
       - lambda: |-
           if (ai_helper::mouse_mover::build_enabled() &&

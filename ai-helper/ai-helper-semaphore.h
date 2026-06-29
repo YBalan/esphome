@@ -4,6 +4,9 @@
 
 #define AI_SEM_LOG_TAG_AI_STATUS "ai_status"
 
+#define AI_SEM_LOG_STATUS_UNCHANGED "Status unchanged (%d), skipping LED switch"
+#define AI_SEM_LOG_STATUS_CHANGED "Status changed: %d -> %d"
+
 #define AI_SEM_STATUS_IDLE "Idle"
 #define AI_SEM_STATUS_REASONING "Reasoning"
 #define AI_SEM_STATUS_DONE "Done"
@@ -29,7 +32,25 @@
 #define AI_SEM_LED_ASSIGN_GREEN "Green"
 
 #define AI_SEM_DEFAULT_LED_SLOT 0
+#define AI_SEM_LED_SLOT_RED 1
+#define AI_SEM_LED_SLOT_YELLOW 2
+#define AI_SEM_LED_SLOT_GREEN 3
+
+#define AI_SEM_STATUS_CODE_IDLE 0
+#define AI_SEM_STATUS_CODE_REASONING 1
+#define AI_SEM_STATUS_CODE_DONE 2
+#define AI_SEM_STATUS_CODE_NEED_USER_ACTION 3
+#define AI_SEM_STATUS_CODE_ALLOW_ACTION 4
+#define AI_SEM_STATUS_CODE_CUSTOM1 5
+#define AI_SEM_STATUS_CODE_CUSTOM2 6
+
 #define AI_SEM_DEFAULT_FLOAT_ZERO 0.0f
+#define AI_SEM_COLOR_DEFAULT_FULL 1.0f
+#define AI_SEM_COLOR_DEFAULT_ZERO 0.0f
+#define AI_SEM_COLOR_YELLOW_GREEN 0.78f
+
+#define AI_SEM_PERCENT_DIVISOR 100.0f
+
 #define AI_SEM_DEFAULT_BEEP_ENABLED false
 #define AI_SEM_DEFAULT_BEEP_FREQUENCY 1800.0f
 #define AI_SEM_DEFAULT_BEEP_REPEAT 1
@@ -55,24 +76,24 @@ struct ActiveState {
 
 inline int status_code_from_option(const std::string &option) {
   if (option == AI_SEM_STATUS_REASONING) {
-    return 1;
+    return AI_SEM_STATUS_CODE_REASONING;
   }
   if (option == AI_SEM_STATUS_DONE) {
-    return 2;
+    return AI_SEM_STATUS_CODE_DONE;
   }
   if (option == AI_SEM_STATUS_NEED_USER_ACTION) {
-    return 3;
+    return AI_SEM_STATUS_CODE_NEED_USER_ACTION;
   }
   if (option == AI_SEM_STATUS_ALLOW_ACTION) {
-    return 4;
+    return AI_SEM_STATUS_CODE_ALLOW_ACTION;
   }
   if (option == AI_SEM_STATUS_CUSTOM1) {
-    return 5;
+    return AI_SEM_STATUS_CODE_CUSTOM1;
   }
   if (option == AI_SEM_STATUS_CUSTOM2) {
-    return 6;
+    return AI_SEM_STATUS_CODE_CUSTOM2;
   }
-  return 0;
+  return AI_SEM_STATUS_CODE_IDLE;
 }
 
 inline std::string normalized_status(const std::string &raw) {
@@ -99,17 +120,17 @@ inline std::string normalized_status(const std::string &raw) {
 
 inline const char *status_text_from_code(const int code) {
   switch (code) {
-    case 1:
+    case AI_SEM_STATUS_CODE_REASONING:
       return AI_SEM_STATUS_REASONING;
-    case 2:
+    case AI_SEM_STATUS_CODE_DONE:
       return AI_SEM_STATUS_DONE;
-    case 3:
+    case AI_SEM_STATUS_CODE_NEED_USER_ACTION:
       return AI_SEM_STATUS_NEED_USER_ACTION;
-    case 4:
+    case AI_SEM_STATUS_CODE_ALLOW_ACTION:
       return AI_SEM_STATUS_ALLOW_ACTION;
-    case 5:
+    case AI_SEM_STATUS_CODE_CUSTOM1:
       return AI_SEM_STATUS_CUSTOM1;
-    case 6:
+    case AI_SEM_STATUS_CODE_CUSTOM2:
       return AI_SEM_STATUS_CUSTOM2;
     default:
       return AI_SEM_STATUS_IDLE;
@@ -117,27 +138,27 @@ inline const char *status_text_from_code(const int code) {
 }
 
 inline void color_from_name(const std::string &name, float &r, float &g, float &b, bool &rainbow) {
-  r = 1.0f;
-  g = 0.0f;
-  b = 0.0f;
+  r = AI_SEM_COLOR_DEFAULT_FULL;
+  g = AI_SEM_COLOR_DEFAULT_ZERO;
+  b = AI_SEM_COLOR_DEFAULT_ZERO;
   rainbow = false;
 
   if (name == AI_SEM_COLOR_YELLOW) {
-    r = 1.0f;
-    g = 0.78f;
-    b = 0.0f;
+    r = AI_SEM_COLOR_DEFAULT_FULL;
+    g = AI_SEM_COLOR_YELLOW_GREEN;
+    b = AI_SEM_COLOR_DEFAULT_ZERO;
   } else if (name == AI_SEM_COLOR_GREEN) {
-    r = 0.0f;
-    g = 1.0f;
-    b = 0.0f;
+    r = AI_SEM_COLOR_DEFAULT_ZERO;
+    g = AI_SEM_COLOR_DEFAULT_FULL;
+    b = AI_SEM_COLOR_DEFAULT_ZERO;
   } else if (name == AI_SEM_COLOR_BLUE) {
-    r = 0.0f;
-    g = 0.0f;
-    b = 1.0f;
+    r = AI_SEM_COLOR_DEFAULT_ZERO;
+    g = AI_SEM_COLOR_DEFAULT_ZERO;
+    b = AI_SEM_COLOR_DEFAULT_FULL;
   } else if (name == AI_SEM_COLOR_WHITE) {
-    r = 1.0f;
-    g = 1.0f;
-    b = 1.0f;
+    r = AI_SEM_COLOR_DEFAULT_FULL;
+    g = AI_SEM_COLOR_DEFAULT_FULL;
+    b = AI_SEM_COLOR_DEFAULT_FULL;
   } else if (name == AI_SEM_COLOR_RAINBOW) {
     rainbow = true;
   }
@@ -150,23 +171,23 @@ inline bool should_apply_status_update(const int current_status_code, const int 
 inline bool update_status_from_option_and_log(const std::string &option, int &status_code) {
   const int new_status_code = status_code_from_option(option);
   if (!should_apply_status_update(status_code, new_status_code)) {
-    ESP_LOGI(AI_SEM_LOG_TAG_AI_STATUS, "Status unchanged (%d), skipping LED switch", status_code);
+    ESP_LOGI(AI_SEM_LOG_TAG_AI_STATUS, AI_SEM_LOG_STATUS_UNCHANGED, status_code);
     return false;
   }
 
-  ESP_LOGI(AI_SEM_LOG_TAG_AI_STATUS, "Status changed: %d -> %d", status_code, new_status_code);
+  ESP_LOGI(AI_SEM_LOG_TAG_AI_STATUS, AI_SEM_LOG_STATUS_CHANGED, status_code, new_status_code);
   status_code = new_status_code;
   return true;
 }
 
 inline const char *led_output_mode_text(const int status_code, const bool active_rainbow_effect, const int active_led_slot) {
-  if (status_code == 0) {
+  if (status_code == AI_SEM_STATUS_CODE_IDLE) {
     return AI_SEM_LED_MODE_IDLE_OFF;
   }
   if (active_rainbow_effect) {
     return AI_SEM_LED_MODE_WHOLE_STRIP_RAINBOW;
   }
-  if (active_led_slot > 0) {
+  if (active_led_slot > AI_SEM_DEFAULT_LED_SLOT) {
     return AI_SEM_LED_MODE_SINGLE_LED;
   }
   return AI_SEM_LED_MODE_OFF;
@@ -174,13 +195,13 @@ inline const char *led_output_mode_text(const int status_code, const bool active
 
 inline int led_slot_from_assignment(const std::string &assignment) {
   if (assignment == AI_SEM_LED_ASSIGN_RED) {
-    return 1;
+    return AI_SEM_LED_SLOT_RED;
   }
   if (assignment == AI_SEM_LED_ASSIGN_YELLOW) {
-    return 2;
+    return AI_SEM_LED_SLOT_YELLOW;
   }
   if (assignment == AI_SEM_LED_ASSIGN_GREEN) {
-    return 3;
+    return AI_SEM_LED_SLOT_GREEN;
   }
   return AI_SEM_DEFAULT_LED_SLOT;
 }
@@ -240,53 +261,53 @@ inline ActiveState compute_active_state(
   state.beep_repeat = AI_SEM_DEFAULT_BEEP_REPEAT;
   state.beep_volume = AI_SEM_DEFAULT_BEEP_VOLUME;
   state.rainbow_effect = AI_SEM_DEFAULT_RAINBOW_EFFECT;
-  state.idle = (status_code == 0);
+  state.idle = (status_code == AI_SEM_STATUS_CODE_IDLE);
 
   std::string color_name = AI_SEM_COLOR_RED;
-  if (status_code == 1) {
+  if (status_code == AI_SEM_STATUS_CODE_REASONING) {
     state.led_slot = led_slot_from_assignment(reasoning_led_assignment);
     color_name = reasoning_color;
-    state.led_brightness = reasoning_brightness / 100.0f;
+    state.led_brightness = reasoning_brightness / AI_SEM_PERCENT_DIVISOR;
     state.beep_enabled = reasoning_buzzer_enabled;
     state.beep_frequency = reasoning_buzzer_frequency;
     state.beep_repeat = reasoning_buzzer_repeat;
     state.beep_volume = reasoning_buzzer_volume;
-  } else if (status_code == 2) {
+  } else if (status_code == AI_SEM_STATUS_CODE_DONE) {
     state.led_slot = led_slot_from_assignment(done_led_assignment);
     color_name = done_color;
-    state.led_brightness = done_brightness / 100.0f;
+    state.led_brightness = done_brightness / AI_SEM_PERCENT_DIVISOR;
     state.beep_enabled = done_buzzer_enabled;
     state.beep_frequency = done_buzzer_frequency;
     state.beep_repeat = done_buzzer_repeat;
     state.beep_volume = done_buzzer_volume;
-  } else if (status_code == 3) {
+  } else if (status_code == AI_SEM_STATUS_CODE_NEED_USER_ACTION) {
     state.led_slot = led_slot_from_assignment(need_action_led_assignment);
     color_name = need_action_color;
-    state.led_brightness = need_action_brightness / 100.0f;
+    state.led_brightness = need_action_brightness / AI_SEM_PERCENT_DIVISOR;
     state.beep_enabled = need_action_buzzer_enabled;
     state.beep_frequency = need_action_buzzer_frequency;
     state.beep_repeat = need_action_buzzer_repeat;
     state.beep_volume = need_action_buzzer_volume;
-  } else if (status_code == 4) {
+  } else if (status_code == AI_SEM_STATUS_CODE_ALLOW_ACTION) {
     state.led_slot = led_slot_from_assignment(allow_action_led_assignment);
     color_name = allow_action_color;
-    state.led_brightness = allow_action_brightness / 100.0f;
+    state.led_brightness = allow_action_brightness / AI_SEM_PERCENT_DIVISOR;
     state.beep_enabled = allow_action_buzzer_enabled;
     state.beep_frequency = allow_action_buzzer_frequency;
     state.beep_repeat = allow_action_buzzer_repeat;
     state.beep_volume = allow_action_buzzer_volume;
-  } else if (status_code == 5) {
+  } else if (status_code == AI_SEM_STATUS_CODE_CUSTOM1) {
     state.led_slot = led_slot_from_assignment(custom1_led_assignment);
     color_name = custom1_color;
-    state.led_brightness = custom1_brightness / 100.0f;
+    state.led_brightness = custom1_brightness / AI_SEM_PERCENT_DIVISOR;
     state.beep_enabled = custom1_buzzer_enabled;
     state.beep_frequency = custom1_buzzer_frequency;
     state.beep_repeat = custom1_buzzer_repeat;
     state.beep_volume = custom1_buzzer_volume;
-  } else if (status_code == 6) {
+  } else if (status_code == AI_SEM_STATUS_CODE_CUSTOM2) {
     state.led_slot = led_slot_from_assignment(custom2_led_assignment);
     color_name = custom2_color;
-    state.led_brightness = custom2_brightness / 100.0f;
+    state.led_brightness = custom2_brightness / AI_SEM_PERCENT_DIVISOR;
     state.beep_enabled = custom2_buzzer_enabled;
     state.beep_frequency = custom2_buzzer_frequency;
     state.beep_repeat = custom2_buzzer_repeat;
