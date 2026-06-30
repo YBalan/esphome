@@ -113,8 +113,8 @@ esp32:
     type: esp-idf
 
 logger:
-  level: INFO
-  #baud_rate: 0
+  level: WARN
+  baud_rate: 0
 
 ota:
   - platform: esphome
@@ -530,29 +530,29 @@ light:
               green: 0%
               blue: 0%
               num_leds: 1
-          add_led_interval: 100ms
+          add_led_interval: 180ms
           reverse: false
       - addressable_scan:
           name: Scan
-          move_interval: 100ms
+          move_interval: 180ms
           scan_width: 1
       - addressable_twinkle:
           name: Twinkle
           twinkle_probability: 5%
-          progress_interval: 16ms
+          progress_interval: 64ms
       - addressable_random_twinkle:
           name: Random Twinkle
           twinkle_probability: 5%
-          progress_interval: 64ms
+          progress_interval: 120ms
       - addressable_fireworks:
           name: Fireworks
-          update_interval: 64ms
+          update_interval: 120ms
           spark_probability: 5%
           use_random_color: true
           fade_out_rate: 120
       - addressable_flicker:
           name: Flicker
-          update_interval: 33ms
+          update_interval: 80ms
           intensity: 2%
       - strobe:
           name: Strobe
