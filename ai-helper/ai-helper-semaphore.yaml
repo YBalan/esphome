@@ -1,33 +1,28 @@
 substitutions:
+  # Hardware pins
   sem_led_data_pin: GPIO26
   sem_buzzer_pin: GPIO25
-  sem_init_status_code: "0"
-  sem_init_active_led_slot: "0"
-  sem_init_float_zero: "0.0"
-  sem_init_bool_false: "false"
-  sem_init_beep_frequency: "1800.0"
-  sem_init_beep_repeat: "1"
 
+  # Status initialization
+  sem_init_status_code: "0"
   sem_init_status_option: Idle
+
+  # Status names (consistent with C++ enums)
   sem_status_reasoning_option: Reasoning
   sem_status_done_option: Done
   sem_status_need_user_action_option: Need User Action
   sem_status_allow_action_option: Allow Action
   sem_status_custom1_option: Custom1
   sem_status_custom2_option: Custom2
-  sem_init_reasoning_led_assignment: Yellow
-  sem_init_done_led_assignment: Green
-  sem_init_need_action_led_assignment: Red
-  sem_init_allow_action_led_assignment: Red
-  sem_init_custom1_led_assignment: Yellow
-  sem_init_custom2_led_assignment: Green
-  sem_init_reasoning_color_option: Yellow
-  sem_init_done_color_option: Green
-  sem_init_need_action_color_option: Red
-  sem_init_allow_action_color_option: Red
-  sem_init_custom1_color_option: Blue
-  sem_init_custom2_color_option: White
 
+  # LED/Buzzer state initialization
+  sem_init_active_led_slot: "0"
+  sem_init_float_zero: "0.0"
+  sem_init_bool_false: "false"
+  sem_init_beep_frequency: "1800.0"
+  sem_init_beep_repeat: "1"
+
+  # Default brightness and sound levels
   sem_init_brightness: "35"
   sem_init_rainbow_brightness: "35"
   sem_init_buzzer_frequency: "1800"
@@ -35,8 +30,27 @@ substitutions:
   sem_init_buzzer_volume_alert: "55"
   sem_init_buzzer_repeat_single: "1"
   sem_init_buzzer_repeat_double: "2"
+
+  # Beep timing
   sem_init_beep_on_ms: "150"
   sem_init_beep_off_ms: "120"
+
+  # Initial LED/Color assignments (per status)
+  sem_init_reasoning_led_assignment: Yellow
+  sem_init_reasoning_color_option: Yellow
+  sem_init_done_led_assignment: Green
+  sem_init_done_color_option: Green
+  sem_init_need_action_led_assignment: Red
+  sem_init_need_action_color_option: Red
+  sem_init_allow_action_led_assignment: Red
+  sem_init_allow_action_color_option: Red
+  sem_init_custom1_led_assignment: Yellow
+  sem_init_custom1_color_option: Blue
+  sem_init_custom2_led_assignment: Green
+  sem_init_custom2_color_option: White
+
+packages:
+  defaults: !include ai-helper-defaults.yaml
 
 esphome:
   on_boot:
@@ -233,6 +247,85 @@ script:
           green: 0%
           blue: 0%
       - lambda: |-
+          ai_helper::semaphore::StatusConfigArray configs = {};
+          configs[AI_SEM_STATUS_CODE_REASONING] = {
+            .led = {
+              .assignment = id(sem_sel_reasoning_led_assignment).current_option(),
+              .color = id(sem_sel_reasoning_color).current_option(),
+              .brightness = id(sem_num_reasoning_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_reasoning_buzzer_enabled).state,
+              .frequency = id(sem_num_reasoning_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_reasoning_buzzer_repeat).state,
+              .volume = id(sem_num_reasoning_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_DONE] = {
+            .led = {
+              .assignment = id(sem_sel_done_led_assignment).current_option(),
+              .color = id(sem_sel_done_color).current_option(),
+              .brightness = id(sem_num_done_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_done_buzzer_enabled).state,
+              .frequency = id(sem_num_done_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_done_buzzer_repeat).state,
+              .volume = id(sem_num_done_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_NEED_USER_ACTION] = {
+            .led = {
+              .assignment = id(sem_sel_need_action_led_assignment).current_option(),
+              .color = id(sem_sel_need_action_color).current_option(),
+              .brightness = id(sem_num_need_action_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_need_action_buzzer_enabled).state,
+              .frequency = id(sem_num_need_action_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_need_action_buzzer_repeat).state,
+              .volume = id(sem_num_need_action_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_ALLOW_ACTION] = {
+            .led = {
+              .assignment = id(sem_sel_allow_action_led_assignment).current_option(),
+              .color = id(sem_sel_allow_action_color).current_option(),
+              .brightness = id(sem_num_allow_action_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_allow_action_buzzer_enabled).state,
+              .frequency = id(sem_num_allow_action_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_allow_action_buzzer_repeat).state,
+              .volume = id(sem_num_allow_action_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_CUSTOM1] = {
+            .led = {
+              .assignment = id(sem_sel_custom1_led_assignment).current_option(),
+              .color = id(sem_sel_custom1_color).current_option(),
+              .brightness = id(sem_num_custom1_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_custom1_buzzer_enabled).state,
+              .frequency = id(sem_num_custom1_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_custom1_buzzer_repeat).state,
+              .volume = id(sem_num_custom1_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_CUSTOM2] = {
+            .led = {
+              .assignment = id(sem_sel_custom2_led_assignment).current_option(),
+              .color = id(sem_sel_custom2_color).current_option(),
+              .brightness = id(sem_num_custom2_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_custom2_buzzer_enabled).state,
+              .frequency = id(sem_num_custom2_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_custom2_buzzer_repeat).state,
+              .volume = id(sem_num_custom2_buzzer_volume).state,
+            },
+          };
           if (ai_helper::semaphore::compute_and_assign_active_state(
               id(sem_active_led_slot),
               id(sem_active_led_r),
@@ -245,48 +338,7 @@ script:
               id(sem_active_beep_volume),
               id(sem_active_rainbow_effect),
               id(sem_status_code),
-              id(sem_sel_reasoning_led_assignment).current_option(),
-              id(sem_sel_reasoning_color).current_option(),
-              id(sem_num_reasoning_brightness).state,
-              id(sem_sw_reasoning_buzzer_enabled).state,
-              id(sem_num_reasoning_buzzer_frequency).state,
-              (int) id(sem_num_reasoning_buzzer_repeat).state,
-              id(sem_num_reasoning_buzzer_volume).state,
-              id(sem_sel_done_led_assignment).current_option(),
-              id(sem_sel_done_color).current_option(),
-              id(sem_num_done_brightness).state,
-              id(sem_sw_done_buzzer_enabled).state,
-              id(sem_num_done_buzzer_frequency).state,
-              (int) id(sem_num_done_buzzer_repeat).state,
-              id(sem_num_done_buzzer_volume).state,
-              id(sem_sel_need_action_led_assignment).current_option(),
-              id(sem_sel_need_action_color).current_option(),
-              id(sem_num_need_action_brightness).state,
-              id(sem_sw_need_action_buzzer_enabled).state,
-              id(sem_num_need_action_buzzer_frequency).state,
-              (int) id(sem_num_need_action_buzzer_repeat).state,
-              id(sem_num_need_action_buzzer_volume).state,
-              id(sem_sel_allow_action_led_assignment).current_option(),
-              id(sem_sel_allow_action_color).current_option(),
-              id(sem_num_allow_action_brightness).state,
-              id(sem_sw_allow_action_buzzer_enabled).state,
-              id(sem_num_allow_action_buzzer_frequency).state,
-              (int) id(sem_num_allow_action_buzzer_repeat).state,
-              id(sem_num_allow_action_buzzer_volume).state,
-              id(sem_sel_custom1_led_assignment).current_option(),
-              id(sem_sel_custom1_color).current_option(),
-              id(sem_num_custom1_brightness).state,
-              id(sem_sw_custom1_buzzer_enabled).state,
-              id(sem_num_custom1_buzzer_frequency).state,
-              (int) id(sem_num_custom1_buzzer_repeat).state,
-              id(sem_num_custom1_buzzer_volume).state,
-              id(sem_sel_custom2_led_assignment).current_option(),
-              id(sem_sel_custom2_color).current_option(),
-              id(sem_num_custom2_brightness).state,
-              id(sem_sw_custom2_buzzer_enabled).state,
-              id(sem_num_custom2_buzzer_frequency).state,
-              (int) id(sem_num_custom2_buzzer_repeat).state,
-              id(sem_num_custom2_buzzer_volume).state)) {
+              configs)) {
             return;
           }
 
@@ -440,7 +492,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
+    options: ${color_options}
     initial_option: ${sem_init_reasoning_color_option}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -451,7 +503,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green" ]
+    options: ${led_assign_options}
     initial_option: ${sem_init_reasoning_led_assignment}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -462,7 +514,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
+    options: ${color_options}
     initial_option: ${sem_init_done_color_option}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -473,7 +525,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green" ]
+    options: ${led_assign_options}
     initial_option: ${sem_init_done_led_assignment}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -484,7 +536,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
+    options: ${color_options}
     initial_option: ${sem_init_need_action_color_option}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -495,7 +547,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green" ]
+    options: ${led_assign_options}
     initial_option: ${sem_init_need_action_led_assignment}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -506,7 +558,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
+    options: ${color_options}
     initial_option: ${sem_init_allow_action_color_option}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -517,7 +569,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green" ]
+    options: ${led_assign_options}
     initial_option: ${sem_init_allow_action_led_assignment}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -528,7 +580,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
+    options: ${color_options}
     initial_option: ${sem_init_custom1_color_option}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -539,7 +591,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green" ]
+    options: ${led_assign_options}
     initial_option: ${sem_init_custom1_led_assignment}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -550,7 +602,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green", "Blue", "White", "Rainbow" ]
+    options: ${color_options}
     initial_option: ${sem_init_custom2_color_option}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -561,7 +613,7 @@ select:
     optimistic: true
     restore_value: true
     entity_category: config
-    options: [ "Red", "Yellow", "Green" ]
+    options: ${led_assign_options}
     initial_option: ${sem_init_custom2_led_assignment}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -644,10 +696,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
     initial_value: ${sem_init_brightness}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -658,10 +710,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
     initial_value: ${sem_init_brightness}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -672,10 +724,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
     initial_value: ${sem_init_brightness}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -686,10 +738,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
     initial_value: ${sem_init_brightness}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -700,10 +752,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
     initial_value: ${sem_init_rainbow_brightness}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -714,10 +766,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
     initial_value: ${sem_init_brightness}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -728,10 +780,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 0
-    max_value: 100
-    step: 1
-    unit_of_measurement: "%"
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
     initial_value: ${sem_init_brightness}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -742,10 +794,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 200
-    max_value: 5000
-    step: 10
-    unit_of_measurement: Hz
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
     initial_value: ${sem_init_buzzer_frequency}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -756,10 +808,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 200
-    max_value: 5000
-    step: 10
-    unit_of_measurement: Hz
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
     initial_value: ${sem_init_buzzer_frequency}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -770,10 +822,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 200
-    max_value: 5000
-    step: 10
-    unit_of_measurement: Hz
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
     initial_value: ${sem_init_buzzer_frequency}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -784,10 +836,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 200
-    max_value: 5000
-    step: 10
-    unit_of_measurement: Hz
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
     initial_value: ${sem_init_buzzer_frequency}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -798,10 +850,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 200
-    max_value: 5000
-    step: 10
-    unit_of_measurement: Hz
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
     initial_value: ${sem_init_buzzer_frequency}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -812,10 +864,10 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 200
-    max_value: 5000
-    step: 10
-    unit_of_measurement: Hz
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
     initial_value: ${sem_init_buzzer_frequency}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -910,9 +962,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
     initial_value: ${sem_init_buzzer_repeat_single}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -923,9 +975,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
     initial_value: ${sem_init_buzzer_repeat_single}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -936,9 +988,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
     initial_value: ${sem_init_buzzer_repeat_double}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -949,9 +1001,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
     initial_value: ${sem_init_buzzer_repeat_double}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -962,9 +1014,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
     initial_value: ${sem_init_buzzer_repeat_single}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -975,9 +1027,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 1
-    max_value: 10
-    step: 1
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
     initial_value: ${sem_init_buzzer_repeat_single}
     set_action:
       - script.execute: sem_apply_status_outputs
@@ -988,9 +1040,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 20
-    max_value: 1000
-    step: 10
+    min_value: ${beep_on_min_ms}
+    max_value: ${beep_on_max_ms}
+    step: ${beep_on_step_ms}
     unit_of_measurement: ms
     initial_value: ${sem_init_beep_on_ms}
 
@@ -1000,9 +1052,9 @@ number:
     entity_category: config
     optimistic: true
     restore_value: true
-    min_value: 20
-    max_value: 1000
-    step: 10
+    min_value: ${beep_off_min_ms}
+    max_value: ${beep_off_max_ms}
+    step: ${beep_off_step_ms}
     unit_of_measurement: ms
     initial_value: ${sem_init_beep_off_ms}
 

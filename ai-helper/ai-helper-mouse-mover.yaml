@@ -1,4 +1,8 @@
+packages:
+  defaults: !include ai-helper-mouse-mover-defaults.yaml
+
 substitutions:
+  # Hardware-specific pins and configuration
   mm_servo_pin: GPIO23
   mm_lcd_sda_pin: GPIO21
   mm_lcd_scl_pin: GPIO22
@@ -7,78 +11,26 @@ substitutions:
   mm_btn_up_pin: GPIO14
   mm_btn_down_pin: GPIO12
   mm_btn_right_pin: GPIO13
+  mm_builtin_blue_led_pin: GPIO2
 
+  # Timing settings
   mm_backlight_delay_ms: "60000"
   mm_long_press_ms: "2000"
   mm_short_press_min_ms: "30"
   mm_short_press_max_ms: "800"
   mm_long_press_max_s: "10s"
 
+  # System settings
   mm_boot_priority: "-5"
   mm_servo_pwm_frequency: "50 Hz"
   mm_display_update_interval: "1s"
   mm_main_interval: "1s"
 
-  mm_angle_min: "0"
-  mm_angle_max: "270"
-  mm_angle_step: "1"
-  mm_max_angle_min: "90"
-  mm_max_angle_step: "90"
-
-  mm_period_cfg_min_s: "5"
-  mm_period_cfg_max_s: "3600"
-  mm_period_cfg_step_s: "1"
-
-  mm_move_step_cfg_min: "1"
-  mm_move_step_cfg_max: "10"
-  mm_move_step_cfg_step: "1"
-
-  mm_move_delay_cfg_min_ms: "20"
-  mm_move_delay_cfg_max_ms: "2000"
-  mm_move_delay_cfg_step_ms: "10"
-
-  mm_bound_step_cfg_min: "1"
-  mm_bound_step_cfg_max: "20"
-  mm_bound_step_cfg_step: "1"
-
-  mm_period_min_cfg_max_s: "3600"
-  mm_period_min_cfg_step_s: "1"
-  mm_period_min_cfg_initial_s: "120"
-  mm_period_max_cfg_min_s: "5"
-  mm_period_max_cfg_max_s: "7200"
-  mm_period_max_cfg_step_s: "1"
-  mm_period_max_cfg_initial_s: "360"
-
-  mm_step_min_cfg_max: "10"
-  mm_step_min_cfg_step: "1"
-  mm_step_min_cfg_initial: "1"
-  mm_step_max_cfg_min: "1"
-  mm_step_max_cfg_max: "20"
-  mm_step_max_cfg_step: "1"
-  mm_step_max_cfg_initial: "5"
-
-  mm_delay_min_cfg_max_ms: "3000"
-  mm_delay_min_cfg_step_ms: "10"
-  mm_delay_min_cfg_initial_ms: "100"
-  mm_delay_max_cfg_min_ms: "20"
-  mm_delay_max_cfg_max_ms: "5000"
-  mm_delay_max_cfg_step_ms: "10"
-  mm_delay_max_cfg_initial_ms: "700"
-
-  mm_init_start_angle: "150"
-  mm_init_end_angle: "180"
-  mm_init_max_angle: "180"
-  mm_init_manual_angle: "150"
-  mm_init_move_angle: "175"
-  mm_init_move_step: "1"
-  mm_init_move_speed_delay_ms: "200"
-  mm_init_period_s: "120"
-  mm_init_bound_step: "5"
-
 esphome:
   on_boot:
     priority: ${mm_boot_priority}
     then:
+      - output.turn_off: mm_builtin_blue_led
       - script.execute: mm_backlight_on
       - script.execute: mm_servo_to_current
       - lambda: |-
@@ -128,6 +80,10 @@ globals:
     type: bool
     restore_value: yes
     initial_value: "true"
+  - id: mm_servo_led_blink_state
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
 i2c:
   - id: mm_i2c
@@ -140,6 +96,11 @@ output:
     id: mm_servo_pwm
     pin: ${mm_servo_pin}
     frequency: ${mm_servo_pwm_frequency}
+  - platform: gpio
+    id: mm_builtin_blue_led
+    pin:
+      number: ${mm_builtin_blue_led_pin}
+      inverted: false
 
 servo:
   - id: mm_servo
@@ -186,12 +147,14 @@ switch:
             ESP_LOGI("mouse_mover", "Compile-time disabled; forcing runtime switch OFF");
             return;
           }
+          id(mouse_mover_enabled).publish_state(true);
           id(mm_last_move_tick_ms) = millis();
           id(mm_lcd).backlight();
           ai_helper::mouse_mover::touch_backlight(id(mm_backlight_tick_ms), millis());
       - script.execute: mm_publish_text_states
     turn_off_action:
       - lambda: |-
+          id(mouse_mover_enabled).publish_state(false);
           id(mm_lcd).backlight();
           ai_helper::mouse_mover::touch_backlight(id(mm_backlight_tick_ms), millis());
       - script.execute: mm_publish_text_states
@@ -342,9 +305,19 @@ number:
     optimistic: true
     restore_value: true
     min_value: ${mm_move_step_cfg_min}
-    max_value: ${mm_move_step_cfg_max}
+    max_value: ${mm_step_max_cfg_max}
     step: ${mm_move_step_cfg_step}
     initial_value: ${mm_init_move_step}
+    set_action:
+      - lambda: |-
+          int min_step = (int) id(mm_num_step_min).state;
+          int max_step = (int) id(mm_num_step_max).state;
+          if (min_step > max_step) {
+            const int tmp = min_step;
+            min_step = max_step;
+            max_step = tmp;
+          }
+          id(mm_num_move_step).publish_state(ai_helper::mouse_mover::clamp_between((int) x, min_step, max_step));
 
   - platform: template
     id: mm_num_move_speed_delay_ms
@@ -403,6 +376,16 @@ number:
     max_value: ${mm_step_min_cfg_max}
     step: ${mm_step_min_cfg_step}
     initial_value: ${mm_step_min_cfg_initial}
+    set_action:
+      - lambda: |-
+          int min_step = (int) x;
+          int max_step = (int) id(mm_num_step_max).state;
+          if (min_step > max_step) {
+            max_step = min_step;
+            id(mm_num_step_max).publish_state(max_step);
+          }
+          id(mm_num_step_min).publish_state(min_step);
+          id(mm_num_move_step).publish_state(ai_helper::mouse_mover::clamp_between((int) id(mm_num_move_step).state, min_step, max_step));
 
   - platform: template
     id: mm_num_step_max
@@ -414,6 +397,16 @@ number:
     max_value: ${mm_step_max_cfg_max}
     step: ${mm_step_max_cfg_step}
     initial_value: ${mm_step_max_cfg_initial}
+    set_action:
+      - lambda: |-
+          int max_step = (int) x;
+          int min_step = (int) id(mm_num_step_min).state;
+          if (max_step < min_step) {
+            min_step = max_step;
+            id(mm_num_step_min).publish_state(min_step);
+          }
+          id(mm_num_step_max).publish_state(max_step);
+          id(mm_num_move_step).publish_state(ai_helper::mouse_mover::clamp_between((int) id(mm_num_move_step).state, min_step, max_step));
 
   - platform: template
     id: mm_num_delay_min_ms
@@ -554,6 +547,7 @@ binary_sensor:
                       id(mm_num_start_angle).publish_state(id(mm_current_angle));
                       id(mm_bound_edit_min) = false;
                     }
+          - script.execute: mm_publish_text_states
           - script.execute: mm_backlight_on
 
   - platform: gpio
@@ -590,6 +584,7 @@ binary_sensor:
                     if (ai_helper::mouse_mover::can_save_max(id(mm_current_angle), (int) id(mm_num_start_angle).state)) {
                       id(mm_num_end_angle).publish_state(id(mm_current_angle));
                     }
+          - script.execute: mm_publish_text_states
           - script.execute: mm_backlight_on
 
   - platform: gpio
@@ -610,6 +605,9 @@ binary_sensor:
         then:
           - lambda: |-
               id(mm_bound_menu_active) = false;
+          - select.set:
+              id: sem_ai_status_select
+              option: "Idle"
       - min_length: ${mm_long_press_ms}ms
         max_length: ${mm_long_press_max_s}
         then:
@@ -623,6 +621,19 @@ script:
       - lambda: |-
           id(mm_lcd).backlight();
           ai_helper::mouse_mover::touch_backlight(id(mm_backlight_tick_ms), millis());
+
+  - id: mm_servo_led_blink_iteration
+    mode: queued
+    then:
+      - lambda: |-
+          id(mm_servo_led_blink_state) = !id(mm_servo_led_blink_state);
+      - if:
+          condition:
+            lambda: return id(mm_servo_led_blink_state);
+          then:
+            - output.turn_on: mm_builtin_blue_led
+          else:
+            - output.turn_off: mm_builtin_blue_led
 
   - id: mm_servo_to_current
     mode: restart
@@ -667,6 +678,8 @@ script:
           const int angle_min = ai_helper::mouse_mover::start_offset_angle(start, end);
 
           id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::random_local_range(angle_min, end));
+          id(mm_num_move_step).publish_state(
+              ai_helper::mouse_mover::randomize_step((int) id(mm_num_step_min).state, (int) id(mm_num_step_max).state));
           id(mm_num_move_speed_delay_ms).publish_state(
               ai_helper::mouse_mover::random_local_range((int) id(mm_num_delay_min_ms).state, (int) id(mm_num_delay_max_ms).state));
           id(num_mouse_mover_period_s).publish_state(
@@ -675,8 +688,9 @@ script:
           id(mm_random_last_status) = "local";
           ESP_LOGI(
               "mouse_mover",
-              "Randomized LOCAL values angle=%d speed_ms=%d period_s=%d http=%d",
+              "Randomized LOCAL values angle=%d step=%d speed_ms=%d period_s=%d http=%d",
               (int) id(mm_num_move_angle).state,
+              (int) id(mm_num_move_step).state,
               (int) id(mm_num_move_speed_delay_ms).state,
               (int) id(num_mouse_mover_period_s).state,
               id(mm_random_last_http_status));
@@ -781,6 +795,38 @@ script:
                       id(mm_random_last_status).c_str());
                     id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
 
+  - id: mm_fetch_step_random_org
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            const int min_v = (int) id(mm_num_step_min).state;
+            const int max_v = (int) id(mm_num_step_max).state;
+            return "https://www.random.org/integers/?num=1&min=" + to_string(min_v) +
+                   "&max=" + to_string(max_v) +
+                   "&col=1&base=10&format=plain&rnd=new";
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  id(mm_random_last_http_status) = response->status_code;
+                  int value = 0;
+                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
+                    id(mm_num_move_step).publish_state(value);
+                    id(mm_random_last_status) = "random.org";
+                  } else {
+                    id(mm_num_move_step).publish_state(
+                        ai_helper::mouse_mover::randomize_step((int) id(mm_num_step_min).state, (int) id(mm_num_step_max).state));
+                    id(mm_random_last_status) = "random.org err -> local";
+                  }
+                  ESP_LOGI(
+                      "mouse_mover",
+                      "random.org STEP http=%d value=%d source=%s",
+                      response->status_code,
+                      (int) id(mm_num_move_step).state,
+                      id(mm_random_last_status).c_str());
+                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+
   - id: mm_refresh_random_values
     mode: restart
     then:
@@ -797,6 +843,7 @@ script:
             - script.execute: mm_randomize_local_values
           else:
             - script.execute: mm_fetch_angle_random_org
+            - script.execute: mm_fetch_step_random_org
             - script.execute: mm_fetch_speed_random_org
             - script.execute: mm_fetch_period_random_org
 
@@ -819,12 +866,14 @@ script:
                       level: INFO
                       format: "mouse_mover ignored; runtime switch OFF"
                 else:
-                  - script.execute: mm_backlight_on
                   - script.execute: mm_servo_move_cycle
 
   - id: mm_servo_move_cycle
     mode: single
     then:
+      - lambda: |-
+          id(mm_servo_led_blink_state) = false;
+      - output.turn_off: mm_builtin_blue_led
       - lambda: |-
           int step = 1;
           int target = 0;
@@ -846,6 +895,7 @@ script:
             - lambda: |-
                 ESP_LOGI("mouse_mover", "servo forward angle=%d", id(mm_current_angle));
                 ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle), (int) id(mm_num_max_angle).state);
+            - script.execute: mm_servo_led_blink_iteration
             - delay: !lambda return (uint32_t) id(mm_num_move_speed_delay_ms).state;
             - lambda: |-
                 id(mm_current_angle) = ai_helper::mouse_mover::next_forward_angle(id(mm_current_angle), (int) id(mm_num_move_step).state);
@@ -858,6 +908,7 @@ script:
             - lambda: |-
                 ESP_LOGI("mouse_mover", "servo backward angle=%d", id(mm_current_angle));
                 ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle), (int) id(mm_num_max_angle).state);
+            - script.execute: mm_servo_led_blink_iteration
             - delay: !lambda return (uint32_t) id(mm_num_move_speed_delay_ms).state;
             - lambda: |-
                 id(mm_current_angle) = ai_helper::mouse_mover::next_backward_angle(id(mm_current_angle), (int) id(mm_num_move_step).state);
@@ -868,6 +919,9 @@ script:
               id(mm_last_move_tick_ms),
               millis(),
               id(mouse_mover_tick_s));
+      - lambda: |-
+          id(mm_servo_led_blink_state) = false;
+      - output.turn_off: mm_builtin_blue_led
       - script.execute: mm_refresh_random_values
 
 text_sensor:
@@ -876,23 +930,33 @@ text_sensor:
     name: ${friendly_name} Mouse Mover Mode
     icon: mdi:mouse
     update_interval: never
+    lambda: return std::string(ai_helper::mouse_mover::mode_text(id(mouse_mover_enabled).state));
 
   - platform: template
     id: mouse_mover_bounds_text
     name: ${friendly_name} Mouse Mover Bounds
     icon: mdi:angle-obtuse
     update_interval: never
+    lambda: |-
+      char buf[AI_MOUSE_MOVER_BOUNDS_TEXT_LEN];
+      return std::string(ai_helper::mouse_mover::bounds_text((int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state, buf));
 
   - platform: template
     id: mouse_mover_random_source_text
     name: ${friendly_name} Mouse Mover Random Source
     icon: mdi:dice-multiple
     update_interval: never
+    lambda: return id(mm_random_last_status);
 
 interval:
   - interval: ${mm_main_interval}
     then:
       - lambda: |-
+          if (!id(mm_servo_move_cycle).is_running()) {
+            id(mm_builtin_blue_led).turn_off();
+            id(mm_servo_led_blink_state) = false;
+          }
+
           if (ai_helper::mouse_mover::build_enabled() &&
               id(mouse_mover_enabled).state &&
               !id(mm_bound_menu_active) &&

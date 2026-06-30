@@ -29,8 +29,8 @@
 #define AI_MOUSE_MOVER_TEXT_ENABLE_IN_BUILD "Enable in build"
 #define AI_MOUSE_MOVER_TEXT_BOUND_SAVE_MIN "Hold UP SaveMin "
 #define AI_MOUSE_MOVER_TEXT_BOUND_SAVE_MAX "Hold DN SaveMax "
-#define AI_MOUSE_MOVER_TEXT_STATUS_ON "MM ON "
-#define AI_MOUSE_MOVER_TEXT_STATUS_OFF "MM OFF"
+#define AI_MOUSE_MOVER_TEXT_STATUS_ON "ON"
+#define AI_MOUSE_MOVER_TEXT_STATUS_OFF "OFF"
 #define AI_MOUSE_MOVER_TEXT_CAPTIVE_PORTAL "Captive Portal  "
 
 #define AI_MOUSE_MOVER_FMT_STRING "%s"
@@ -110,20 +110,20 @@ inline int normalize_end_angle(const int requested_end, const int start_angle, c
   return end;
 }
 
-inline int normalize_target_angle(const int requested_target, const int start_angle, const int end_angle, const int max_angle = AI_MOUSE_MOVER_ANGLE_180) {
+inline int normalize_angle_in_range(const int angle, const int start_angle, const int end_angle, const int max_angle = AI_MOUSE_MOVER_ANGLE_180) {
   const int max_clamped = normalize_max_angle(max_angle);
-  return clamp_between(
-      clamp_angle(requested_target, max_clamped),
-      clamp_angle(start_angle, max_clamped),
-      clamp_angle(end_angle, max_clamped));
+  const int clamped_angle = clamp_angle(angle, max_clamped);
+  const int clamped_start = clamp_angle(start_angle, max_clamped);
+  const int clamped_end = clamp_angle(end_angle, max_clamped);
+  return clamp_between(clamped_angle, clamped_start, clamped_end);
+}
+
+inline int normalize_target_angle(const int requested_target, const int start_angle, const int end_angle, const int max_angle = AI_MOUSE_MOVER_ANGLE_180) {
+  return normalize_angle_in_range(requested_target, start_angle, end_angle, max_angle);
 }
 
 inline int normalize_current_angle(const int current_angle, const int start_angle, const int end_angle, const int max_angle = AI_MOUSE_MOVER_ANGLE_180) {
-  const int max_clamped = normalize_max_angle(max_angle);
-  return clamp_between(
-      clamp_angle(current_angle, max_clamped),
-      clamp_angle(start_angle, max_clamped),
-      clamp_angle(end_angle, max_clamped));
+  return normalize_angle_in_range(current_angle, start_angle, end_angle, max_angle);
 }
 
 inline uint32_t elapsed_seconds(const uint32_t now_ms, const uint32_t last_tick_ms) {
@@ -330,6 +330,10 @@ inline int random_local_range(const int min_value, const int max_value) {
   const uint32_t range = static_cast<uint32_t>(max_v - min_v + 1);
   const uint32_t raw = esp_random();
   return min_v + static_cast<int>(raw % range);
+}
+
+inline int randomize_step(const int step_min, const int step_max) {
+  return random_local_range(step_min, step_max);
 }
 
 inline bool parse_int_response(const char *body, int &value) {

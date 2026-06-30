@@ -94,7 +94,7 @@ function Invoke-StatusWebhook($status) {
     return
   }
 
-  $uri = "http://172.16.1.173/button/{0}/press" -f $endpointMap[$status]
+  $uri = "http://172.16.1.15/button/{0}/press" -f $endpointMap[$status]
 
   try {
     Invoke-WebRequest -Uri $uri -Method Post -Body "" -TimeoutSec 5 | Out-Null

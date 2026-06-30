@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <array>
 
 #define AI_SEM_LOG_TAG_AI_STATUS "ai_status"
 
@@ -43,6 +44,7 @@
 #define AI_SEM_STATUS_CODE_ALLOW_ACTION 4
 #define AI_SEM_STATUS_CODE_CUSTOM1 5
 #define AI_SEM_STATUS_CODE_CUSTOM2 6
+#define AI_SEM_STATUS_CODE_COUNT 7
 
 #define AI_SEM_DEFAULT_FLOAT_ZERO 0.0f
 #define AI_SEM_COLOR_DEFAULT_FULL 1.0f
@@ -60,6 +62,24 @@
 namespace ai_helper {
 namespace semaphore {
 
+struct LedConfig {
+  std::string assignment;
+  std::string color;
+  float brightness;
+};
+
+struct BuzzerConfig {
+  bool enabled;
+  float frequency;
+  int repeat_count;
+  float volume;
+};
+
+struct StatusConfig {
+  LedConfig led;
+  BuzzerConfig buzzer;
+};
+
 struct ActiveState {
   int led_slot;
   float led_r;
@@ -73,6 +93,8 @@ struct ActiveState {
   bool rainbow_effect;
   bool idle;
 };
+
+using StatusConfigArray = std::array<StatusConfig, AI_SEM_STATUS_CODE_COUNT>;
 
 inline int status_code_from_option(const std::string &option) {
   if (option == AI_SEM_STATUS_REASONING) {
@@ -208,48 +230,7 @@ inline int led_slot_from_assignment(const std::string &assignment) {
 
 inline ActiveState compute_active_state(
     const int status_code,
-    const std::string &reasoning_led_assignment,
-    const std::string &reasoning_color,
-    const float reasoning_brightness,
-    const bool reasoning_buzzer_enabled,
-    const float reasoning_buzzer_frequency,
-    const int reasoning_buzzer_repeat,
-    const float reasoning_buzzer_volume,
-    const std::string &done_led_assignment,
-    const std::string &done_color,
-    const float done_brightness,
-    const bool done_buzzer_enabled,
-    const float done_buzzer_frequency,
-    const int done_buzzer_repeat,
-    const float done_buzzer_volume,
-    const std::string &need_action_led_assignment,
-    const std::string &need_action_color,
-    const float need_action_brightness,
-    const bool need_action_buzzer_enabled,
-    const float need_action_buzzer_frequency,
-    const int need_action_buzzer_repeat,
-    const float need_action_buzzer_volume,
-    const std::string &allow_action_led_assignment,
-    const std::string &allow_action_color,
-    const float allow_action_brightness,
-    const bool allow_action_buzzer_enabled,
-    const float allow_action_buzzer_frequency,
-    const int allow_action_buzzer_repeat,
-    const float allow_action_buzzer_volume,
-    const std::string &custom1_led_assignment,
-    const std::string &custom1_color,
-    const float custom1_brightness,
-    const bool custom1_buzzer_enabled,
-    const float custom1_buzzer_frequency,
-    const int custom1_buzzer_repeat,
-    const float custom1_buzzer_volume,
-    const std::string &custom2_led_assignment,
-    const std::string &custom2_color,
-    const float custom2_brightness,
-    const bool custom2_buzzer_enabled,
-    const float custom2_buzzer_frequency,
-    const int custom2_buzzer_repeat,
-    const float custom2_buzzer_volume) {
+    const StatusConfigArray &configs) {
   ActiveState state{};
   state.led_slot = AI_SEM_DEFAULT_LED_SLOT;
   state.led_r = AI_SEM_DEFAULT_FLOAT_ZERO;
@@ -263,59 +244,15 @@ inline ActiveState compute_active_state(
   state.rainbow_effect = AI_SEM_DEFAULT_RAINBOW_EFFECT;
   state.idle = (status_code == AI_SEM_STATUS_CODE_IDLE);
 
-  std::string color_name = AI_SEM_COLOR_RED;
-  if (status_code == AI_SEM_STATUS_CODE_REASONING) {
-    state.led_slot = led_slot_from_assignment(reasoning_led_assignment);
-    color_name = reasoning_color;
-    state.led_brightness = reasoning_brightness / AI_SEM_PERCENT_DIVISOR;
-    state.beep_enabled = reasoning_buzzer_enabled;
-    state.beep_frequency = reasoning_buzzer_frequency;
-    state.beep_repeat = reasoning_buzzer_repeat;
-    state.beep_volume = reasoning_buzzer_volume;
-  } else if (status_code == AI_SEM_STATUS_CODE_DONE) {
-    state.led_slot = led_slot_from_assignment(done_led_assignment);
-    color_name = done_color;
-    state.led_brightness = done_brightness / AI_SEM_PERCENT_DIVISOR;
-    state.beep_enabled = done_buzzer_enabled;
-    state.beep_frequency = done_buzzer_frequency;
-    state.beep_repeat = done_buzzer_repeat;
-    state.beep_volume = done_buzzer_volume;
-  } else if (status_code == AI_SEM_STATUS_CODE_NEED_USER_ACTION) {
-    state.led_slot = led_slot_from_assignment(need_action_led_assignment);
-    color_name = need_action_color;
-    state.led_brightness = need_action_brightness / AI_SEM_PERCENT_DIVISOR;
-    state.beep_enabled = need_action_buzzer_enabled;
-    state.beep_frequency = need_action_buzzer_frequency;
-    state.beep_repeat = need_action_buzzer_repeat;
-    state.beep_volume = need_action_buzzer_volume;
-  } else if (status_code == AI_SEM_STATUS_CODE_ALLOW_ACTION) {
-    state.led_slot = led_slot_from_assignment(allow_action_led_assignment);
-    color_name = allow_action_color;
-    state.led_brightness = allow_action_brightness / AI_SEM_PERCENT_DIVISOR;
-    state.beep_enabled = allow_action_buzzer_enabled;
-    state.beep_frequency = allow_action_buzzer_frequency;
-    state.beep_repeat = allow_action_buzzer_repeat;
-    state.beep_volume = allow_action_buzzer_volume;
-  } else if (status_code == AI_SEM_STATUS_CODE_CUSTOM1) {
-    state.led_slot = led_slot_from_assignment(custom1_led_assignment);
-    color_name = custom1_color;
-    state.led_brightness = custom1_brightness / AI_SEM_PERCENT_DIVISOR;
-    state.beep_enabled = custom1_buzzer_enabled;
-    state.beep_frequency = custom1_buzzer_frequency;
-    state.beep_repeat = custom1_buzzer_repeat;
-    state.beep_volume = custom1_buzzer_volume;
-  } else if (status_code == AI_SEM_STATUS_CODE_CUSTOM2) {
-    state.led_slot = led_slot_from_assignment(custom2_led_assignment);
-    color_name = custom2_color;
-    state.led_brightness = custom2_brightness / AI_SEM_PERCENT_DIVISOR;
-    state.beep_enabled = custom2_buzzer_enabled;
-    state.beep_frequency = custom2_buzzer_frequency;
-    state.beep_repeat = custom2_buzzer_repeat;
-    state.beep_volume = custom2_buzzer_volume;
-  }
-
-  if (!state.idle) {
-    color_from_name(color_name, state.led_r, state.led_g, state.led_b, state.rainbow_effect);
+  if (!state.idle && status_code >= 0 && status_code < AI_SEM_STATUS_CODE_COUNT) {
+    const auto &config = configs[status_code];
+    state.led_slot = led_slot_from_assignment(config.led.assignment);
+    state.led_brightness = config.led.brightness / AI_SEM_PERCENT_DIVISOR;
+    state.beep_enabled = config.buzzer.enabled;
+    state.beep_frequency = config.buzzer.frequency;
+    state.beep_repeat = config.buzzer.repeat_count;
+    state.beep_volume = config.buzzer.volume;
+    color_from_name(config.led.color, state.led_r, state.led_g, state.led_b, state.rainbow_effect);
   }
 
   return state;
@@ -333,92 +270,8 @@ inline bool compute_and_assign_active_state(
     float &active_beep_volume,
     bool &active_rainbow_effect,
     const int status_code,
-  const std::string &reasoning_led_assignment,
-    const std::string &reasoning_color,
-    const float reasoning_brightness,
-    const bool reasoning_buzzer_enabled,
-    const float reasoning_buzzer_frequency,
-    const int reasoning_buzzer_repeat,
-    const float reasoning_buzzer_volume,
-  const std::string &done_led_assignment,
-    const std::string &done_color,
-    const float done_brightness,
-    const bool done_buzzer_enabled,
-    const float done_buzzer_frequency,
-    const int done_buzzer_repeat,
-    const float done_buzzer_volume,
-  const std::string &need_action_led_assignment,
-    const std::string &need_action_color,
-    const float need_action_brightness,
-    const bool need_action_buzzer_enabled,
-    const float need_action_buzzer_frequency,
-    const int need_action_buzzer_repeat,
-    const float need_action_buzzer_volume,
-  const std::string &allow_action_led_assignment,
-    const std::string &allow_action_color,
-    const float allow_action_brightness,
-    const bool allow_action_buzzer_enabled,
-    const float allow_action_buzzer_frequency,
-    const int allow_action_buzzer_repeat,
-    const float allow_action_buzzer_volume,
-  const std::string &custom1_led_assignment,
-    const std::string &custom1_color,
-    const float custom1_brightness,
-    const bool custom1_buzzer_enabled,
-    const float custom1_buzzer_frequency,
-    const int custom1_buzzer_repeat,
-    const float custom1_buzzer_volume,
-  const std::string &custom2_led_assignment,
-    const std::string &custom2_color,
-    const float custom2_brightness,
-    const bool custom2_buzzer_enabled,
-    const float custom2_buzzer_frequency,
-    const int custom2_buzzer_repeat,
-    const float custom2_buzzer_volume) {
-  const auto state = compute_active_state(
-      status_code,
-      reasoning_led_assignment,
-      reasoning_color,
-      reasoning_brightness,
-      reasoning_buzzer_enabled,
-      reasoning_buzzer_frequency,
-      reasoning_buzzer_repeat,
-      reasoning_buzzer_volume,
-      done_led_assignment,
-      done_color,
-      done_brightness,
-      done_buzzer_enabled,
-      done_buzzer_frequency,
-      done_buzzer_repeat,
-      done_buzzer_volume,
-      need_action_led_assignment,
-      need_action_color,
-      need_action_brightness,
-      need_action_buzzer_enabled,
-      need_action_buzzer_frequency,
-      need_action_buzzer_repeat,
-      need_action_buzzer_volume,
-      allow_action_led_assignment,
-      allow_action_color,
-      allow_action_brightness,
-      allow_action_buzzer_enabled,
-      allow_action_buzzer_frequency,
-      allow_action_buzzer_repeat,
-      allow_action_buzzer_volume,
-      custom1_led_assignment,
-      custom1_color,
-      custom1_brightness,
-      custom1_buzzer_enabled,
-      custom1_buzzer_frequency,
-      custom1_buzzer_repeat,
-      custom1_buzzer_volume,
-      custom2_led_assignment,
-      custom2_color,
-      custom2_brightness,
-      custom2_buzzer_enabled,
-      custom2_buzzer_frequency,
-      custom2_buzzer_repeat,
-      custom2_buzzer_volume);
+    const StatusConfigArray &configs) {
+  const auto state = compute_active_state(status_code, configs);
 
   active_led_slot = state.led_slot;
   active_led_r = state.led_r;

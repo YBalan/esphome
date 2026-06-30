@@ -1,0 +1,38 @@
+substitutions:
+  # Common brightness/percentage settings
+  brightness_min: "0"
+  brightness_max: "100"
+  brightness_step: "1"
+  brightness_unit: "%"
+
+  # Common buzzer frequency settings
+  buzzer_freq_min: "200"
+  buzzer_freq_max: "5000"
+  buzzer_freq_step: "10"
+  buzzer_freq_unit: "Hz"
+
+  # Common color options (as YAML lists for ESPHome select components)
+  color_options:
+    - Red
+    - Yellow
+    - Green
+    - Blue
+    - White
+    - Rainbow
+  led_assign_options:
+    - Red
+    - Yellow
+    - Green
+
+  # Common repeat settings
+  buzzer_repeat_min: "1"
+  buzzer_repeat_max: "10"
+  buzzer_repeat_step: "1"
+
+  # Beep timing
+  beep_on_min_ms: "20"
+  beep_on_max_ms: "1000"
+  beep_on_step_ms: "10"
+  beep_off_min_ms: "20"
+  beep_off_max_ms: "1000"
+  beep_off_step_ms: "10"

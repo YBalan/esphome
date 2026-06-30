@@ -42,6 +42,45 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion|ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
+              "-Mode",
+              "need_user_action"
+            ],
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
+              "-Mode",
+              "reasoning"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "hooks": [
