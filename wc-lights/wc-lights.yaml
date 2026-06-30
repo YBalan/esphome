@@ -15,7 +15,7 @@ substitutions:
   bath_light_pin: GPIO19
   wc_door_pin: GPIO21
   bath_door_pin: GPIO22  
-  rgb_strip_pin: GPIO27
+  rgb_strip_pin: GPIO26
   reset_counters_pin: GPIO4
 
   # Door input settings (NO/NC per room)
@@ -113,7 +113,7 @@ esp32:
     type: esp-idf
 
 logger:
-  level: WARN
+  level: INFO
   baud_rate: 0
 
 ota:
@@ -490,22 +490,14 @@ light:
     restore_mode: RESTORE_DEFAULT_OFF
 
   - platform: esp32_rmt_led_strip
-    id: status_strip_raw
+    id: status_strip
+    name: Device - Status Strip
     pin: ${rgb_strip_pin}
     num_leds: ${rgb_led_count}
     rgb_order: ${rgb_order}
     chipset: ws2812
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
-
-  - platform: partition
-    id: status_strip
-    name: Device - Status Strip
-    segments:
-      # Reserve pixel 0 as NULL pixel and expose LEDs 1..N-1.
-      - id: status_strip_raw
-        from: 1
-        to: ${rgb_usable_led_count}
     effects:
       - addressable_rainbow:
           name: Rainbow
