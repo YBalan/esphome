@@ -23,6 +23,7 @@ substitutions:
   # System settings
   mm_boot_priority: "-5"
   mm_servo_pwm_frequency: "50 Hz"
+  mm_servo_pwm_channel: "0"
   mm_display_update_interval: "1s"
   mm_main_interval: "1s"
 
@@ -96,6 +97,7 @@ output:
     id: mm_servo_pwm
     pin: ${mm_servo_pin}
     frequency: ${mm_servo_pwm_frequency}
+    channel: ${mm_servo_pwm_channel}
   - platform: gpio
     id: mm_builtin_blue_led
     pin:

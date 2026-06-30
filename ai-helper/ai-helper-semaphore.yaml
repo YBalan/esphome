@@ -2,6 +2,7 @@ substitutions:
   # Hardware pins
   sem_led_data_pin: GPIO26
   sem_buzzer_pin: GPIO25
+  sem_buzzer_pwm_channel: "2"
 
   # Status initialization
   sem_init_status_code: "0"
@@ -23,11 +24,11 @@ substitutions:
   sem_init_beep_repeat: "1"
 
   # Default brightness and sound levels
-  sem_init_brightness: "35"
-  sem_init_rainbow_brightness: "35"
+  sem_init_brightness: "20"
+  sem_init_rainbow_brightness: "20"
   sem_init_buzzer_frequency: "1800"
-  sem_init_buzzer_volume_off: "0"
-  sem_init_buzzer_volume_alert: "55"
+  sem_init_buzzer_volume_off: "10"
+  sem_init_buzzer_volume_alert: "10"
   sem_init_buzzer_repeat_single: "1"
   sem_init_buzzer_repeat_double: "2"
 
@@ -146,6 +147,8 @@ output:
   - platform: ledc
     id: sem_buzzer_pwm
     pin: ${sem_buzzer_pin}
+    channel: ${sem_buzzer_pwm_channel}
+    frequency: ${sem_init_buzzer_frequency}
 
 light:
   - platform: esp32_rmt_led_strip
@@ -171,8 +174,8 @@ light:
     internal: false
     segments:
       - id: sem_status_led_raw
-        from: 1
-        to: 1
+        from: 3
+        to: 3
 
   - platform: partition
     id: sem_status_led_yellow
@@ -189,8 +192,8 @@ light:
     internal: false
     segments:
       - id: sem_status_led_raw
-        from: 3
-        to: 3
+        from: 1
+        to: 1
 
 script:
   - id: sem_publish_text_states
@@ -214,9 +217,6 @@ script:
                 count: !lambda |-
                   return id(sem_active_beep_repeat) > 0 ? id(sem_active_beep_repeat) : 1;
                 then:
-                  - output.ledc.set_frequency:
-                      id: sem_buzzer_pwm
-                      frequency: !lambda return id(sem_active_beep_frequency);
                   - output.set_level:
                       id: sem_buzzer_pwm
                       level: !lambda return id(sem_active_beep_volume) / 100.0f;
