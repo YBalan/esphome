@@ -30,6 +30,7 @@ substitutions:
 
   # RGB strip
   rgb_led_count: "50"
+  rgb_usable_led_count: "49"
   rgb_default_active_led_count: "26"
   strip_wc_inside_brightness_pct: "35"
   strip_flash_brightness_pct: "35"
@@ -489,14 +490,22 @@ light:
     restore_mode: RESTORE_DEFAULT_OFF
 
   - platform: esp32_rmt_led_strip
-    id: status_strip
-    name: Device - Status Strip
+    id: status_strip_raw
     pin: ${rgb_strip_pin}
     num_leds: ${rgb_led_count}
     rgb_order: ${rgb_order}
     chipset: ws2812
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
+
+  - platform: partition
+    id: status_strip
+    name: Device - Status Strip
+    segments:
+      # Reserve pixel 0 as NULL pixel and expose LEDs 1..N-1.
+      - id: status_strip_raw
+        from: 1
+        to: ${rgb_usable_led_count}
     effects:
       - addressable_rainbow:
           name: Rainbow
@@ -944,7 +953,7 @@ number:
     restore_value: true
     initial_value: ${rgb_default_active_led_count}
     min_value: 0
-    max_value: ${rgb_led_count}
+    max_value: ${rgb_usable_led_count}
     step: 1
 
   # Night mode schedule
