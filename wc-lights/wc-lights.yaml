@@ -857,7 +857,7 @@ select:
     optimistic: true
     restore_value: true
     initial_option: "Red"
-    options:
+    options: &color_options
       - "Red"
       - "Green"
       - "Blue"
@@ -876,17 +876,7 @@ select:
     optimistic: true
     restore_value: true
     initial_option: "Green"
-    options:
-      - "Red"
-      - "Green"
-      - "Blue"
-      - "Yellow"
-      - "Orange"
-      - "Purple"
-      - "Cyan"
-      - "White"
-      - "Warm White"
-      - "Pink"
+    options: *color_options
 
   - platform: template
     id: bath_flash_color_preset
@@ -895,17 +885,7 @@ select:
     optimistic: true
     restore_value: true
     initial_option: "Blue"
-    options:
-      - "Red"
-      - "Green"
-      - "Blue"
-      - "Yellow"
-      - "Orange"
-      - "Purple"
-      - "Cyan"
-      - "White"
-      - "Warm White"
-      - "Pink"
+    options: *color_options
 
 number:
   - platform: template
