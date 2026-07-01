@@ -607,9 +607,9 @@ binary_sensor:
         then:
           - lambda: |-
               id(mm_bound_menu_active) = false;
-          - select.set:
-              id: sem_ai_status_select
-              option: "Idle"
+              #ifdef AI_HELPER_SEMAPHORE_BUILD_ENABLED
+              id(sem_ai_status_select).make_call().set_option("Idle").perform();
+              #endif
       - min_length: ${mm_long_press_ms}ms
         max_length: ${mm_long_press_max_s}
         then:

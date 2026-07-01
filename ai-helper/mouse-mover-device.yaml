@@ -1,7 +1,7 @@
 substitutions:
-  device_name: ai-helper
-  friendly_name: AI Helper
-  ap_ssid: AP-AI-Helper
+  device_name: mouse-mover
+  friendly_name: Mouse Mover
+  ap_ssid: AP-Mouse-Mover
   ap_password: password
   time_zone: Europe/Kyiv
   wifi_rssi_update: 60s
@@ -12,14 +12,8 @@ esphome:
   platformio_options:
     build_flags:
       - -DAI_HELPER_MOUSE_MOVER_BUILD_ENABLED=1
-      - -DAI_HELPER_SEMAPHORE_BUILD_ENABLED=1
   includes:
-    - ai-helper-semaphore.h
     - ai-helper-mouse-mover.h
-  on_boot:
-    priority: -10
-    then:
-      - script.execute: sem_apply_status_outputs
 
 esp32:
   board: esp32dev
@@ -28,5 +22,6 @@ esp32:
 
 packages:
   common: !include ai-helper-common.yaml
-  semaphore: !include ai-helper-semaphore.yaml
   mouse_mover: !include ai-helper-mouse-mover.yaml
+
+api:
