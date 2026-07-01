@@ -8,10 +8,12 @@ Both modules share one ESPHome codebase and can be flashed together on one board
 
 ## Hardware
 
-3D-printable enclosure parts for the mouse mover are in [`stl/`](stl/):
+3D-printable enclosure parts are in [`stl/`](stl/):
 
-- `MMBottom.stl` / `MMTop.stl` — enclosure base and lid
+- `MMBottom.stl` / `MMTop.stl` — mouse mover enclosure base and lid
 - `MMHPart1.stl` .. `MMHPart4.stl`, `MMHPart2Long.stl` — mover arm/horn segments (use `MMHPart2Long.stl` instead of `MMHPart2.stl` for the extended-reach variant)
+- `Semaphor - Holder.stl`, `Semaphor - Sem Bottom.stl`, `Semaphor - Sem Top.stl`, `Semaphor - Screw.stl` — semaphore enclosure parts
+- `A1M AI-Helper.3mf` — combined 3MF project file for the semaphore parts
 
 Common electronics for both modules:
 
@@ -161,10 +163,22 @@ wifi_password: "Your_WiFi_Password"
 
 ## Photos
 
-![Assembled device](photo/IMG_20240731_201218.jpg)
+![Assembled device](photo/IMG_20260701_184322.jpg)
+
+![Assembled device](photo/IMG_20260701_184308.jpg)
+
+![Assembled device](photo/IMG_20260701_184259.jpg)
+
+![Assembled device](photo/IMG_20260701_184258.jpg)
+
+![Assembled device](photo/IMG_20260701_184256.jpg)
+
+![Assembled device](photo/IMG_20260701_184252.jpg)
+
+![Assembled device](photo/IMG_20240731_201313.jpg)
 
 ![Assembled device](photo/IMG_20240731_201309.jpg)
 
-![Assembled device](photo/IMG_20240731_201313.jpg)
+![Assembled device](photo/IMG_20240731_201218.jpg)
 
 Mouse mover in action: [`VID_20240801_203023.mp4`](photo/VID_20240801_203023.mp4), [`VID_20240801_203426.mp4`](photo/VID_20240801_203426.mp4)
