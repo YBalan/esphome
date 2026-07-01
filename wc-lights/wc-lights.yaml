@@ -15,7 +15,7 @@ substitutions:
   bath_light_pin: GPIO19
   wc_door_pin: GPIO21
   bath_door_pin: GPIO22  
-  rgb_strip_pin: GPIO27
+  rgb_strip_pin: GPIO26
   reset_counters_pin: GPIO4
 
   # Door input settings (NO/NC per room)
@@ -30,6 +30,7 @@ substitutions:
 
   # RGB strip
   rgb_led_count: "50"
+  rgb_usable_led_count: "49"
   rgb_default_active_led_count: "26"
   strip_wc_inside_brightness_pct: "35"
   strip_flash_brightness_pct: "35"
@@ -113,7 +114,7 @@ esp32:
 
 logger:
   level: INFO
-  #baud_rate: 0
+  baud_rate: 0
 
 ota:
   - platform: esphome
@@ -521,29 +522,29 @@ light:
               green: 0%
               blue: 0%
               num_leds: 1
-          add_led_interval: 100ms
+          add_led_interval: 180ms
           reverse: false
       - addressable_scan:
           name: Scan
-          move_interval: 100ms
+          move_interval: 180ms
           scan_width: 1
       - addressable_twinkle:
           name: Twinkle
           twinkle_probability: 5%
-          progress_interval: 16ms
+          progress_interval: 64ms
       - addressable_random_twinkle:
           name: Random Twinkle
           twinkle_probability: 5%
-          progress_interval: 64ms
+          progress_interval: 120ms
       - addressable_fireworks:
           name: Fireworks
-          update_interval: 64ms
+          update_interval: 120ms
           spark_probability: 5%
           use_random_color: true
           fade_out_rate: 120
       - addressable_flicker:
           name: Flicker
-          update_interval: 33ms
+          update_interval: 80ms
           intensity: 2%
       - strobe:
           name: Strobe
@@ -856,7 +857,7 @@ select:
     optimistic: true
     restore_value: true
     initial_option: "Red"
-    options:
+    options: &color_options
       - "Red"
       - "Green"
       - "Blue"
@@ -875,17 +876,7 @@ select:
     optimistic: true
     restore_value: true
     initial_option: "Green"
-    options:
-      - "Red"
-      - "Green"
-      - "Blue"
-      - "Yellow"
-      - "Orange"
-      - "Purple"
-      - "Cyan"
-      - "White"
-      - "Warm White"
-      - "Pink"
+    options: *color_options
 
   - platform: template
     id: bath_flash_color_preset
@@ -894,17 +885,7 @@ select:
     optimistic: true
     restore_value: true
     initial_option: "Blue"
-    options:
-      - "Red"
-      - "Green"
-      - "Blue"
-      - "Yellow"
-      - "Orange"
-      - "Purple"
-      - "Cyan"
-      - "White"
-      - "Warm White"
-      - "Pink"
+    options: *color_options
 
 number:
   - platform: template
@@ -944,7 +925,7 @@ number:
     restore_value: true
     initial_value: ${rgb_default_active_led_count}
     min_value: 0
-    max_value: ${rgb_led_count}
+    max_value: ${rgb_usable_led_count}
     step: 1
 
   # Night mode schedule

@@ -1,0 +1,979 @@
+packages:
+  defaults: !include ai-helper-mouse-mover-defaults.yaml
+
+substitutions:
+  # Hardware-specific pins and configuration
+  mm_servo_pin: GPIO23
+  mm_lcd_sda_pin: GPIO21
+  mm_lcd_scl_pin: GPIO22
+  mm_lcd_address: "0x27"
+  mm_btn_ok_pin: GPIO27
+  mm_btn_up_pin: GPIO14
+  mm_btn_down_pin: GPIO12
+  mm_btn_right_pin: GPIO13
+  mm_builtin_blue_led_pin: GPIO2
+
+  # Timing settings
+  mm_backlight_delay_ms: "60000"
+  mm_long_press_ms: "2000"
+  mm_short_press_min_ms: "30"
+  mm_short_press_max_ms: "800"
+  mm_long_press_max_s: "10s"
+
+  # System settings
+  mm_boot_priority: "-5"
+  mm_servo_pwm_frequency: "50 Hz"
+  mm_servo_pwm_channel: "0"
+  mm_display_update_interval: "1s"
+  mm_main_interval: "1s"
+
+esphome:
+  on_boot:
+    priority: ${mm_boot_priority}
+    then:
+      - output.turn_off: mm_builtin_blue_led
+      - script.execute: mm_backlight_on
+      - script.execute: mm_servo_to_current
+      - lambda: |-
+          id(mm_random_org_selected) = id(mouse_mover_use_random_org).state;
+          bool enabled = id(mouse_mover_enabled).state;
+          ai_helper::mouse_mover::init_boot_state(id(mm_last_move_tick_ms), millis(), enabled);
+          if (!enabled) {
+            id(mouse_mover_enabled).publish_state(false);
+          }
+      - script.execute: mm_refresh_random_values
+      - script.execute: mm_publish_text_states
+
+globals:
+  - id: mouse_mover_tick_s
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: mm_last_move_tick_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: mm_backlight_tick_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: mm_bound_menu_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: mm_bound_edit_min
+    type: bool
+    restore_value: no
+    initial_value: "true"
+  - id: mm_current_angle
+    type: int
+    restore_value: yes
+    initial_value: ${mm_init_start_angle}
+  - id: mm_random_last_http_status
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: mm_random_last_status
+    type: std::string
+    restore_value: no
+    initial_value: '"idle"'
+  - id: mm_random_org_selected
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: mm_servo_led_blink_state
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+i2c:
+  - id: mm_i2c
+    sda: ${mm_lcd_sda_pin}
+    scl: ${mm_lcd_scl_pin}
+    scan: true
+
+output:
+  - platform: ledc
+    id: mm_servo_pwm
+    pin: ${mm_servo_pin}
+    frequency: ${mm_servo_pwm_frequency}
+    channel: ${mm_servo_pwm_channel}
+  - platform: gpio
+    id: mm_builtin_blue_led
+    pin:
+      number: ${mm_builtin_blue_led_pin}
+      inverted: false
+
+servo:
+  - id: mm_servo
+    output: mm_servo_pwm
+
+display:
+  - platform: lcd_pcf8574
+    id: mm_lcd
+    dimensions: 16x2
+    address: ${mm_lcd_address}
+    update_interval: ${mm_display_update_interval}
+    lambda: |-
+      const bool captive_active = !esphome::network::is_connected();
+      const char *ap_name = "${ap_ssid}";
+      ai_helper::mouse_mover::render_display(
+          it,
+          ai_helper::mouse_mover::build_enabled(),
+          id(mm_bound_menu_active),
+          id(mm_bound_edit_min),
+          (int) id(mm_num_start_angle).state,
+          id(mm_current_angle),
+          (int) id(mm_num_end_angle).state,
+          id(mouse_mover_enabled).state,
+          millis(),
+          id(mm_last_move_tick_ms),
+          (uint32_t) id(num_mouse_mover_period_s).state,
+          (int) id(mm_num_move_step).state,
+          (int) id(mm_num_move_speed_delay_ms).state,
+          captive_active,
+          ap_name);
+
+switch:
+  - platform: template
+    id: mouse_mover_enabled
+    name: ${friendly_name} Mouse Mover Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - lambda: |-
+          const bool enabled = ai_helper::mouse_mover::accept_runtime_enable(true);
+          if (!enabled) {
+            id(mouse_mover_enabled).publish_state(false);
+            ESP_LOGI("mouse_mover", "Compile-time disabled; forcing runtime switch OFF");
+            return;
+          }
+          id(mouse_mover_enabled).publish_state(true);
+          id(mm_last_move_tick_ms) = millis();
+          id(mm_lcd).backlight();
+          ai_helper::mouse_mover::touch_backlight(id(mm_backlight_tick_ms), millis());
+      - script.execute: mm_publish_text_states
+    turn_off_action:
+      - lambda: |-
+          id(mouse_mover_enabled).publish_state(false);
+          id(mm_lcd).backlight();
+          ai_helper::mouse_mover::touch_backlight(id(mm_backlight_tick_ms), millis());
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mouse_mover_use_random_org
+    name: ${friendly_name} Mouse Mover Use random.org
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+    turn_on_action:
+      - lambda: |-
+          id(mm_random_org_selected) = true;
+          id(mm_random_last_status) = "random.org selected";
+      - script.execute: mm_publish_text_states
+      - script.execute: mm_refresh_random_values
+    turn_off_action:
+      - lambda: |-
+          id(mm_random_org_selected) = false;
+          id(mm_random_last_http_status) = 0;
+          id(mm_random_last_status) = "local selected";
+      - script.execute: mm_publish_text_states
+      - script.execute: mm_refresh_random_values
+
+number:
+  - platform: template
+    id: num_mouse_mover_period_s
+    name: ${friendly_name} Mouse Mover Period
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_period_cfg_min_s}
+    max_value: ${mm_period_cfg_max_s}
+    step: ${mm_period_cfg_step_s}
+    unit_of_measurement: s
+    initial_value: ${mm_init_period_s}
+
+  - platform: template
+    id: mm_num_start_angle
+    name: ${friendly_name} Mouse Mover Start Angle
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
+    unit_of_measurement: "deg"
+    initial_value: ${mm_init_start_angle}
+    set_action:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          int start = ai_helper::mouse_mover::normalize_start_angle((int) x, (int) id(mm_num_end_angle).state, max_angle);
+          int end = (int) id(mm_num_end_angle).state;
+          id(mm_num_start_angle).publish_state(start);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) id(mm_num_manual_angle).state, max_angle));
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mm_num_end_angle
+    name: ${friendly_name} Mouse Mover End Angle
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
+    unit_of_measurement: "deg"
+    initial_value: ${mm_init_end_angle}
+    set_action:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          int start = (int) id(mm_num_start_angle).state;
+          int end = ai_helper::mouse_mover::normalize_end_angle((int) x, start, max_angle);
+          id(mm_num_end_angle).publish_state(end);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) id(mm_num_manual_angle).state, max_angle));
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mm_num_max_angle
+    name: ${friendly_name} Mouse Mover Max Angle
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_max_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_max_angle_step}
+    unit_of_measurement: "deg"
+    initial_value: ${mm_init_max_angle}
+    set_action:
+      - lambda: |-
+          const int max_angle = ai_helper::mouse_mover::normalize_max_angle((int) x);
+          id(mm_num_max_angle).publish_state(max_angle);
+
+          int start = ai_helper::mouse_mover::normalize_start_angle((int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state, max_angle);
+          int end = ai_helper::mouse_mover::normalize_end_angle((int) id(mm_num_end_angle).state, start, max_angle);
+          id(mm_num_start_angle).publish_state(start);
+          id(mm_num_end_angle).publish_state(end);
+
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) id(mm_num_manual_angle).state, max_angle));
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+      - script.execute: mm_servo_to_current
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mm_num_manual_angle
+    name: ${friendly_name} Mouse Mover Manual Angle
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
+    unit_of_measurement: "deg"
+    initial_value: ${mm_init_manual_angle}
+    set_action:
+      - lambda: |-
+          id(mm_num_manual_angle).publish_state(ai_helper::mouse_mover::clamp_angle((int) x, (int) id(mm_num_max_angle).state));
+
+  - platform: template
+    id: mm_num_move_angle
+    name: ${friendly_name} Mouse Mover Target Angle
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_angle_min}
+    max_value: ${mm_angle_max}
+    step: ${mm_angle_step}
+    unit_of_measurement: "deg"
+    initial_value: ${mm_init_move_angle}
+    set_action:
+      - lambda: |-
+          const int target = ai_helper::mouse_mover::normalize_target_angle(
+              (int) x,
+              (int) id(mm_num_start_angle).state,
+              (int) id(mm_num_end_angle).state,
+              (int) id(mm_num_max_angle).state);
+          id(mm_num_move_angle).publish_state(target);
+
+  - platform: template
+    id: mm_num_move_step
+    name: ${friendly_name} Mouse Mover Step
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_move_step_cfg_min}
+    max_value: ${mm_step_max_cfg_max}
+    step: ${mm_move_step_cfg_step}
+    initial_value: ${mm_init_move_step}
+    set_action:
+      - lambda: |-
+          int min_step = (int) id(mm_num_step_min).state;
+          int max_step = (int) id(mm_num_step_max).state;
+          if (min_step > max_step) {
+            const int tmp = min_step;
+            min_step = max_step;
+            max_step = tmp;
+          }
+          id(mm_num_move_step).publish_state(ai_helper::mouse_mover::clamp_between((int) x, min_step, max_step));
+
+  - platform: template
+    id: mm_num_move_speed_delay_ms
+    name: ${friendly_name} Mouse Mover Step Delay
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_move_delay_cfg_min_ms}
+    max_value: ${mm_move_delay_cfg_max_ms}
+    step: ${mm_move_delay_cfg_step_ms}
+    unit_of_measurement: ms
+    initial_value: ${mm_init_move_speed_delay_ms}
+
+  - platform: template
+    id: mm_num_bound_step
+    name: ${friendly_name} Mouse Mover Bound Step
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_bound_step_cfg_min}
+    max_value: ${mm_bound_step_cfg_max}
+    step: ${mm_bound_step_cfg_step}
+    initial_value: ${mm_init_bound_step}
+
+  - platform: template
+    id: mm_num_period_min_s
+    name: ${friendly_name} Mouse Mover Period Min
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_period_cfg_min_s}
+    max_value: ${mm_period_min_cfg_max_s}
+    step: ${mm_period_min_cfg_step_s}
+    unit_of_measurement: s
+    initial_value: ${mm_period_min_cfg_initial_s}
+
+  - platform: template
+    id: mm_num_period_max_s
+    name: ${friendly_name} Mouse Mover Period Max
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_period_max_cfg_min_s}
+    max_value: ${mm_period_max_cfg_max_s}
+    step: ${mm_period_max_cfg_step_s}
+    unit_of_measurement: s
+    initial_value: ${mm_period_max_cfg_initial_s}
+
+  - platform: template
+    id: mm_num_step_min
+    name: ${friendly_name} Mouse Mover Step Min
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_move_step_cfg_min}
+    max_value: ${mm_step_min_cfg_max}
+    step: ${mm_step_min_cfg_step}
+    initial_value: ${mm_step_min_cfg_initial}
+    set_action:
+      - lambda: |-
+          int min_step = (int) x;
+          int max_step = (int) id(mm_num_step_max).state;
+          if (min_step > max_step) {
+            max_step = min_step;
+            id(mm_num_step_max).publish_state(max_step);
+          }
+          id(mm_num_step_min).publish_state(min_step);
+          id(mm_num_move_step).publish_state(ai_helper::mouse_mover::clamp_between((int) id(mm_num_move_step).state, min_step, max_step));
+
+  - platform: template
+    id: mm_num_step_max
+    name: ${friendly_name} Mouse Mover Step Max
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_step_max_cfg_min}
+    max_value: ${mm_step_max_cfg_max}
+    step: ${mm_step_max_cfg_step}
+    initial_value: ${mm_step_max_cfg_initial}
+    set_action:
+      - lambda: |-
+          int max_step = (int) x;
+          int min_step = (int) id(mm_num_step_min).state;
+          if (max_step < min_step) {
+            min_step = max_step;
+            id(mm_num_step_min).publish_state(min_step);
+          }
+          id(mm_num_step_max).publish_state(max_step);
+          id(mm_num_move_step).publish_state(ai_helper::mouse_mover::clamp_between((int) id(mm_num_move_step).state, min_step, max_step));
+
+  - platform: template
+    id: mm_num_delay_min_ms
+    name: ${friendly_name} Mouse Mover Delay Min
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_move_delay_cfg_min_ms}
+    max_value: ${mm_delay_min_cfg_max_ms}
+    step: ${mm_delay_min_cfg_step_ms}
+    unit_of_measurement: ms
+    initial_value: ${mm_delay_min_cfg_initial_ms}
+
+  - platform: template
+    id: mm_num_delay_max_ms
+    name: ${friendly_name} Mouse Mover Delay Max
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${mm_delay_max_cfg_min_ms}
+    max_value: ${mm_delay_max_cfg_max_ms}
+    step: ${mm_delay_max_cfg_step_ms}
+    unit_of_measurement: ms
+    initial_value: ${mm_delay_max_cfg_initial_ms}
+
+button:
+  - platform: template
+    id: mouse_mover_trigger_now
+    name: ${friendly_name} Mouse Mover Trigger Now
+    entity_category: config
+    on_press:
+      - script.execute: mouse_mover_emit_activity
+
+  - platform: template
+    id: mouse_mover_manual_goto
+    name: ${friendly_name} Mouse Mover Go To Manual Angle
+    entity_category: config
+    on_press:
+      - script.execute: mm_servo_to_manual
+
+  - platform: template
+    id: mouse_mover_set_manual_as_start
+    name: ${friendly_name} Mouse Mover Set Manual As Start
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          const int end = (int) id(mm_num_end_angle).state;
+          const int start = ai_helper::mouse_mover::normalize_start_angle((int) id(mm_num_manual_angle).state, end, max_angle);
+          id(mm_num_start_angle).publish_state(start);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mouse_mover_set_manual_as_stop
+    name: ${friendly_name} Mouse Mover Set Manual As Stop
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          const int start = (int) id(mm_num_start_angle).state;
+          const int end = ai_helper::mouse_mover::normalize_end_angle((int) id(mm_num_manual_angle).state, start, max_angle);
+          id(mm_num_end_angle).publish_state(end);
+          id(mm_current_angle) = ai_helper::mouse_mover::normalize_current_angle(id(mm_current_angle), start, end, max_angle);
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_move_angle).state, start, end, max_angle));
+      - script.execute: mm_publish_text_states
+
+  - platform: template
+    id: mouse_mover_randomize_now
+    name: ${friendly_name} Mouse Mover Randomize Now
+    entity_category: config
+    on_press:
+      - script.execute: mm_refresh_random_values
+
+binary_sensor:
+  - platform: gpio
+    id: mm_btn_ok
+    name: ${friendly_name} MM Button OK
+    pin:
+      number: ${mm_btn_ok_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    internal: true
+    on_press:
+      - script.execute: mm_backlight_on
+    on_click:
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
+        then:
+          - if:
+              condition:
+                lambda: return id(mm_bound_menu_active);
+              then:
+                - script.execute: mm_backlight_on
+              else:
+                - script.execute: mouse_mover_emit_activity
+      - min_length: ${mm_long_press_ms}ms
+        max_length: ${mm_long_press_max_s}
+        then:
+          - switch.toggle: mouse_mover_enabled
+          - script.execute: mm_backlight_on
+
+  - platform: gpio
+    id: mm_btn_up
+    name: ${friendly_name} MM Button Up
+    pin:
+      number: ${mm_btn_up_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    internal: true
+    on_press:
+      - script.execute: mm_backlight_on
+    on_click:
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
+        then:
+          - lambda: |-
+              ai_helper::mouse_mover::enter_bound_menu(id(mm_bound_menu_active), id(mm_bound_edit_min), true);
+              int start = (int) id(mm_num_start_angle).state;
+              int end = (int) id(mm_num_end_angle).state;
+              int next = ai_helper::mouse_mover::next_bound_angle(id(mm_current_angle), start, end, (int) id(mm_num_bound_step).state, -1);
+              id(mm_current_angle) = next;
+              ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), next, (int) id(mm_num_max_angle).state);
+      - min_length: ${mm_long_press_ms}ms
+        max_length: ${mm_long_press_max_s}
+        then:
+          - if:
+              condition:
+                lambda: return id(mm_bound_menu_active);
+              then:
+                - lambda: |-
+                    if (ai_helper::mouse_mover::can_save_min(id(mm_current_angle), (int) id(mm_num_end_angle).state)) {
+                      id(mm_num_start_angle).publish_state(id(mm_current_angle));
+                      id(mm_bound_edit_min) = false;
+                    }
+          - script.execute: mm_publish_text_states
+          - script.execute: mm_backlight_on
+
+  - platform: gpio
+    id: mm_btn_down
+    name: ${friendly_name} MM Button Down
+    pin:
+      number: ${mm_btn_down_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    internal: true
+    on_press:
+      - script.execute: mm_backlight_on
+    on_click:
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
+        then:
+          - lambda: |-
+              ai_helper::mouse_mover::enter_bound_menu(id(mm_bound_menu_active), id(mm_bound_edit_min), false);
+              int start = (int) id(mm_num_start_angle).state;
+              int end = (int) id(mm_num_end_angle).state;
+              int next = ai_helper::mouse_mover::next_bound_angle(id(mm_current_angle), start, end, (int) id(mm_num_bound_step).state, 1);
+              id(mm_current_angle) = next;
+              ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), next, (int) id(mm_num_max_angle).state);
+      - min_length: ${mm_long_press_ms}ms
+        max_length: ${mm_long_press_max_s}
+        then:
+          - if:
+              condition:
+                lambda: return id(mm_bound_menu_active);
+              then:
+                - lambda: |-
+                    if (ai_helper::mouse_mover::can_save_max(id(mm_current_angle), (int) id(mm_num_start_angle).state)) {
+                      id(mm_num_end_angle).publish_state(id(mm_current_angle));
+                    }
+          - script.execute: mm_publish_text_states
+          - script.execute: mm_backlight_on
+
+  - platform: gpio
+    id: mm_btn_right
+    name: ${friendly_name} MM Button Right
+    pin:
+      number: ${mm_btn_right_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    internal: true
+    on_press:
+      - script.execute: mm_backlight_on
+    on_click:
+      - min_length: ${mm_short_press_min_ms}ms
+        max_length: ${mm_short_press_max_ms}ms
+        then:
+          - lambda: |-
+              id(mm_bound_menu_active) = false;
+              #ifdef AI_HELPER_SEMAPHORE_BUILD_ENABLED
+              id(sem_ai_status_select).make_call().set_option("Idle").perform();
+              #endif
+      - min_length: ${mm_long_press_ms}ms
+        max_length: ${mm_long_press_max_s}
+        then:
+          - switch.toggle: mouse_mover_enabled
+          - script.execute: mm_backlight_on
+
+script:
+  - id: mm_backlight_on
+    mode: restart
+    then:
+      - lambda: |-
+          id(mm_lcd).backlight();
+          ai_helper::mouse_mover::touch_backlight(id(mm_backlight_tick_ms), millis());
+
+  - id: mm_servo_led_blink_iteration
+    mode: queued
+    then:
+      - lambda: |-
+          id(mm_servo_led_blink_state) = !id(mm_servo_led_blink_state);
+      - if:
+          condition:
+            lambda: return id(mm_servo_led_blink_state);
+          then:
+            - output.turn_on: mm_builtin_blue_led
+          else:
+            - output.turn_off: mm_builtin_blue_led
+
+  - id: mm_servo_to_current
+    mode: restart
+    then:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          int current = ai_helper::mouse_mover::normalize_current_angle(
+              id(mm_current_angle),
+              (int) id(mm_num_start_angle).state,
+              (int) id(mm_num_end_angle).state,
+              max_angle);
+          id(mm_current_angle) = current;
+          ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), current, max_angle);
+
+  - id: mm_servo_to_manual
+    mode: restart
+    then:
+      - lambda: |-
+          const int max_angle = (int) id(mm_num_max_angle).state;
+          const int start = (int) id(mm_num_start_angle).state;
+          const int end = (int) id(mm_num_end_angle).state;
+          const int manual = ai_helper::mouse_mover::normalize_target_angle((int) id(mm_num_manual_angle).state, start, end, max_angle);
+          id(mm_num_manual_angle).publish_state(manual);
+          id(mm_current_angle) = manual;
+          ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), manual, max_angle);
+
+  - id: mm_publish_text_states
+    mode: restart
+    then:
+      - lambda: |-
+          char buf[32];
+          id(mouse_mover_mode_text).publish_state(ai_helper::mouse_mover::mode_text(id(mouse_mover_enabled).state));
+          id(mouse_mover_bounds_text).publish_state(ai_helper::mouse_mover::bounds_text((int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state, buf));
+          id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+
+  - id: mm_randomize_local_values
+    mode: restart
+    then:
+      - lambda: |-
+          const int start = (int) id(mm_num_start_angle).state;
+          const int end = (int) id(mm_num_end_angle).state;
+          const int angle_min = ai_helper::mouse_mover::start_offset_angle(start, end);
+
+          id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::random_local_range(angle_min, end));
+          id(mm_num_move_step).publish_state(
+              ai_helper::mouse_mover::randomize_step((int) id(mm_num_step_min).state, (int) id(mm_num_step_max).state));
+          id(mm_num_move_speed_delay_ms).publish_state(
+              ai_helper::mouse_mover::random_local_range((int) id(mm_num_delay_min_ms).state, (int) id(mm_num_delay_max_ms).state));
+          id(num_mouse_mover_period_s).publish_state(
+              ai_helper::mouse_mover::random_local_range((int) id(mm_num_period_min_s).state, (int) id(mm_num_period_max_s).state));
+          id(mm_random_last_http_status) = 0;
+          id(mm_random_last_status) = "local";
+          ESP_LOGI(
+              "mouse_mover",
+              "Randomized LOCAL values angle=%d step=%d speed_ms=%d period_s=%d http=%d",
+              (int) id(mm_num_move_angle).state,
+              (int) id(mm_num_move_step).state,
+              (int) id(mm_num_move_speed_delay_ms).state,
+              (int) id(num_mouse_mover_period_s).state,
+              id(mm_random_last_http_status));
+      - script.execute: mm_publish_text_states
+
+  - id: mm_fetch_angle_random_org
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            const int start = (int) id(mm_num_start_angle).state;
+            const int end = (int) id(mm_num_end_angle).state;
+            const int angle_min = ai_helper::mouse_mover::start_offset_angle(start, end);
+            return "https://www.random.org/integers/?num=1&min=" + to_string(angle_min) +
+                   "&max=" + to_string(end) +
+                   "&col=1&base=10&format=plain&rnd=new";
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  id(mm_random_last_http_status) = response->status_code;
+                  int value = 0;
+                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
+                    id(mm_num_move_angle).publish_state(value);
+                    id(mm_random_last_status) = "random.org";
+                  } else {
+                    const int start = (int) id(mm_num_start_angle).state;
+                    const int end = (int) id(mm_num_end_angle).state;
+                    const int angle_min = ai_helper::mouse_mover::start_offset_angle(start, end);
+                    id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::random_local_range(angle_min, end));
+                    id(mm_random_last_status) = "random.org err -> local";
+                  }
+                  ESP_LOGI(
+                      "mouse_mover",
+                      "random.org ANGLE http=%d value=%d source=%s",
+                      response->status_code,
+                      (int) id(mm_num_move_angle).state,
+                      id(mm_random_last_status).c_str());
+                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+
+  - id: mm_fetch_speed_random_org
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            const int min_v = (int) id(mm_num_delay_min_ms).state;
+            const int max_v = (int) id(mm_num_delay_max_ms).state;
+            return "https://www.random.org/integers/?num=1&min=" + to_string(min_v) +
+                   "&max=" + to_string(max_v) +
+                   "&col=1&base=10&format=plain&rnd=new";
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  id(mm_random_last_http_status) = response->status_code;
+                  int value = 0;
+                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
+                    id(mm_num_move_speed_delay_ms).publish_state(value);
+                    id(mm_random_last_status) = "random.org";
+                  } else {
+                    id(mm_num_move_speed_delay_ms).publish_state(
+                        ai_helper::mouse_mover::random_local_range((int) id(mm_num_delay_min_ms).state, (int) id(mm_num_delay_max_ms).state));
+                    id(mm_random_last_status) = "random.org err -> local";
+                  }
+                  ESP_LOGI(
+                      "mouse_mover",
+                      "random.org SPEED http=%d value_ms=%d source=%s",
+                      response->status_code,
+                      (int) id(mm_num_move_speed_delay_ms).state,
+                      id(mm_random_last_status).c_str());
+                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+
+  - id: mm_fetch_period_random_org
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            const int min_v = (int) id(mm_num_period_min_s).state;
+            const int max_v = (int) id(mm_num_period_max_s).state;
+            return "https://www.random.org/integers/?num=1&min=" + to_string(min_v) +
+                   "&max=" + to_string(max_v) +
+                   "&col=1&base=10&format=plain&rnd=new";
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  id(mm_random_last_http_status) = response->status_code;
+                  int value = 0;
+                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
+                    id(num_mouse_mover_period_s).publish_state(value);
+                    id(mm_random_last_status) = "random.org";
+                  } else {
+                    id(num_mouse_mover_period_s).publish_state(
+                        ai_helper::mouse_mover::random_local_range((int) id(mm_num_period_min_s).state, (int) id(mm_num_period_max_s).state));
+                    id(mm_random_last_status) = "random.org err -> local";
+                  }
+                  ESP_LOGI(
+                      "mouse_mover",
+                      "random.org PERIOD http=%d value_s=%d source=%s",
+                      response->status_code,
+                      (int) id(num_mouse_mover_period_s).state,
+                      id(mm_random_last_status).c_str());
+                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+
+  - id: mm_fetch_step_random_org
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            const int min_v = (int) id(mm_num_step_min).state;
+            const int max_v = (int) id(mm_num_step_max).state;
+            return "https://www.random.org/integers/?num=1&min=" + to_string(min_v) +
+                   "&max=" + to_string(max_v) +
+                   "&col=1&base=10&format=plain&rnd=new";
+          capture_response: true
+          on_response:
+            then:
+              - lambda: |-
+                  id(mm_random_last_http_status) = response->status_code;
+                  int value = 0;
+                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
+                    id(mm_num_move_step).publish_state(value);
+                    id(mm_random_last_status) = "random.org";
+                  } else {
+                    id(mm_num_move_step).publish_state(
+                        ai_helper::mouse_mover::randomize_step((int) id(mm_num_step_min).state, (int) id(mm_num_step_max).state));
+                    id(mm_random_last_status) = "random.org err -> local";
+                  }
+                  ESP_LOGI(
+                      "mouse_mover",
+                      "random.org STEP http=%d value=%d source=%s",
+                      response->status_code,
+                      (int) id(mm_num_move_step).state,
+                      id(mm_random_last_status).c_str());
+                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+
+  - id: mm_refresh_random_values
+    mode: restart
+    then:
+      - lambda: |-
+          ESP_LOGI(
+              "mouse_mover",
+              "Random refresh start use_random_org=%s wifi=%s",
+              id(mm_random_org_selected) ? "true" : "false",
+              esphome::network::is_connected() ? "up" : "down");
+      - if:
+          condition:
+            lambda: return !id(mm_random_org_selected) || !esphome::network::is_connected();
+          then:
+            - script.execute: mm_randomize_local_values
+          else:
+            - script.execute: mm_fetch_angle_random_org
+            - script.execute: mm_fetch_step_random_org
+            - script.execute: mm_fetch_speed_random_org
+            - script.execute: mm_fetch_period_random_org
+
+  - id: mouse_mover_emit_activity
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return !ai_helper::mouse_mover::build_enabled();
+          then:
+            - logger.log:
+                level: INFO
+                format: "mouse_mover compile-time disabled"
+          else:
+            - if:
+                condition:
+                  switch.is_off: mouse_mover_enabled
+                then:
+                  - logger.log:
+                      level: INFO
+                      format: "mouse_mover ignored; runtime switch OFF"
+                else:
+                  - script.execute: mm_servo_move_cycle
+
+  - id: mm_servo_move_cycle
+    mode: single
+    then:
+      - lambda: |-
+          id(mm_servo_led_blink_state) = false;
+      - output.turn_off: mm_builtin_blue_led
+      - lambda: |-
+          int step = 1;
+          int target = 0;
+          ai_helper::mouse_mover::prepare_cycle(
+              (int) id(mm_num_start_angle).state,
+              (int) id(mm_num_end_angle).state,
+              (int) id(mm_num_move_angle).state,
+              (int) id(mm_num_move_step).state,
+              (int) id(mm_num_max_angle).state,
+              id(mm_current_angle),
+              target,
+              step);
+          id(mm_num_move_angle).publish_state(target);
+          id(mm_num_move_step).publish_state(step);
+      - while:
+          condition:
+            lambda: return ai_helper::mouse_mover::should_continue_forward(id(mm_current_angle), (int) id(mm_num_move_angle).state);
+          then:
+            - lambda: |-
+                ESP_LOGI("mouse_mover", "servo forward angle=%d", id(mm_current_angle));
+                ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle), (int) id(mm_num_max_angle).state);
+            - script.execute: mm_servo_led_blink_iteration
+            - delay: !lambda return (uint32_t) id(mm_num_move_speed_delay_ms).state;
+            - lambda: |-
+                id(mm_current_angle) = ai_helper::mouse_mover::next_forward_angle(id(mm_current_angle), (int) id(mm_num_move_step).state);
+      - lambda: |-
+          id(mm_current_angle) = (int) id(mm_num_move_angle).state;
+      - while:
+          condition:
+            lambda: return ai_helper::mouse_mover::should_continue_backward(id(mm_current_angle), (int) id(mm_num_start_angle).state);
+          then:
+            - lambda: |-
+                ESP_LOGI("mouse_mover", "servo backward angle=%d", id(mm_current_angle));
+                ai_helper::mouse_mover::apply_servo_angle(id(mm_servo), id(mm_current_angle), (int) id(mm_num_max_angle).state);
+            - script.execute: mm_servo_led_blink_iteration
+            - delay: !lambda return (uint32_t) id(mm_num_move_speed_delay_ms).state;
+            - lambda: |-
+                id(mm_current_angle) = ai_helper::mouse_mover::next_backward_angle(id(mm_current_angle), (int) id(mm_num_move_step).state);
+      - lambda: |-
+          ai_helper::mouse_mover::reset_after_cycle(
+              id(mm_current_angle),
+              (int) id(mm_num_start_angle).state,
+              id(mm_last_move_tick_ms),
+              millis(),
+              id(mouse_mover_tick_s));
+      - lambda: |-
+          id(mm_servo_led_blink_state) = false;
+      - output.turn_off: mm_builtin_blue_led
+      - script.execute: mm_refresh_random_values
+
+text_sensor:
+  - platform: template
+    id: mouse_mover_mode_text
+    name: ${friendly_name} Mouse Mover Mode
+    icon: mdi:mouse
+    update_interval: never
+    lambda: return std::string(ai_helper::mouse_mover::mode_text(id(mouse_mover_enabled).state));
+
+  - platform: template
+    id: mouse_mover_bounds_text
+    name: ${friendly_name} Mouse Mover Bounds
+    icon: mdi:angle-obtuse
+    update_interval: never
+    lambda: |-
+      char buf[AI_MOUSE_MOVER_BOUNDS_TEXT_LEN];
+      return std::string(ai_helper::mouse_mover::bounds_text((int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state, buf));
+
+  - platform: template
+    id: mouse_mover_random_source_text
+    name: ${friendly_name} Mouse Mover Random Source
+    icon: mdi:dice-multiple
+    update_interval: never
+    lambda: return id(mm_random_last_status);
+
+interval:
+  - interval: ${mm_main_interval}
+    then:
+      - lambda: |-
+          if (!id(mm_servo_move_cycle).is_running()) {
+            id(mm_builtin_blue_led).turn_off();
+            id(mm_servo_led_blink_state) = false;
+          }
+
+          if (ai_helper::mouse_mover::build_enabled() &&
+              id(mouse_mover_enabled).state &&
+              !id(mm_bound_menu_active) &&
+              !id(mm_servo_move_cycle).is_running() &&
+              !id(mm_refresh_random_values).is_running()) {
+            const uint32_t elapsed_s = ai_helper::mouse_mover::elapsed_seconds(millis(), id(mm_last_move_tick_ms));
+            const uint32_t period_s = (uint32_t) id(num_mouse_mover_period_s).state;
+            if (elapsed_s >= period_s) {
+              id(mouse_mover_emit_activity).execute();
+            }
+          }
+
+          if (ai_helper::mouse_mover::should_backlight_timeout(
+              id(mm_backlight_tick_ms), millis(), (uint32_t) ${mm_backlight_delay_ms})) {
+            id(mm_lcd).no_backlight();
+            id(mm_backlight_tick_ms) = 0;
+            id(mm_bound_menu_active) = false;
+          }

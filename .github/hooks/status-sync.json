@@ -1,0 +1,89 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          ".github/hooks/ai-helper-status-sync.ps1",
+          "-Mode",
+          "reasoning"
+        ],
+        "cwd": "d:\\esphome",
+        "timeout": 10
+      }
+    ],
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          ".github/hooks/ai-helper-status-sync.ps1",
+          "-Mode",
+          "need_user_action"
+        ],
+        "cwd": "d:\\esphome",
+        "timeout": 10
+      }
+    ],
+    "AllowAction": [
+      {
+        "type": "command",
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          ".github/hooks/ai-helper-status-sync.ps1",
+          "-Mode",
+          "allow_action"
+        ],
+        "cwd": "d:\\esphome",
+        "timeout": 10
+      }
+    ],
+    "Done": [
+      {
+        "type": "command",
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          ".github/hooks/ai-helper-status-sync.ps1",
+          "-Mode",
+          "done"
+        ],
+        "cwd": "d:\\esphome",
+        "timeout": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          ".github/hooks/ai-helper-status-sync.ps1",
+          "-Mode",
+          "classify-stop"
+        ],
+        "cwd": "d:\\esphome",
+        "timeout": 10
+      }
+    ]
+  }
+}

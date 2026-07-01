@@ -1,0 +1,27 @@
+substitutions:
+  device_name: mouse-mover
+  friendly_name: Mouse Mover
+  ap_ssid: AP-Mouse-Mover
+  ap_password: password
+  time_zone: Europe/Kyiv
+  wifi_rssi_update: 60s
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  platformio_options:
+    build_flags:
+      - -DAI_HELPER_MOUSE_MOVER_BUILD_ENABLED=1
+  includes:
+    - ai-helper-mouse-mover.h
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+packages:
+  common: !include ai-helper-common.yaml
+  mouse_mover: !include ai-helper-mouse-mover.yaml
+
+api:

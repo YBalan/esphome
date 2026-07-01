@@ -1,0 +1,34 @@
+logger:
+  level: INFO
+
+ota:
+  - platform: esphome
+
+time:
+  - platform: sntp
+    id: ha_time
+    timezone: ${time_zone}
+
+wifi:
+  ap:
+    ssid: ${ap_ssid}
+    password: ${ap_password}
+  fast_connect: true
+  reboot_timeout: 0s
+
+captive_portal:
+
+web_server:
+  port: 80
+
+http_request:
+  useragent: esphome-ai-helper
+  timeout: 5s
+  verify_ssl: true
+
+sensor:
+  - platform: wifi_signal
+    name: ${friendly_name} WiFi RSSI
+    id: wifi_rssi
+    update_interval: ${wifi_rssi_update}
+    entity_category: diagnostic

@@ -1,0 +1,1072 @@
+substitutions:
+  # Hardware pins
+  sem_led_data_pin: GPIO26
+  sem_buzzer_pin: GPIO25
+  sem_buzzer_pwm_channel: "2"
+
+  # Status initialization
+  sem_init_status_code: "0"
+  sem_init_status_option: Idle
+
+  # Status names (consistent with C++ enums)
+  sem_status_reasoning_option: Reasoning
+  sem_status_done_option: Done
+  sem_status_need_user_action_option: Need User Action
+  sem_status_allow_action_option: Allow Action
+  sem_status_custom1_option: Custom1
+  sem_status_custom2_option: Custom2
+
+  # LED/Buzzer state initialization
+  sem_init_active_led_slot: "0"
+  sem_init_float_zero: "0.0"
+  sem_init_bool_false: "false"
+  sem_init_beep_frequency: "1800.0"
+  sem_init_beep_repeat: "1"
+
+  # Default brightness and sound levels
+  sem_init_brightness: "20"
+  sem_init_rainbow_brightness: "20"
+  sem_init_buzzer_frequency: "1800"
+  sem_init_buzzer_volume_off: "10"
+  sem_init_buzzer_volume_alert: "10"
+  sem_init_buzzer_repeat_single: "1"
+  sem_init_buzzer_repeat_double: "2"
+
+  # Beep timing
+  sem_init_beep_on_ms: "150"
+  sem_init_beep_off_ms: "120"
+
+  # Initial LED/Color assignments (per status)
+  sem_init_reasoning_led_assignment: Yellow
+  sem_init_reasoning_color_option: Yellow
+  sem_init_done_led_assignment: Green
+  sem_init_done_color_option: Green
+  sem_init_need_action_led_assignment: Red
+  sem_init_need_action_color_option: Red
+  sem_init_allow_action_led_assignment: Red
+  sem_init_allow_action_color_option: Red
+  sem_init_custom1_led_assignment: Yellow
+  sem_init_custom1_color_option: Blue
+  sem_init_custom2_led_assignment: Green
+  sem_init_custom2_color_option: White
+
+packages:
+  defaults: !include ai-helper-defaults.yaml
+
+esphome:
+  on_boot:
+    priority: -5
+    then:
+      - script.execute: sem_publish_text_states
+
+api:
+  actions:
+    - action: set_ai_status
+      variables:
+        status: string
+      then:
+        - logger.log:
+            level: INFO
+            format: "set_ai_status called with status='%s'"
+            args: [ 'status.c_str()' ]
+        - lambda: |-
+            id(sem_ai_status_select).publish_state(ai_helper::semaphore::normalized_status(status));
+            id(sem_apply_status_outputs).execute();
+
+    - action: claude_status_hook
+      variables:
+        status: string
+      then:
+        - logger.log:
+            level: INFO
+            format: "claude_status_hook called with status='%s'"
+            args: [ 'status.c_str()' ]
+        - lambda: |-
+            id(sem_ai_status_select).publish_state(ai_helper::semaphore::normalized_status(status));
+            id(sem_apply_status_outputs).execute();
+
+    - action: copilot_status_hook
+      variables:
+        status: string
+      then:
+        - logger.log:
+            level: INFO
+            format: "copilot_status_hook called with status='%s'"
+            args: [ 'status.c_str()' ]
+        - lambda: |-
+            id(sem_ai_status_select).publish_state(ai_helper::semaphore::normalized_status(status));
+            id(sem_apply_status_outputs).execute();
+
+globals:
+  - id: sem_status_code
+    type: int
+    restore_value: yes
+    initial_value: ${sem_init_status_code}
+  - id: sem_active_led_slot
+    type: int
+    restore_value: no
+    initial_value: ${sem_init_active_led_slot}
+  - id: sem_active_led_r
+    type: float
+    restore_value: no
+    initial_value: ${sem_init_float_zero}
+  - id: sem_active_led_g
+    type: float
+    restore_value: no
+    initial_value: ${sem_init_float_zero}
+  - id: sem_active_led_b
+    type: float
+    restore_value: no
+    initial_value: ${sem_init_float_zero}
+  - id: sem_active_led_brightness
+    type: float
+    restore_value: no
+    initial_value: ${sem_init_float_zero}
+  - id: sem_active_beep_enabled
+    type: bool
+    restore_value: no
+    initial_value: ${sem_init_bool_false}
+  - id: sem_active_beep_frequency
+    type: float
+    restore_value: no
+    initial_value: ${sem_init_beep_frequency}
+  - id: sem_active_beep_repeat
+    type: int
+    restore_value: no
+    initial_value: ${sem_init_beep_repeat}
+  - id: sem_active_beep_volume
+    type: float
+    restore_value: no
+    initial_value: ${sem_init_float_zero}
+  - id: sem_active_rainbow_effect
+    type: bool
+    restore_value: no
+    initial_value: ${sem_init_bool_false}
+
+output:
+  - platform: ledc
+    id: sem_buzzer_pwm
+    pin: ${sem_buzzer_pin}
+    channel: ${sem_buzzer_pwm_channel}
+    frequency: ${sem_init_buzzer_frequency}
+
+light:
+  - platform: esp32_rmt_led_strip
+    id: sem_status_led_raw
+    name: ${friendly_name} Action Full Strip LED
+    internal: false
+    chipset: WS2812
+    pin: ${sem_led_data_pin}
+    num_leds: 4
+    rgb_order: GRB
+    restore_mode: ALWAYS_OFF
+    default_transition_length: 0s
+    flash_transition_length: 0s
+    effects:
+      - addressable_rainbow:
+          name: Rainbow
+          speed: 8
+          width: 30
+
+  - platform: partition
+    id: sem_status_led_red
+    name: ${friendly_name} Action Red LED
+    internal: false
+    segments:
+      - id: sem_status_led_raw
+        from: 3
+        to: 3
+
+  - platform: partition
+    id: sem_status_led_yellow
+    name: ${friendly_name} Action Yellow LED
+    internal: false
+    segments:
+      - id: sem_status_led_raw
+        from: 2
+        to: 2
+
+  - platform: partition
+    id: sem_status_led_green
+    name: ${friendly_name} Action Green LED
+    internal: false
+    segments:
+      - id: sem_status_led_raw
+        from: 1
+        to: 1
+
+script:
+  - id: sem_publish_text_states
+    mode: restart
+    then:
+      - lambda: |-
+          id(sem_ai_status_text).publish_state(ai_helper::semaphore::status_text_from_code(id(sem_status_code)));
+          id(sem_led_output_mode_text).publish_state(
+              ai_helper::semaphore::led_output_mode_text(id(sem_status_code), id(sem_active_rainbow_effect), id(sem_active_led_slot)));
+
+  - id: sem_play_alert_beep
+    mode: restart
+    then:
+      - if:
+          condition:
+            and:
+              - switch.is_on: sem_buzzer_enabled
+              - lambda: return id(sem_active_beep_enabled) && id(sem_active_beep_volume) > 0.0f;
+          then:
+            - repeat:
+                count: !lambda |-
+                  return id(sem_active_beep_repeat) > 0 ? id(sem_active_beep_repeat) : 1;
+                then:
+                  - output.set_level:
+                      id: sem_buzzer_pwm
+                      level: !lambda return id(sem_active_beep_volume) / 100.0f;
+                  - delay: !lambda return (uint32_t) id(sem_beep_on_ms).state;
+                  - output.turn_off: sem_buzzer_pwm
+                  - delay: !lambda return (uint32_t) id(sem_beep_off_ms).state;
+
+  - id: sem_apply_status_outputs
+    mode: restart
+    then:
+      - light.turn_off:
+          id: sem_status_led_raw
+          transition_length: 0s
+      - light.turn_off:
+          id: sem_status_led_red
+          transition_length: 0s
+      - light.turn_off:
+          id: sem_status_led_yellow
+          transition_length: 0s
+      - light.turn_off:
+          id: sem_status_led_green
+          transition_length: 0s
+      - light.addressable_set:
+          id: sem_status_led_raw
+          range_from: 1
+          range_to: 3
+          red: 0%
+          green: 0%
+          blue: 0%
+      - lambda: |-
+          ai_helper::semaphore::StatusConfigArray configs = {};
+          configs[AI_SEM_STATUS_CODE_REASONING] = {
+            .led = {
+              .assignment = id(sem_sel_reasoning_led_assignment).current_option(),
+              .color = id(sem_sel_reasoning_color).current_option(),
+              .brightness = id(sem_num_reasoning_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_reasoning_buzzer_enabled).state,
+              .frequency = id(sem_num_reasoning_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_reasoning_buzzer_repeat).state,
+              .volume = id(sem_num_reasoning_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_DONE] = {
+            .led = {
+              .assignment = id(sem_sel_done_led_assignment).current_option(),
+              .color = id(sem_sel_done_color).current_option(),
+              .brightness = id(sem_num_done_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_done_buzzer_enabled).state,
+              .frequency = id(sem_num_done_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_done_buzzer_repeat).state,
+              .volume = id(sem_num_done_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_NEED_USER_ACTION] = {
+            .led = {
+              .assignment = id(sem_sel_need_action_led_assignment).current_option(),
+              .color = id(sem_sel_need_action_color).current_option(),
+              .brightness = id(sem_num_need_action_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_need_action_buzzer_enabled).state,
+              .frequency = id(sem_num_need_action_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_need_action_buzzer_repeat).state,
+              .volume = id(sem_num_need_action_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_ALLOW_ACTION] = {
+            .led = {
+              .assignment = id(sem_sel_allow_action_led_assignment).current_option(),
+              .color = id(sem_sel_allow_action_color).current_option(),
+              .brightness = id(sem_num_allow_action_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_allow_action_buzzer_enabled).state,
+              .frequency = id(sem_num_allow_action_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_allow_action_buzzer_repeat).state,
+              .volume = id(sem_num_allow_action_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_CUSTOM1] = {
+            .led = {
+              .assignment = id(sem_sel_custom1_led_assignment).current_option(),
+              .color = id(sem_sel_custom1_color).current_option(),
+              .brightness = id(sem_num_custom1_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_custom1_buzzer_enabled).state,
+              .frequency = id(sem_num_custom1_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_custom1_buzzer_repeat).state,
+              .volume = id(sem_num_custom1_buzzer_volume).state,
+            },
+          };
+          configs[AI_SEM_STATUS_CODE_CUSTOM2] = {
+            .led = {
+              .assignment = id(sem_sel_custom2_led_assignment).current_option(),
+              .color = id(sem_sel_custom2_color).current_option(),
+              .brightness = id(sem_num_custom2_brightness).state,
+            },
+            .buzzer = {
+              .enabled = id(sem_sw_custom2_buzzer_enabled).state,
+              .frequency = id(sem_num_custom2_buzzer_frequency).state,
+              .repeat_count = (int) id(sem_num_custom2_buzzer_repeat).state,
+              .volume = id(sem_num_custom2_buzzer_volume).state,
+            },
+          };
+          if (ai_helper::semaphore::compute_and_assign_active_state(
+              id(sem_active_led_slot),
+              id(sem_active_led_r),
+              id(sem_active_led_g),
+              id(sem_active_led_b),
+              id(sem_active_led_brightness),
+              id(sem_active_beep_enabled),
+              id(sem_active_beep_frequency),
+              id(sem_active_beep_repeat),
+              id(sem_active_beep_volume),
+              id(sem_active_rainbow_effect),
+              id(sem_status_code),
+              configs)) {
+            return;
+          }
+
+      - if:
+          condition:
+            lambda: return id(sem_active_rainbow_effect);
+          then:
+            - light.turn_on:
+                id: sem_status_led_raw
+                effect: Rainbow
+                brightness: !lambda return id(sem_num_rainbow_brightness).state / 100.0f;
+
+      - if:
+          condition:
+            lambda: return !id(sem_active_rainbow_effect) && id(sem_active_led_slot) == 1;
+          then:
+            - light.turn_on:
+                id: sem_status_led_red
+                transition_length: 0s
+                red: !lambda return id(sem_active_led_r);
+                green: !lambda return id(sem_active_led_g);
+                blue: !lambda return id(sem_active_led_b);
+                brightness: !lambda return id(sem_active_led_brightness);
+
+      - if:
+          condition:
+            lambda: return !id(sem_active_rainbow_effect) && id(sem_active_led_slot) == 2;
+          then:
+            - light.turn_on:
+                id: sem_status_led_yellow
+                transition_length: 0s
+                red: !lambda return id(sem_active_led_r);
+                green: !lambda return id(sem_active_led_g);
+                blue: !lambda return id(sem_active_led_b);
+                brightness: !lambda return id(sem_active_led_brightness);
+
+      - if:
+          condition:
+            lambda: return !id(sem_active_rainbow_effect) && id(sem_active_led_slot) == 3;
+          then:
+            - light.turn_on:
+                id: sem_status_led_green
+                transition_length: 0s
+                red: !lambda return id(sem_active_led_r);
+                green: !lambda return id(sem_active_led_g);
+                blue: !lambda return id(sem_active_led_b);
+                brightness: !lambda return id(sem_active_led_brightness);
+
+      - if:
+          condition:
+            lambda: return id(sem_active_beep_enabled);
+          then:
+            - script.execute: sem_play_alert_beep
+      - script.execute: sem_publish_text_states
+
+switch:
+  - platform: template
+    id: sem_buzzer_enabled
+    name: ${friendly_name} Buzzer Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+
+  - platform: template
+    id: sem_sw_reasoning_buzzer_enabled
+    name: ${friendly_name} Reasoning Buzzer Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - script.execute: sem_apply_status_outputs
+    turn_off_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sw_done_buzzer_enabled
+    name: ${friendly_name} Done Buzzer Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - script.execute: sem_apply_status_outputs
+    turn_off_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sw_need_action_buzzer_enabled
+    name: ${friendly_name} Need Action Buzzer Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+    turn_on_action:
+      - script.execute: sem_apply_status_outputs
+    turn_off_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sw_allow_action_buzzer_enabled
+    name: ${friendly_name} Allow Action Buzzer Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - script.execute: sem_apply_status_outputs
+    turn_off_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sw_custom1_buzzer_enabled
+    name: ${friendly_name} Custom1 Buzzer Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - script.execute: sem_apply_status_outputs
+    turn_off_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sw_custom2_buzzer_enabled
+    name: ${friendly_name} Custom2 Buzzer Enabled
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+    turn_on_action:
+      - script.execute: sem_apply_status_outputs
+    turn_off_action:
+      - script.execute: sem_apply_status_outputs
+
+select:
+  - platform: template
+    id: sem_ai_status_select
+    name: ${friendly_name} AI Status
+    optimistic: true
+    restore_value: true
+    options: [ "Idle", "Reasoning", "Done", "Need User Action", "Allow Action", "Custom1", "Custom2" ]
+    initial_option: ${sem_init_status_option}
+    set_action:
+      - logger.log:
+          level: INFO
+          format: "sem_ai_status_select set_action with option='%s'"
+          args: [ 'x.c_str()' ]
+      - lambda: |-
+          if (ai_helper::semaphore::update_status_from_option_and_log(x, id(sem_status_code))) {
+            id(sem_apply_status_outputs).execute();
+          }
+
+  - platform: template
+    id: sem_sel_reasoning_color
+    name: ${friendly_name} Reasoning Color
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${color_options}
+    initial_option: ${sem_init_reasoning_color_option}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_reasoning_led_assignment
+    name: ${friendly_name} Reasoning LED
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${led_assign_options}
+    initial_option: ${sem_init_reasoning_led_assignment}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_done_color
+    name: ${friendly_name} Done Color
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${color_options}
+    initial_option: ${sem_init_done_color_option}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_done_led_assignment
+    name: ${friendly_name} Done LED
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${led_assign_options}
+    initial_option: ${sem_init_done_led_assignment}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_need_action_color
+    name: ${friendly_name} Need Action Color
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${color_options}
+    initial_option: ${sem_init_need_action_color_option}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_need_action_led_assignment
+    name: ${friendly_name} Need Action LED
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${led_assign_options}
+    initial_option: ${sem_init_need_action_led_assignment}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_allow_action_color
+    name: ${friendly_name} Allow Action Color
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${color_options}
+    initial_option: ${sem_init_allow_action_color_option}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_allow_action_led_assignment
+    name: ${friendly_name} Allow Action LED
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${led_assign_options}
+    initial_option: ${sem_init_allow_action_led_assignment}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_custom1_color
+    name: ${friendly_name} Custom1 Color
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${color_options}
+    initial_option: ${sem_init_custom1_color_option}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_custom1_led_assignment
+    name: ${friendly_name} Custom1 LED
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${led_assign_options}
+    initial_option: ${sem_init_custom1_led_assignment}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_custom2_color
+    name: ${friendly_name} Custom2 Color
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${color_options}
+    initial_option: ${sem_init_custom2_color_option}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_sel_custom2_led_assignment
+    name: ${friendly_name} Custom2 LED
+    optimistic: true
+    restore_value: true
+    entity_category: config
+    options: ${led_assign_options}
+    initial_option: ${sem_init_custom2_led_assignment}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+button:
+  - platform: template
+    id: sem_webhook_idle
+    name: webhook_idle
+    icon: mdi:web
+    entity_category: config
+    on_press:
+      - select.set:
+          id: sem_ai_status_select
+          option: ${sem_init_status_option}
+
+  - platform: template
+    id: sem_webhook_reasoning
+    name: webhook_reasoning
+    icon: mdi:web
+    entity_category: config
+    on_press:
+      - select.set:
+          id: sem_ai_status_select
+          option: ${sem_status_reasoning_option}
+
+  - platform: template
+    id: sem_webhook_done
+    name: webhook_done
+    icon: mdi:web
+    entity_category: config
+    on_press:
+      - select.set:
+          id: sem_ai_status_select
+          option: ${sem_status_done_option}
+
+  - platform: template
+    id: sem_webhook_need_user_action
+    name: webhook_need_user_action
+    icon: mdi:web
+    entity_category: config
+    on_press:
+      - select.set:
+          id: sem_ai_status_select
+          option: ${sem_status_need_user_action_option}
+
+  - platform: template
+    id: sem_webhook_allow_action
+    name: webhook_allow_action
+    icon: mdi:web
+    entity_category: config
+    on_press:
+      - select.set:
+          id: sem_ai_status_select
+          option: ${sem_status_allow_action_option}
+
+  - platform: template
+    id: sem_webhook_custom1
+    name: webhook_custom1
+    icon: mdi:web
+    entity_category: config
+    on_press:
+      - select.set:
+          id: sem_ai_status_select
+          option: ${sem_status_custom1_option}
+
+  - platform: template
+    id: sem_webhook_custom2
+    name: webhook_custom2
+    icon: mdi:web
+    entity_category: config
+    on_press:
+      - select.set:
+          id: sem_ai_status_select
+          option: ${sem_status_custom2_option}
+
+number:
+  - platform: template
+    id: sem_num_reasoning_brightness
+    name: ${friendly_name} Reasoning Brightness
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
+    initial_value: ${sem_init_brightness}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_done_brightness
+    name: ${friendly_name} Done Brightness
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
+    initial_value: ${sem_init_brightness}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_need_action_brightness
+    name: ${friendly_name} Need Action Brightness
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
+    initial_value: ${sem_init_brightness}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_allow_action_brightness
+    name: ${friendly_name} Allow Action Brightness
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
+    initial_value: ${sem_init_brightness}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_rainbow_brightness
+    name: ${friendly_name} Rainbow Brightness
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
+    initial_value: ${sem_init_rainbow_brightness}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom1_brightness
+    name: ${friendly_name} Custom1 Brightness
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
+    initial_value: ${sem_init_brightness}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom2_brightness
+    name: ${friendly_name} Custom2 Brightness
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${brightness_min}
+    max_value: ${brightness_max}
+    step: ${brightness_step}
+    unit_of_measurement: ${brightness_unit}
+    initial_value: ${sem_init_brightness}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_reasoning_buzzer_frequency
+    name: ${friendly_name} Reasoning Buzzer Frequency
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
+    initial_value: ${sem_init_buzzer_frequency}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_done_buzzer_frequency
+    name: ${friendly_name} Done Buzzer Frequency
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
+    initial_value: ${sem_init_buzzer_frequency}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_need_action_buzzer_frequency
+    name: ${friendly_name} Need Action Buzzer Frequency
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
+    initial_value: ${sem_init_buzzer_frequency}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_allow_action_buzzer_frequency
+    name: ${friendly_name} Allow Action Buzzer Frequency
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
+    initial_value: ${sem_init_buzzer_frequency}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom1_buzzer_frequency
+    name: ${friendly_name} Custom1 Buzzer Frequency
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
+    initial_value: ${sem_init_buzzer_frequency}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom2_buzzer_frequency
+    name: ${friendly_name} Custom2 Buzzer Frequency
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_freq_min}
+    max_value: ${buzzer_freq_max}
+    step: ${buzzer_freq_step}
+    unit_of_measurement: ${buzzer_freq_unit}
+    initial_value: ${sem_init_buzzer_frequency}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_reasoning_buzzer_volume
+    name: ${friendly_name} Reasoning Buzzer Volume
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial_value: ${sem_init_buzzer_volume_off}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_done_buzzer_volume
+    name: ${friendly_name} Done Buzzer Volume
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial_value: ${sem_init_buzzer_volume_off}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_need_action_buzzer_volume
+    name: ${friendly_name} Need Action Buzzer Volume
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial_value: ${sem_init_buzzer_volume_alert}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_allow_action_buzzer_volume
+    name: ${friendly_name} Allow Action Buzzer Volume
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial_value: ${sem_init_buzzer_volume_alert}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom1_buzzer_volume
+    name: ${friendly_name} Custom1 Buzzer Volume
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial_value: ${sem_init_buzzer_volume_off}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom2_buzzer_volume
+    name: ${friendly_name} Custom2 Buzzer Volume
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    initial_value: ${sem_init_buzzer_volume_off}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_reasoning_buzzer_repeat
+    name: ${friendly_name} Reasoning Buzzer Repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
+    initial_value: ${sem_init_buzzer_repeat_single}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_done_buzzer_repeat
+    name: ${friendly_name} Done Buzzer Repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
+    initial_value: ${sem_init_buzzer_repeat_single}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_need_action_buzzer_repeat
+    name: ${friendly_name} Need Action Buzzer Repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
+    initial_value: ${sem_init_buzzer_repeat_double}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_allow_action_buzzer_repeat
+    name: ${friendly_name} Allow Action Buzzer Repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
+    initial_value: ${sem_init_buzzer_repeat_double}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom1_buzzer_repeat
+    name: ${friendly_name} Custom1 Buzzer Repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
+    initial_value: ${sem_init_buzzer_repeat_single}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_num_custom2_buzzer_repeat
+    name: ${friendly_name} Custom2 Buzzer Repeat
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${buzzer_repeat_min}
+    max_value: ${buzzer_repeat_max}
+    step: ${buzzer_repeat_step}
+    initial_value: ${sem_init_buzzer_repeat_single}
+    set_action:
+      - script.execute: sem_apply_status_outputs
+
+  - platform: template
+    id: sem_beep_on_ms
+    name: ${friendly_name} Buzzer On Time
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${beep_on_min_ms}
+    max_value: ${beep_on_max_ms}
+    step: ${beep_on_step_ms}
+    unit_of_measurement: ms
+    initial_value: ${sem_init_beep_on_ms}
+
+  - platform: template
+    id: sem_beep_off_ms
+    name: ${friendly_name} Buzzer Off Time
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    min_value: ${beep_off_min_ms}
+    max_value: ${beep_off_max_ms}
+    step: ${beep_off_step_ms}
+    unit_of_measurement: ms
+    initial_value: ${sem_init_beep_off_ms}
+
+text_sensor:
+  - platform: template
+    id: sem_ai_status_text
+    name: ${friendly_name} Status Text
+    icon: mdi:robot
+    update_interval: never
+
+  - platform: template
+    id: sem_led_output_mode_text
+    name: ${friendly_name} LED Output Mode
+    icon: mdi:led-strip-variant
+    update_interval: never

@@ -15,6 +15,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 | [`jkbms_v2/`](jkbms_v2/) | JK-BMS (Jikong) | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
 | [`garage/generator/`](garage/generator/) | Garage Generator Controller | ESP32 | Generator control + PZEM telemetry + RF learn/transmit + mirrored servos |
 | [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
+| [`ai-helper/`](ai-helper/) | AI Helper (Semaphore + Mouse Mover) | ESP32 | RGB/buzzer status semaphore for coding-agent hooks, servo-driven mouse mover |
 
 ---
 
@@ -118,6 +119,19 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 - MQTT uses explicit command/telemetry topics only (`topic_prefix: null`, `discovery: false`)
 
 📁 [garage/generator/README.md](garage/generator/README.md)
+
+---
+
+## ai-helper
+
+**Coding-agent desk companion** — a status semaphore plus an optional mouse mover, sharing one ESPHome codebase.
+
+- **Semaphore** — RGB LED + buzzer shows agent status (`Idle`/`Reasoning`/`Done`/`Need User Action`/`Allow Action`/`Custom1`/`Custom2`), each fully configurable (color, LED slot, brightness, buzzer) from Home Assistant
+- Status can be set via HA select entity, native API action, or a plain HTTP button-press endpoint — the latter is used to wire up Claude Code and GitHub Copilot hooks so the agent's live status shows up on the semaphore
+- **Mouse mover** — servo sweep on a timer with LCD menu and physical buttons; random angle/step/delay/period optionally seeded from random.org, with local fallback
+- Buildable as one combined device (`ai-helper.yaml`) or two standalone devices (`semaphore-device.yaml`, `mouse-mover-device.yaml`)
+
+📁 [ai-helper/README.md](ai-helper/README.md)
 
 ---
 

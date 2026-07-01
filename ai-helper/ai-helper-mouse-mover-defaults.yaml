@@ -1,0 +1,71 @@
+substitutions:
+  # Common number component defaults
+  mm_number_optimistic: "true"
+  mm_number_restore_value: "true"
+  mm_number_entity_category: "config"
+
+  # Angle configuration
+  mm_angle_min: "0"
+  mm_angle_max: "270"
+  mm_angle_step: "1"
+  mm_max_angle_min: "90"
+  mm_max_angle_step: "90"
+
+  # Period configuration (main duty cycle in seconds)
+  mm_period_cfg_min_s: "5"
+  mm_period_cfg_max_s: "3600"
+  mm_period_cfg_step_s: "1"
+
+  # Period Min configuration
+  mm_period_min_cfg_max_s: "3600"
+  mm_period_min_cfg_step_s: "1"
+  mm_period_min_cfg_initial_s: "120"
+
+  # Period Max configuration
+  mm_period_max_cfg_min_s: "5"
+  mm_period_max_cfg_max_s: "7200"
+  mm_period_max_cfg_step_s: "1"
+  mm_period_max_cfg_initial_s: "360"
+
+  # Step configuration
+  mm_move_step_cfg_min: "1"
+  mm_move_step_cfg_max: "10"
+  mm_move_step_cfg_step: "1"
+
+  mm_step_min_cfg_max: "10"
+  mm_step_min_cfg_step: "1"
+  mm_step_min_cfg_initial: "1"
+
+  mm_step_max_cfg_min: "1"
+  mm_step_max_cfg_max: "20"
+  mm_step_max_cfg_step: "1"
+  mm_step_max_cfg_initial: "5"
+
+  mm_bound_step_cfg_min: "1"
+  mm_bound_step_cfg_max: "20"
+  mm_bound_step_cfg_step: "1"
+
+  # Delay configuration (milliseconds)
+  mm_move_delay_cfg_min_ms: "20"
+  mm_move_delay_cfg_max_ms: "2000"
+  mm_move_delay_cfg_step_ms: "10"
+
+  mm_delay_min_cfg_max_ms: "3000"
+  mm_delay_min_cfg_step_ms: "10"
+  mm_delay_min_cfg_initial_ms: "100"
+
+  mm_delay_max_cfg_min_ms: "20"
+  mm_delay_max_cfg_max_ms: "5000"
+  mm_delay_max_cfg_step_ms: "10"
+  mm_delay_max_cfg_initial_ms: "700"
+
+  # Initial values for all angle/step/delay settings
+  mm_init_start_angle: "150"
+  mm_init_end_angle: "180"
+  mm_init_max_angle: "180"
+  mm_init_manual_angle: "150"
+  mm_init_move_angle: "175"
+  mm_init_move_step: "1"
+  mm_init_move_speed_delay_ms: "200"
+  mm_init_period_s: "120"
+  mm_init_bound_step: "5"
