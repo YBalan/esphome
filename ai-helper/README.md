@@ -182,3 +182,7 @@ wifi_password: "Your_WiFi_Password"
 ![Assembled device](photo/IMG_20240731_201218.jpg)
 
 Mouse mover in action: [`VID_20240801_203023.mp4`](photo/VID_20240801_203023.mp4), [`VID_20240801_203426.mp4`](photo/VID_20240801_203426.mp4)
+
+## Video
+
+[![AI Helper demo video](https://img.youtube.com/vi/Ve-P4YmRdPM/0.jpg)](https://youtu.be/Ve-P4YmRdPM)
