@@ -60,6 +60,21 @@ An ESPHome-based smart lighting controller for WC and Bath rooms. Automatically 
 
 ---
 
+## Troubleshooting: ESP32 Instability / Reboots
+
+If the ESP32 resets randomly or dies after days of uptime while driving the WS2812 status strip, this is almost always an electrical wiring issue, not a timing/frequency setting — `led_pwm_frequency` only controls the two `ledc` MOSFET dimmer outputs (WC/Bath main lights); the WS2812 strip is bit-banged by the ESP32's RMT peripheral with fixed protocol timing and is not affected by that substitution at all.
+
+Root causes to check, in order of likelihood, when the strip runs off its own 5 V supply:
+
+1. **Ground topology** — a common ground between the ESP32 supply and the strip's 5 V supply is required, but *how* they're tied matters. If both grounds are daisy-chained through a shared screw terminal that also carries the MOSFET load return current, switching current pulses (LED strip draws up to ~3 A at full brightness/50 LEDs; MOSFET PWM loads switch at `led_pwm_frequency`) create ground bounce on that shared path, which is seen by the ESP32 as noise on its own GND reference — this is a well-known cause of brownout resets. Fix: wire the ESP32 GND, LED strip GND, and PSU GND in a **star** topology (one single junction point), not daisy-chained through the load return paths.
+2. **Bulk capacitance at the strip** — a large electrolytic capacitor (1000 µF, 6.3 V+) should sit directly across **V+ and GND at the start of the LED strip itself** (not on the data line, and not only back at the PSU). This absorbs the strip's current transients locally instead of pulling them through the wiring.
+3. **Level shifting** — the data line currently runs the ESP32's 3.3 V logic straight into a 5 V WS2812 strip (with the 330 Ω series resistor, which is correctly sized). This is out of spec for `VIH` on 5 V strips and works "most of the time," but marginal signal levels are more sensitive to the noise from point 1. Adding a 74AHCT125/74HCT245 level shifter between the ESP32 GPIO and the strip's DIN meaningfully improves margin, especially over the current 50-LED run.
+4. **Decoupling at the ESP32** — add a 100 nF ceramic + 100–470 µF electrolytic capacitor across the ESP32's own 3.3 V/GND right at the board, close to the XL4015 buck output, to absorb WiFi TX current spikes (~500 mA bursts) that are a separate, common cause of ESP32 brownout resets unrelated to the LED strip.
+
+As a software-side mitigation, `wc-lights.yaml` lowers the ESP32 brownout detector trip threshold (`CONFIG_ESP32_BROWNOUT_DET_LVL_SEL_7`) so brief noise dips don't force a reset — but this only masks the symptom; items 1–4 above address the actual cause.
+
+---
+
 ## 3D Printed Enclosure
 
 Printable files are in the [`stl/`](stl/) folder:
