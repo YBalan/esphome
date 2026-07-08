@@ -14,7 +14,7 @@ substitutions:
   wc_light_pin: GPIO18
   bath_light_pin: GPIO19
   wc_door_pin: GPIO21
-  bath_door_pin: GPIO22  
+  bath_door_pin: GPIO13  
   rgb_strip_pin: GPIO26
   reset_counters_pin: GPIO4
 
@@ -23,6 +23,8 @@ substitutions:
   bath_endstop_mode_default: "NC"
   door_debounce_on: 150ms
   door_debounce_off: 150ms
+  bath_door_debounce_on: 400ms
+  bath_door_debounce_off: 400ms
 
   # MOSFET PWM dimming
   # Increase if you notice visible flicker, decrease if MOSFET gets warm.
@@ -109,8 +111,16 @@ esphome:
 
 esp32:
   board: esp32dev
-  framework:  
+  framework:
     type: esp-idf
+    # Default brownout level (2.70V) trips on brief supply dips caused by
+    # WS2812/MOSFET switching noise coupled through the shared ground even
+    # though the strip has its own PSU. Lowering the trip point avoids false
+    # resets from noise while still protecting against real undervoltage.
+    # This is a mitigation, not a substitute for fixing the wiring per
+    # README.md "Troubleshooting: ESP32 Instability / Reboots".
+    sdkconfig_options:
+      CONFIG_ESP32_BROWNOUT_DET_LVL_SEL_7: "y"
 
 logger:
   level: INFO
@@ -592,8 +602,8 @@ binary_sensor:
         pullup: true
       inverted: false
     filters:
-      - delayed_on: ${door_debounce_on}
-      - delayed_off: ${door_debounce_off}
+      - delayed_on: ${bath_door_debounce_on}
+      - delayed_off: ${bath_door_debounce_off}
 
   - platform: template
     id: wc_door_sensor
