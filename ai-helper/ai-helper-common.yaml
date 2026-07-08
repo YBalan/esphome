@@ -23,7 +23,11 @@ web_server:
 
 http_request:
   useragent: esphome-ai-helper
-  timeout: 5s
+  timeout: 10s
+  # Must be > timeout. Extends the ESP32 task watchdog for the whole request
+  # (incl. the TLS handshake in esp_http_client_open, which is otherwise not
+  # fed and can exceed the 5s default WDT -> panic reboot).
+  watchdog_timeout: 15s
   verify_ssl: true
 
 sensor:
