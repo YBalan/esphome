@@ -698,136 +698,51 @@ script:
               id(mm_random_last_http_status));
       - script.execute: mm_publish_text_states
 
-  - id: mm_fetch_angle_random_org
+  # Fetch all four random values in ONE request (one TLS handshake instead of
+  # four). random.org's plain endpoint uses a single min/max for the whole
+  # batch, so we draw 4 uniform integers over a wide range and scale each into
+  # its own target range on-device via scale_to_range().
+  - id: mm_fetch_all_random_org
     mode: restart
     then:
       - http_request.get:
-          url: !lambda |-
-            const int start = (int) id(mm_num_start_angle).state;
-            const int end = (int) id(mm_num_end_angle).state;
-            const int angle_min = ai_helper::mouse_mover::start_offset_angle(start, end);
-            return "https://www.random.org/integers/?num=1&min=" + to_string(angle_min) +
-                   "&max=" + to_string(end) +
-                   "&col=1&base=10&format=plain&rnd=new";
+          url: "https://www.random.org/integers/?num=4&min=0&max=1000000&col=1&base=10&format=plain&rnd=new"
           capture_response: true
           on_response:
             then:
               - lambda: |-
                   id(mm_random_last_http_status) = response->status_code;
-                  int value = 0;
-                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
-                    id(mm_num_move_angle).publish_state(value);
-                    id(mm_random_last_status) = "random.org";
-                  } else {
-                    const int start = (int) id(mm_num_start_angle).state;
-                    const int end = (int) id(mm_num_end_angle).state;
-                    const int angle_min = ai_helper::mouse_mover::start_offset_angle(start, end);
-                    id(mm_num_move_angle).publish_state(ai_helper::mouse_mover::random_local_range(angle_min, end));
-                    id(mm_random_last_status) = "random.org err -> local";
+                  const auto rv = ai_helper::mouse_mover::compute_random_values(
+                      response->status_code, body.c_str(),
+                      (int) id(mm_num_start_angle).state, (int) id(mm_num_end_angle).state,
+                      (int) id(mm_num_step_min).state, (int) id(mm_num_step_max).state,
+                      (int) id(mm_num_delay_min_ms).state, (int) id(mm_num_delay_max_ms).state,
+                      (int) id(mm_num_period_min_s).state, (int) id(mm_num_period_max_s).state);
+                  if (!rv.ok) {
+                    ESP_LOGW(
+                        "mouse_mover",
+                        "random.org ALL http=%d parse failed -> local",
+                        response->status_code);
+                    id(mm_randomize_local_values).execute();
+                    return;
                   }
+                  id(mm_num_move_angle).publish_state(rv.angle);
+                  id(mm_num_move_step).publish_state(rv.step);
+                  id(mm_num_move_speed_delay_ms).publish_state(rv.speed_ms);
+                  id(num_mouse_mover_period_s).publish_state(rv.period_s);
+                  id(mm_random_last_status) = "random.org";
                   ESP_LOGI(
                       "mouse_mover",
-                      "random.org ANGLE http=%d value=%d source=%s",
-                      response->status_code,
-                      (int) id(mm_num_move_angle).state,
+                      "random.org ALL http=%d angle=%d step=%d speed_ms=%d period_s=%d source=%s",
+                      response->status_code, rv.angle, rv.step, rv.speed_ms, rv.period_s,
                       id(mm_random_last_status).c_str());
-                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
-
-  - id: mm_fetch_speed_random_org
-    mode: restart
-    then:
-      - http_request.get:
-          url: !lambda |-
-            const int min_v = (int) id(mm_num_delay_min_ms).state;
-            const int max_v = (int) id(mm_num_delay_max_ms).state;
-            return "https://www.random.org/integers/?num=1&min=" + to_string(min_v) +
-                   "&max=" + to_string(max_v) +
-                   "&col=1&base=10&format=plain&rnd=new";
-          capture_response: true
-          on_response:
+                  id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+          on_error:
             then:
-              - lambda: |-
-                  id(mm_random_last_http_status) = response->status_code;
-                  int value = 0;
-                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
-                    id(mm_num_move_speed_delay_ms).publish_state(value);
-                    id(mm_random_last_status) = "random.org";
-                  } else {
-                    id(mm_num_move_speed_delay_ms).publish_state(
-                        ai_helper::mouse_mover::random_local_range((int) id(mm_num_delay_min_ms).state, (int) id(mm_num_delay_max_ms).state));
-                    id(mm_random_last_status) = "random.org err -> local";
-                  }
-                  ESP_LOGI(
-                      "mouse_mover",
-                      "random.org SPEED http=%d value_ms=%d source=%s",
-                      response->status_code,
-                      (int) id(mm_num_move_speed_delay_ms).state,
-                      id(mm_random_last_status).c_str());
-                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
-
-  - id: mm_fetch_period_random_org
-    mode: restart
-    then:
-      - http_request.get:
-          url: !lambda |-
-            const int min_v = (int) id(mm_num_period_min_s).state;
-            const int max_v = (int) id(mm_num_period_max_s).state;
-            return "https://www.random.org/integers/?num=1&min=" + to_string(min_v) +
-                   "&max=" + to_string(max_v) +
-                   "&col=1&base=10&format=plain&rnd=new";
-          capture_response: true
-          on_response:
-            then:
-              - lambda: |-
-                  id(mm_random_last_http_status) = response->status_code;
-                  int value = 0;
-                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
-                    id(num_mouse_mover_period_s).publish_state(value);
-                    id(mm_random_last_status) = "random.org";
-                  } else {
-                    id(num_mouse_mover_period_s).publish_state(
-                        ai_helper::mouse_mover::random_local_range((int) id(mm_num_period_min_s).state, (int) id(mm_num_period_max_s).state));
-                    id(mm_random_last_status) = "random.org err -> local";
-                  }
-                  ESP_LOGI(
-                      "mouse_mover",
-                      "random.org PERIOD http=%d value_s=%d source=%s",
-                      response->status_code,
-                      (int) id(num_mouse_mover_period_s).state,
-                      id(mm_random_last_status).c_str());
-                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
-
-  - id: mm_fetch_step_random_org
-    mode: restart
-    then:
-      - http_request.get:
-          url: !lambda |-
-            const int min_v = (int) id(mm_num_step_min).state;
-            const int max_v = (int) id(mm_num_step_max).state;
-            return "https://www.random.org/integers/?num=1&min=" + to_string(min_v) +
-                   "&max=" + to_string(max_v) +
-                   "&col=1&base=10&format=plain&rnd=new";
-          capture_response: true
-          on_response:
-            then:
-              - lambda: |-
-                  id(mm_random_last_http_status) = response->status_code;
-                  int value = 0;
-                  if (response->status_code == 200 && ai_helper::mouse_mover::parse_int_response(body.c_str(), value)) {
-                    id(mm_num_move_step).publish_state(value);
-                    id(mm_random_last_status) = "random.org";
-                  } else {
-                    id(mm_num_move_step).publish_state(
-                        ai_helper::mouse_mover::randomize_step((int) id(mm_num_step_min).state, (int) id(mm_num_step_max).state));
-                    id(mm_random_last_status) = "random.org err -> local";
-                  }
-                  ESP_LOGI(
-                      "mouse_mover",
-                      "random.org STEP http=%d value=%d source=%s",
-                      response->status_code,
-                      (int) id(mm_num_move_step).state,
-                      id(mm_random_last_status).c_str());
-                    id(mouse_mover_random_source_text).publish_state(id(mm_random_last_status));
+              - logger.log:
+                  level: WARN
+                  format: "random.org request failed -> local"
+              - script.execute: mm_randomize_local_values
 
   - id: mm_refresh_random_values
     mode: restart
@@ -844,10 +759,7 @@ script:
           then:
             - script.execute: mm_randomize_local_values
           else:
-            - script.execute: mm_fetch_angle_random_org
-            - script.execute: mm_fetch_step_random_org
-            - script.execute: mm_fetch_speed_random_org
-            - script.execute: mm_fetch_period_random_org
+            - script.execute: mm_fetch_all_random_org
 
   - id: mouse_mover_emit_activity
     mode: restart

@@ -355,9 +355,98 @@ inline bool parse_int_response(const char *body, int &value) {
   return true;
 }
 
+// Parse up to `count` whitespace/newline-separated integers from `body`.
+// Returns how many were successfully parsed (random.org plain col=1 output is
+// one integer per line).
+inline int parse_int_list(const char *body, int *values, const int count) {
+  if (body == nullptr || values == nullptr) {
+    return 0;
+  }
+  int found = 0;
+  const char *p = body;
+  while (found < count && *p != '\0') {
+    while (*p != '\0' && *p != '-' && (*p < '0' || *p > '9')) {
+      ++p;
+    }
+    if (*p == '\0') {
+      break;
+    }
+    char *end = nullptr;
+    const long parsed = std::strtol(p, &end, 10);
+    if (end == p) {
+      break;
+    }
+    values[found++] = static_cast<int>(parsed);
+    p = end;
+  }
+  return found;
+}
+
+// Map a raw uniform draw in [0, raw_max] into [lo, hi] inclusive. Lets us pull
+// several values with different target ranges from a single random.org request
+// that used one wide range for all of them.
+inline int scale_to_range(const long raw, const long raw_max, const int lo, const int hi) {
+  int low = lo;
+  int high = hi;
+  if (low > high) {
+    const int tmp = low;
+    low = high;
+    high = tmp;
+  }
+  long r = raw;
+  if (r < 0) {
+    r = 0;
+  }
+  if (r > raw_max) {
+    r = raw_max;
+  }
+  const long long span = static_cast<long long>(high) - static_cast<long long>(low) + 1;
+  const long long scaled = static_cast<long long>(low) + (static_cast<long long>(r) * span) / (raw_max + 1);
+  return clamp_between(static_cast<int>(scaled), low, high);
+}
+
 inline int start_offset_angle(const int start_angle, const int end_angle) {
   const int diff = end_angle - start_angle;
   return start_angle + (diff / 2);
+}
+
+// The four random values produced from a single random.org draw. When ok is
+// false the response was unusable and the caller should fall back to local
+// randomness.
+struct RandomValues {
+  bool ok = false;
+  int angle = 0;
+  int step = 0;
+  int speed_ms = 0;
+  int period_s = 0;
+};
+
+// Parse the 4-integer random.org plain response and scale each raw draw
+// (uniform over [0, RAW_MAX]) into its own target range.
+inline RandomValues compute_random_values(
+    const int status_code,
+    const char *body,
+    const int start_angle,
+    const int end_angle,
+    const int step_min,
+    const int step_max,
+    const int delay_min_ms,
+    const int delay_max_ms,
+    const int period_min_s,
+    const int period_max_s) {
+  RandomValues out;
+  int raw[4] = {0, 0, 0, 0};
+  const long raw_max = 1000000L;
+  if (status_code != 200 || parse_int_list(body, raw, 4) != 4) {
+    return out;  // ok stays false -> caller uses local values
+  }
+  const int angle_min = start_offset_angle(start_angle, end_angle);
+  out.angle = scale_to_range(raw[0], raw_max, angle_min, end_angle);
+  out.step = scale_to_range(raw[1], raw_max, step_min, step_max);
+  out.speed_ms = scale_to_range(raw[2], raw_max, delay_min_ms, delay_max_ms);
+  out.period_s = scale_to_range(raw[3], raw_max, period_min_s, period_max_s);
+  out.ok = true;
+  return out;
 }
 
 inline const char *mode_text(const bool enabled) {
