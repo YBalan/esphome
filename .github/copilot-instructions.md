@@ -20,6 +20,7 @@ Behavior rules:
 - If the webhook request fails, continue the task and do not block on the status update.
 - Prefer updating the status before the related user-visible phase change, not after.
 - If a task moves from waiting back into active work, switch back to `Reasoning`.
+- Customization preflight: before editing repository customization assets (`.github/copilot-instructions.md`, `.github/agents/*`, `.github/skills/*`, `.claude/agents/*`, `.claude/skills/*`, and related instruction/agent/skill files), set `Allow Action` first, then return to `Reasoning` once edits begin.
 - External-read preflight: if a command/tool output references a path outside the current workspace (for example under `%APPDATA%`, temp folders, or network paths), set `Allow Action` before requesting or performing any read/search on that path.
 - Never call file-read/search tools on outside-workspace paths until user approval is requested and granted.
 - After outside-workspace approval is granted and the read is complete, switch back to `Reasoning` for normal task work.

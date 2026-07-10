@@ -1,0 +1,376 @@
+type: sections
+max_columns: 3
+title: AI Helper
+path: ai-helper
+icon: mdi:robot
+show_icon_and_title: false
+sections:
+  - type: grid
+    cards:
+      - type: heading
+        heading: 🚦 AI Status
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - entity: select.wc_ai_helper_ai_helper_ai_status
+            name: Status
+            icon: mdi:robot
+          - entity: sensor.wc_ai_helper_ai_helper_status_text
+            name: Status Text
+          - entity: sensor.bedroom_ai_helper_ai_helper_led_output_mode
+            name: LED Output
+      - type: light
+        entity: light.bedroom_ai_helper_ai_helper_action_full_strip_led
+        name: Full Strip
+        icon: mdi:led-strip-variant
+      - type: horizontal-stack
+        cards:
+          - type: light
+            entity: light.bedroom_ai_helper_ai_helper_action_red_led
+            name: Red
+          - type: light
+            entity: light.bedroom_ai_helper_ai_helper_action_yellow_led
+            name: Yellow
+          - type: light
+            entity: light.bedroom_ai_helper_ai_helper_action_green_led
+            name: Green
+      - type: heading
+        heading: Set Status (webhooks)
+        heading_style: subtitle
+      - type: grid
+        columns: 3
+        square: false
+        cards:
+          - type: button
+            entity: button.bedroom_ai_helper_webhook_idle
+            name: Idle
+            icon: mdi:sleep
+            tap_action:
+              action: toggle
+          - type: button
+            entity: button.bedroom_ai_helper_webhook_reasoning
+            name: Reasoning
+            icon: mdi:brain
+            tap_action:
+              action: toggle
+          - type: button
+            entity: button.bedroom_ai_helper_webhook_done
+            name: Done
+            icon: mdi:check-circle
+            tap_action:
+              action: toggle
+          - type: button
+            entity: button.bedroom_ai_helper_webhook_need_user_action
+            name: Need Action
+            icon: mdi:hand-back-right
+            tap_action:
+              action: toggle
+          - type: button
+            entity: button.bedroom_ai_helper_webhook_allow_action
+            name: Allow Action
+            icon: mdi:shield-check
+            tap_action:
+              action: toggle
+          - type: button
+            entity: button.bedroom_ai_helper_webhook_custom1
+            name: Custom1
+            icon: mdi:numeric-1-circle
+            tap_action:
+              action: toggle
+          - type: button
+            entity: button.bedroom_ai_helper_webhook_custom2
+            name: Custom2
+            icon: mdi:numeric-2-circle
+            tap_action:
+              action: toggle
+  - type: grid
+    cards:
+      - type: heading
+        heading: ⚙️ Status Configs
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: 🟡 Reasoning
+          - entity: select.bedroom_ai_helper_ai_helper_reasoning_led
+            name: LED
+          - entity: select.bedroom_ai_helper_ai_helper_reasoning_color
+            name: Color
+          - entity: number.bedroom_ai_helper_ai_helper_reasoning_brightness
+            name: Brightness
+          - entity: switch.bedroom_ai_helper_ai_helper_reasoning_buzzer_enabled
+            name: Buzzer
+          - entity: number.bedroom_ai_helper_ai_helper_reasoning_buzzer_volume
+            name: Volume
+          - entity: number.bedroom_ai_helper_ai_helper_reasoning_buzzer_frequency
+            name: Frequency
+          - entity: number.bedroom_ai_helper_ai_helper_reasoning_buzzer_repeat
+            name: Repeat
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: 🟢 Done
+          - entity: select.bedroom_ai_helper_ai_helper_done_led
+            name: LED
+          - entity: select.bedroom_ai_helper_ai_helper_done_color
+            name: Color
+          - entity: number.bedroom_ai_helper_ai_helper_done_brightness
+            name: Brightness
+          - entity: switch.bedroom_ai_helper_ai_helper_done_buzzer_enabled
+            name: Buzzer
+          - entity: number.bedroom_ai_helper_ai_helper_done_buzzer_volume
+            name: Volume
+          - entity: number.bedroom_ai_helper_ai_helper_done_buzzer_frequency
+            name: Frequency
+          - entity: number.bedroom_ai_helper_ai_helper_done_buzzer_repeat
+            name: Repeat
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: 🔴 Need User Action
+          - entity: select.bedroom_ai_helper_ai_helper_need_action_led
+            name: LED
+          - entity: select.bedroom_ai_helper_ai_helper_need_action_color
+            name: Color
+          - entity: number.bedroom_ai_helper_ai_helper_need_action_brightness
+            name: Brightness
+          - entity: switch.bedroom_ai_helper_ai_helper_need_action_buzzer_enabled
+            name: Buzzer
+          - entity: number.bedroom_ai_helper_ai_helper_need_action_buzzer_volume
+            name: Volume
+          - entity: number.bedroom_ai_helper_ai_helper_need_action_buzzer_frequency
+            name: Frequency
+          - entity: number.bedroom_ai_helper_ai_helper_need_action_buzzer_repeat
+            name: Repeat
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: 🟠 Allow Action
+          - entity: select.bedroom_ai_helper_ai_helper_allow_action_led
+            name: LED
+          - entity: select.bedroom_ai_helper_ai_helper_allow_action_color
+            name: Color
+          - entity: number.bedroom_ai_helper_ai_helper_allow_action_brightness
+            name: Brightness
+          - entity: switch.bedroom_ai_helper_ai_helper_allow_action_buzzer_enabled
+            name: Buzzer
+          - entity: number.bedroom_ai_helper_ai_helper_allow_action_buzzer_volume
+            name: Volume
+          - entity: number.bedroom_ai_helper_ai_helper_allow_action_buzzer_frequency
+            name: Frequency
+          - entity: number.bedroom_ai_helper_ai_helper_allow_action_buzzer_repeat
+            name: Repeat
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: 1️⃣ Custom1
+          - entity: select.bedroom_ai_helper_ai_helper_custom1_led
+            name: LED
+          - entity: select.bedroom_ai_helper_ai_helper_custom1_color
+            name: Color
+          - entity: number.bedroom_ai_helper_ai_helper_custom1_brightness
+            name: Brightness
+          - entity: switch.bedroom_ai_helper_ai_helper_custom1_buzzer_enabled
+            name: Buzzer
+          - entity: number.bedroom_ai_helper_ai_helper_custom1_buzzer_volume
+            name: Volume
+          - entity: number.bedroom_ai_helper_ai_helper_custom1_buzzer_frequency
+            name: Frequency
+          - entity: number.bedroom_ai_helper_ai_helper_custom1_buzzer_repeat
+            name: Repeat
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: 2️⃣ Custom2
+          - entity: select.bedroom_ai_helper_ai_helper_custom2_led
+            name: LED
+          - entity: select.bedroom_ai_helper_ai_helper_custom2_color
+            name: Color
+          - entity: number.bedroom_ai_helper_ai_helper_custom2_brightness
+            name: Brightness
+          - entity: switch.bedroom_ai_helper_ai_helper_custom2_buzzer_enabled
+            name: Buzzer
+          - entity: number.bedroom_ai_helper_ai_helper_custom2_buzzer_volume
+            name: Volume
+          - entity: number.bedroom_ai_helper_ai_helper_custom2_buzzer_frequency
+            name: Frequency
+          - entity: number.bedroom_ai_helper_ai_helper_custom2_buzzer_repeat
+            name: Repeat
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: 🌈 Shared Buzzer / Rainbow
+          - entity: switch.wc_ai_helper_ai_helper_buzzer_enabled
+            name: Master Buzzer
+          - entity: number.bedroom_ai_helper_ai_helper_rainbow_brightness
+            name: Rainbow Brightness
+          - entity: number.wc_ai_helper_ai_helper_buzzer_on_time
+            name: Beep On Time
+          - entity: number.wc_ai_helper_ai_helper_buzzer_off_time
+            name: Beep Off Time
+  - type: grid
+    cards:
+      - type: heading
+        heading: 🖱️ Mouse Mover
+      - type: horizontal-stack
+        cards:
+          - type: tile
+            entity: switch.bedroom_ai_helper_ai_helper_mouse_mover_enabled
+            name: Enabled
+          - type: tile
+            entity: switch.bedroom_ai_helper_ai_helper_mouse_mover_use_random_org
+            name: random.org
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - entity: sensor.bedroom_ai_helper_ai_helper_mouse_mover_mode
+            name: Mode
+          - entity: sensor.bedroom_ai_helper_ai_helper_mouse_mover_bounds
+            name: Bounds
+          - entity: sensor.bedroom_ai_helper_ai_helper_mouse_mover_random_source
+            name: Random Source
+      - type: entities
+        title: Move Motion
+        show_header_toggle: false
+        entities:
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_period
+            name: Period
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_step
+            name: Step
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_step_delay
+            name: Step Delay
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_target_angle
+            name: Target Angle
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_manual_angle
+            name: Manual Angle
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            entity: button.bedroom_ai_helper_ai_helper_mouse_mover_trigger_now
+            name: Trigger Now
+            icon: mdi:cursor-default-click
+          - type: button
+            entity: button.bedroom_ai_helper_ai_helper_mouse_mover_randomize_now
+            name: Randomize Now
+            icon: mdi:dice-multiple
+          - type: button
+            entity: button.bedroom_ai_helper_ai_helper_mouse_mover_go_to_manual_angle
+            name: Go To Manual
+            icon: mdi:target
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.bedroom_ai_helper_ai_helper_mouse_mover_set_manual_as_start
+            name: Set Manual → Start
+            icon: mdi:ray-start
+          - show_name: true
+            show_icon: true
+            type: button
+            entity: button.bedroom_ai_helper_ai_helper_mouse_mover_set_manual_as_stop
+            name: Set Manual → Stop
+            icon: mdi:ray-end
+  - type: grid
+    cards:
+      - type: heading
+        heading: 🎚️ Motion Config
+      - type: entities
+        title: Servo Bounds
+        show_header_toggle: false
+        entities:
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_start_angle
+            name: Start Angle
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_end_angle
+            name: End Angle
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_max_angle
+            name: Max Angle
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_bound_step
+            name: Bound Step
+  - type: grid
+    cards:
+      - type: heading
+        heading: 🎲 Randomization Ranges
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - type: section
+            label: Period (s)
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_period_min
+            name: Min
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_period_max
+            name: Max
+          - type: section
+            label: Step (deg)
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_step_min
+            name: Min
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_step_max
+            name: Max
+          - type: section
+            label: Step Delay (ms)
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_delay_min
+            name: Min
+          - entity: number.bedroom_ai_helper_ai_helper_mouse_mover_delay_max
+            name: Max
+  - type: grid
+    cards:
+      - type: heading
+        heading: 🛠️ Device System
+      - type: horizontal-stack
+        cards:
+          - type: tile
+            entity: sensor.wc_ai_helper_ai_helper_wifi_rssi
+            name: WiFi RSSI
+            vertical: false
+            features_position: bottom
+          - type: tile
+            entity: sensor.bedroom_ai_helper_ai_helper_wifi_name
+            name: WiFi Name
+      - type: entities
+        show_header_toggle: false
+        entities:
+          - entity: sensor.bedroom_ai_helper_ai_helper_reset_reason
+            name: Reset Reason
+      - type: button
+        entity: button.bedroom_ai_helper_ai_helper_wifi_forget
+        name: WiFi Forget
+        icon: mdi:wifi-remove
+        tap_action:
+          action: toggle
+cards: []
+badges:
+  - type: entity
+    entity: select.wc_ai_helper_ai_helper_ai_status
+    name: AI Status
+    show_name: true
+    show_state: true
+    show_icon: true
+  - type: entity
+    entity: sensor.wc_ai_helper_ai_helper_status_text
+    name: Status
+    show_name: true
+    show_state: true
+    show_icon: true
+  - type: entity
+    entity: switch.bedroom_ai_helper_ai_helper_mouse_mover_enabled
+    name: Mouse Mover
+    show_name: true
+    show_state: true
+    show_icon: true
+  - type: entity
+    entity: sensor.bedroom_ai_helper_ai_helper_mouse_mover_mode
+    name: MM Mode
+    show_name: true
+    show_state: true
+    show_icon: true
+  - type: entity
+    entity: sensor.wc_ai_helper_ai_helper_wifi_rssi
+    show_name: false
+    show_state: true
+    show_icon: true
