@@ -119,6 +119,18 @@
               "classify-stop"
             ],
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-usage-sync.ps1"
+            ],
+            "timeout": 10
           }
         ]
       }

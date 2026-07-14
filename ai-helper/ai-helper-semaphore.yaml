@@ -36,6 +36,11 @@ substitutions:
   sem_init_beep_on_ms: "150"
   sem_init_beep_off_ms: "120"
 
+  # Remaining usage/quota (%) for the active AI tool; 100 = full on boot
+  sem_init_usage_remaining: "100"
+  # Which tool last pushed the usage percentage (Claude Code, GitHub Copilot, ...)
+  sem_init_usage_source: "none"
+
   # Initial LED/Color assignments (per status)
   sem_init_reasoning_led_assignment: Yellow
   sem_init_reasoning_color_option: Yellow
@@ -1057,6 +1062,48 @@ number:
     step: ${beep_off_step_ms}
     unit_of_measurement: ms
     initial_value: ${sem_init_beep_off_ms}
+
+  # Remaining usage/quota (%) for the active AI tool (Claude Code, Copilot, ...).
+  # Agent hooks push the value over HTTP with the web_server REST API, addressing
+  # the entity by its URL-encoded display name (object-id URLs are deprecated and
+  # removed in ESPHome 2026.7.0):
+  #   POST http://<device-ip>/number/AI%20Helper%20Usage%20Remaining/set?value=<0-100>
+  # It's a `number` rather than a `sensor` because ESPHome's web server can only
+  # *set* controllable entities over HTTP - `sensor` entities are read-only. It
+  # still displays as a 0-100 % readout in the web UI / Home Assistant.
+  - platform: template
+    id: sem_usage_remaining
+    name: ${friendly_name} Usage Remaining
+    icon: mdi:battery-clock
+    entity_category: diagnostic
+    optimistic: true
+    restore_value: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    initial_value: ${sem_init_usage_remaining}
+
+text:
+  # Which tool last pushed the usage percentage. Set over HTTP alongside the
+  # percentage, addressing the entity by its URL-encoded display name:
+  #   POST http://<device-ip>/text/AI%20Helper%20Usage%20Source/set?value=Claude%20Code
+  - platform: template
+    id: sem_usage_source
+    name: ${friendly_name} Usage Source
+    icon: mdi:account-wrench
+    entity_category: diagnostic
+    optimistic: true
+    # Not persisted: re-setting the same tool name each turn makes ESPHome's
+    # template text log a misleading "Text value too long to save" warning on the
+    # no-op save. This is a within-session label anyway, so starting at "none"
+    # after a reboot (until the next tool reports) is fine.
+    restore_value: false
+    mode: text
+    min_length: 0
+    max_length: 32
+    initial_value: ${sem_init_usage_source}
 
 text_sensor:
   - platform: template

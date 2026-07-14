@@ -96,6 +96,28 @@ These endpoints exist regardless of which agent calls them:
 
 Both agent integrations below just decide *when* to hit which of these endpoints.
 
+### Remaining-usage gauge
+
+Besides the status semaphore, the device exposes a **`Usage Remaining`** percentage (0-100 %) number entity. Agents push it over the same web-server REST API, addressing the entity by its URL-encoded display name (object-id URLs are deprecated and removed in ESPHome 2026.7.0):
+
+```
+POST http://<device-ip>/number/AI%20Helper%20Usage%20Remaining/set?value=<0-100>
+```
+
+It's a `number` (not a `sensor`) because ESPHome's web server can only *set* controllable entities over HTTP — `sensor` entities are read-only — but it still displays as a percentage readout in the web UI / Home Assistant.
+
+Alongside it, a **`Usage Source`** text entity records which tool last pushed the value, set the same way:
+
+```
+POST http://<device-ip>/text/AI%20Helper%20Usage%20Source/set?value=Claude%20Code
+```
+
+- **Claude Code** reports the real **plan usage** automatically: the `Stop` hook runs [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1). The live "N% used, resets in ..." figure is not exposed to hooks, persisted to disk, or available via any CLI — it lives only in Anthropic's `anthropic-ratelimit-unified-*` response headers. So the hook reproduces what the Claude Code UI does: it makes one minimal authenticated request using the OAuth token in `~/.claude/.credentials.json` and reads `anthropic-ratelimit-unified-5h-utilization`, then posts `100 * (1 - utilization)`. `-Window 5h` (default) mirrors the UI's "Current session" bar; `-Window 7d` is the weekly window. Use `-Override <percent>` to post a fixed value instead. On any failure (offline, expired token) the gauge keeps its previous value rather than showing a wrong one.
+
+  > Note: this uses your stored Claude credentials to make one tiny extra request per turn, and relies on undocumented rate-limit headers that Anthropic could change.
+
+- **GitHub Copilot** has its own separate quota (not Claude's) and no equivalent hook-accessible usage feed, so it can only report a value it estimates itself — see the `curl.exe` call in [`copilot-instructions.md`](../.github/copilot-instructions.md). Best-effort only.
+
 ### Claude Code
 
 Claude Code hooks are configured in [`.claude/settings.json`](../.claude/settings.json) and shell out to [`.github/hooks/ai-helper-status-sync.ps1`](../.github/hooks/ai-helper-status-sync.ps1), which POSTs to the semaphore and de-dupes repeated calls to the same status via a temp state file.

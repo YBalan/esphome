@@ -15,6 +15,12 @@ Webhook commands:
 - Use `curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_done/press"`
 - Use `curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_idle/press"`
 
+Remaining-usage gauge:
+- The device exposes a `Usage Remaining` percentage (0-100 %) and a `Usage Source` text label, both settable. When the requested work is done (at the same time you set `Done`), report your remaining usage and tag it as GitHub Copilot. The entity names are URL-encoded, so keep the `%20` spaces:
+  - `curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/number/AI%20Helper%20Usage%20Remaining/set?value=75"`
+  - `curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/text/AI%20Helper%20Usage%20Source/set?value=GitHub%20Copilot"`
+- Only send a percentage you can actually estimate. If you have no reliable number, skip the percentage call (but you may still set the source). Send at most once per completed turn.
+
 Behavior rules:
 - Do not spam repeated webhook calls when the status has not changed.
 - If the webhook request fails, continue the task and do not block on the status update.
