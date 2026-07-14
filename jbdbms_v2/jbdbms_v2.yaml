@@ -336,11 +336,27 @@ binary_sensor:
       - script.execute: display_timer
 
 button:
-    # WiFi Reset Button
+    # Factory reset: wipes all stored preferences and reboots.
   - platform: factory_reset
-    name: "JBD Reset Device WiFi"
-    id: reset_wifi_btn
-    icon: "mdi:wifi-reset"
+    name: "JBD Factory Reset"
+    id: factory_reset_btn
+    icon: "mdi:cog-counterclockwise"
+
+    # Forget only the saved WiFi credentials and reboot; on restart the device
+    # falls back to its own AP + captive portal (${ap_ssid}) for a new network.
+    # Other preferences are kept, so this is NOT a factory reset.
+  - platform: template
+    name: "JBD WiFi Forget"
+    id: wifi_forget_btn
+    entity_category: config
+    icon: "mdi:wifi-remove"
+    on_press:
+      - logger.log: "Forgetting WiFi credentials; rebooting into setup AP"
+      - lambda: |-
+          // save_wifi_sta persists the empty credentials to NVS immediately.
+          wifi::global_wifi_component->save_wifi_sta("", "");
+      - delay: 1s
+      - lambda: "App.safe_reboot();"
 
   - platform: restart
     name: "JBD Restart Device"
