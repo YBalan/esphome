@@ -128,6 +128,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 
 - **Semaphore** — RGB LED + buzzer shows agent status (`Idle`/`Reasoning`/`Done`/`Need User Action`/`Allow Action`/`Custom1`/`Custom2`), each fully configurable (color, LED slot, brightness, buzzer) from Home Assistant
 - Status can be set via HA select entity, native API action, or a plain HTTP button-press endpoint — the latter is used to wire up Claude Code and GitHub Copilot hooks so the agent's live status shows up on the semaphore
+- **Usage gauge** — a `Usage Remaining` % readout plus a `Usage Source` label showing which tool set it. Claude Code posts its **real plan-session usage** (derived from Anthropic's rate-limit headers) automatically at reasoning start and on `Stop`; Copilot posts best-effort values and updates both source and remaining at reasoning start and at done/stop
 - **Mouse mover** — servo sweep on a timer with LCD menu and physical buttons; random angle/step/delay/period optionally seeded from random.org, with local fallback
 - Buildable as one combined device (`ai-helper.yaml`) or two standalone devices (`semaphore-device.yaml`, `mouse-mover-device.yaml`)
 
