@@ -106,17 +106,17 @@ POST http://<device-ip>/number/AI%20Helper%20Usage%20Remaining/set?value=<0-100>
 
 It's a `number` (not a `sensor`) because ESPHome's web server can only *set* controllable entities over HTTP — `sensor` entities are read-only — but it still displays as a percentage readout in the web UI / Home Assistant.
 
-Alongside it, a **`Usage Source`** text entity records which tool last pushed the value, set the same way:
+Alongside it, a **`Usage Source`** text entity records which tool is currently driving the gauge. Agents should update **both** `Usage Source` and `Usage Remaining` at the **start of reasoning** and again on **`Stop`/`Done`** so the gauge reflects both in-progress and final state. The source value persists across reboots (`restore_value`):
 
 ```
 POST http://<device-ip>/text/AI%20Helper%20Usage%20Source/set?value=Claude%20Code
 ```
 
-- **Claude Code** reports the real **plan usage** automatically: the `Stop` hook runs [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1). The live "N% used, resets in ..." figure is not exposed to hooks, persisted to disk, or available via any CLI — it lives only in Anthropic's `anthropic-ratelimit-unified-*` response headers. So the hook reproduces what the Claude Code UI does: it makes one minimal authenticated request using the OAuth token in `~/.claude/.credentials.json` and reads `anthropic-ratelimit-unified-5h-utilization`, then posts `100 * (1 - utilization)`. `-Window 5h` (default) mirrors the UI's "Current session" bar; `-Window 7d` is the weekly window. Use `-Override <percent>` to post a fixed value instead. On any failure (offline, expired token) the gauge keeps its previous value rather than showing a wrong one.
+- **Claude Code** reports the real **plan usage** automatically via [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1), updating **both** `Usage Remaining` and `Usage Source` at the **start of reasoning** (`UserPromptSubmit`) and again at **`Stop`**. The live "N% used, resets in ..." figure is not exposed to hooks, persisted to disk, or available via any CLI — it lives only in Anthropic's `anthropic-ratelimit-unified-*` response headers. So the hook reproduces what the Claude Code UI does: it makes one minimal authenticated request using the OAuth token in `~/.claude/.credentials.json`, reads `anthropic-ratelimit-unified-5h-utilization`, and posts `100 * (1 - utilization)` (plus the source tag). `-Window 5h` (default) mirrors the UI's "Current session" bar; `-Window 7d` is the weekly window. `-Mode source` is a lightweight variant that skips the API ping and only tags the source (used by Copilot). Use `-Override <percent>` to post a fixed value instead. On any failure (offline, expired token) the gauge keeps its previous value rather than showing a wrong one.
 
   > Note: this uses your stored Claude credentials to make one tiny extra request per turn, and relies on undocumented rate-limit headers that Anthropic could change.
 
-- **GitHub Copilot** has its own separate quota (not Claude's) and no equivalent hook-accessible usage feed, so it can only report a value it estimates itself — see the `curl.exe` call in [`copilot-instructions.md`](../.github/copilot-instructions.md). Best-effort only.
+- **GitHub Copilot** has its own separate quota (not Claude's) with no equivalent hook-accessible usage feed, so its **percentage is best-effort** — it posts a value it estimates at reasoning start and again at done/stop (see [`copilot-instructions.md`](../.github/copilot-instructions.md)). It also sets **`Usage Source = GitHub Copilot`** at both points.
 
 ### Claude Code
 
@@ -136,6 +136,13 @@ Claude Code hooks are configured in [`.claude/settings.json`](../.claude/setting
 3. `classify-stop` mode reads the hook JSON payload from stdin, extracts the last assistant message, and pattern-matches it: mentions of asking permission → `Allow Action`, mentions of a manual step needed from the user → `Need User Action`, otherwise → `Done`.
 4. The script is defensive by design — any HTTP failure is swallowed so a semaphore outage never blocks an agent turn.
 
+In addition to the status wiring above, `.claude/settings.json` also runs [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) on two events (see [Remaining-usage gauge](#remaining-usage-gauge)):
+
+| Claude Code hook | Args | Effect |
+|---|---|---|
+| `UserPromptSubmit` | *(default)* | Query rate-limit headers → post `Usage Remaining` % **and** tag `Usage Source = Claude Code` |
+| `Stop` | *(default)* | Same full update again with the end-of-turn figure |
+
 ### GitHub Copilot
 
 The equivalent hook wiring lives in [`.github/hooks/status-sync.json`](../.github/hooks/status-sync.json) (`UserPromptSubmit` → `reasoning`, `PreToolUse` → `need_user_action`, `AllowAction` → `allow_action`, `Done` → `done`, `Stop` → `classify-stop`), calling the same `ai-helper-status-sync.ps1` script. [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) additionally instructs Copilot to call the webhooks directly via `curl.exe` as part of its normal workflow:
@@ -148,7 +155,9 @@ curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_done/press"
 curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_idle/press"
 ```
 
-To point either integration at your own device, replace `172.16.1.15` everywhere it appears (`ai-helper-status-sync.ps1` and `copilot-instructions.md`) with your semaphore's actual IP address.
+[`status-sync.json`](../.github/hooks/status-sync.json) wires Copilot `UserPromptSubmit` and `Done` to [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) with `-Source "GitHub Copilot"`, so hooks also push best-effort `Usage Remaining` and refresh `Usage Source` automatically at both points.
+
+To point either integration at your own device, replace `172.16.1.15` everywhere it appears (`ai-helper-status-sync.ps1`, `ai-helper-usage-sync.ps1`, and `copilot-instructions.md`) with your semaphore's actual IP address.
 
 ---
 

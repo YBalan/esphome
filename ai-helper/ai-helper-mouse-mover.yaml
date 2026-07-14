@@ -85,6 +85,10 @@ globals:
     type: bool
     restore_value: no
     initial_value: "false"
+  - id: mm_usage_overlay_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
 
 i2c:
   - id: mm_i2c
@@ -117,6 +121,14 @@ display:
     lambda: |-
       const bool captive_active = !esphome::network::is_connected();
       const char *ap_name = "${ap_ssid}";
+      bool show_usage_overlay = false;
+      int usage_remaining = 0;
+      const char *usage_source = "none";
+      #ifdef AI_HELPER_SEMAPHORE_BUILD_ENABLED
+      show_usage_overlay = id(mm_usage_overlay_until_ms) > millis();
+      usage_remaining = (int) id(sem_usage_remaining).state;
+      usage_source = id(sem_usage_source).state.c_str();
+      #endif
       ai_helper::mouse_mover::render_display(
           it,
           ai_helper::mouse_mover::build_enabled(),
@@ -131,6 +143,9 @@ display:
           (uint32_t) id(num_mouse_mover_period_s).state,
           (int) id(mm_num_move_step).state,
           (int) id(mm_num_move_speed_delay_ms).state,
+          show_usage_overlay,
+          usage_remaining,
+          usage_source,
           captive_active,
           ap_name);
 
@@ -607,6 +622,7 @@ binary_sensor:
         then:
           - lambda: |-
               id(mm_bound_menu_active) = false;
+              id(mm_usage_overlay_until_ms) = millis() + 10000U;
               #ifdef AI_HELPER_SEMAPHORE_BUILD_ENABLED
               id(sem_ai_status_select).make_call().set_option("Idle").perform();
               #endif
@@ -888,4 +904,5 @@ interval:
             id(mm_lcd).no_backlight();
             id(mm_backlight_tick_ms) = 0;
             id(mm_bound_menu_active) = false;
+            id(mm_usage_overlay_until_ms) = 0;
           }

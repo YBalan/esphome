@@ -1095,11 +1095,10 @@ text:
     icon: mdi:account-wrench
     entity_category: diagnostic
     optimistic: true
-    # Not persisted: re-setting the same tool name each turn makes ESPHome's
-    # template text log a misleading "Text value too long to save" warning on the
-    # no-op save. This is a within-session label anyway, so starting at "none"
-    # after a reboot (until the next tool reports) is fine.
-    restore_value: false
+    # Persisted across reboots. ESPHome's template text logs a misleading "too
+    # long to save" warning on a no-op (re-writing the same value), so the agent
+    # hooks read the current value and only write when it actually changes.
+    restore_value: true
     mode: text
     min_length: 0
     max_length: 32

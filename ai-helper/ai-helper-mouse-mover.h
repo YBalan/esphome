@@ -38,6 +38,7 @@
 #define AI_MOUSE_MOVER_FMT_MAIN_LINE0 "%s N:%3lus/%3lu"
 #define AI_MOUSE_MOVER_FMT_MAIN_LINE1 "A:%3d S:%2d T:%3d"
 #define AI_MOUSE_MOVER_FMT_CAPTIVE_AP "AP:%-13.13s"
+#define AI_MOUSE_MOVER_FMT_USAGE_LINE1 "U:%3d%% %-8.8s"
 #define AI_MOUSE_MOVER_FMT_BOUNDS_TEXT "%d..%d"
 
 namespace ai_helper {
@@ -263,6 +264,15 @@ inline void format_captive_ap_line(char line1[AI_MOUSE_MOVER_LCD_LINE_LEN], cons
   std::snprintf(line1, AI_MOUSE_MOVER_LCD_LINE_LEN, AI_MOUSE_MOVER_FMT_CAPTIVE_AP, ap_name);
 }
 
+inline void format_usage_line(
+    char line1[AI_MOUSE_MOVER_LCD_LINE_LEN],
+    const int usage_remaining,
+    const char *usage_source) {
+  const int clamped_remaining = clamp_between(usage_remaining, 0, 100);
+  const char *source = (usage_source != nullptr && usage_source[0] != '\0') ? usage_source : "none";
+  std::snprintf(line1, AI_MOUSE_MOVER_LCD_LINE_LEN, AI_MOUSE_MOVER_FMT_USAGE_LINE1, clamped_remaining, source);
+}
+
 template<typename DisplayType>
 inline void render_display(
     DisplayType &it,
@@ -278,6 +288,9 @@ inline void render_display(
     const uint32_t period_seconds,
     const int move_step,
     const int move_delay_ms,
+    const bool show_usage_overlay,
+    const int usage_remaining,
+    const char *usage_source,
     const bool captive_portal_active,
     const char *captive_ap_name) {
   char line0[AI_MOUSE_MOVER_LCD_LINE_LEN];
@@ -299,7 +312,9 @@ inline void render_display(
 
   const uint32_t remain_s = remaining_seconds(now_ms, last_move_tick_ms, period_seconds);
   format_main_screen(line0, line1, runtime_enabled, remain_s, period_seconds, current_angle, move_step, move_delay_ms);
-  if (captive_portal_active) {
+  if (show_usage_overlay) {
+    format_usage_line(line1, usage_remaining, usage_source);
+  } else if (captive_portal_active) {
     format_captive_ap_line(line1, captive_ap_name);
   }
   it.print(0, 0, line0);

@@ -28,7 +28,11 @@ param(
   [string]$Window = "5h",
   [string]$CredentialsPath = "$env:USERPROFILE\.claude\.credentials.json",
   [string]$Model = "claude-haiku-4-5-20251001",
-  [double]$Override = -1
+  [double]$Override = -1,
+  # "full"   -> query the rate-limit headers, post the percentage AND the source.
+  # "source" -> just tag the source (used at the start of reasoning, no API ping).
+  [ValidateSet("full", "source")]
+  [string]$Mode = "full"
 )
 
 $ErrorActionPreference = "Stop"
@@ -100,12 +104,39 @@ function Invoke-DeviceSet($entityKind, $entityName, $value) {
   }
 }
 
+function Get-DeviceValue($entityKind, $entityName) {
+  $encodedName = [uri]::EscapeDataString($entityName)
+  $uri = "http://{0}/{1}/{2}" -f $DeviceIp, $entityKind, $encodedName
+  try {
+    $resp = Invoke-WebRequest -Uri $uri -Method Get -TimeoutSec 5 -UseBasicParsing
+    return ($resp.Content | ConvertFrom-Json).value
+  } catch {
+    return $null
+  }
+}
+
+function Set-UsageSource {
+  # Read the current label first and only write when it differs. The source
+  # entity is persisted (restore_value), and ESPHome's template text logs a
+  # misleading "too long to save" warning on any no-op save, so skipping the
+  # rewrite keeps the log clean while still allowing the value to survive reboots.
+  $current = Get-DeviceValue "text" $SourceEntityName
+  if ($current -eq $Source) { return }
+  Invoke-DeviceSet "text" $SourceEntityName $Source
+}
+
 function Send-Usage([int]$percent) {
   if ($percent -lt 0) { $percent = 0 }
   if ($percent -gt 100) { $percent = 100 }
   # Percentage first, then tag which tool set it - only after a value we trust.
   Invoke-DeviceSet "number" $EntityName $percent
-  Invoke-DeviceSet "text" $SourceEntityName $Source
+  Set-UsageSource
+}
+
+# Source-only: tag the active tool at the start of reasoning, no API ping.
+if ($Mode -eq "source") {
+  Set-UsageSource
+  return
 }
 
 if ($Override -ge 0) {
