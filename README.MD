@@ -16,6 +16,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 | [`garage/generator/`](garage/generator/) | Garage Generator Controller | ESP32 | Generator control + PZEM telemetry + RF learn/transmit + mirrored servos |
 | [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
 | [`ai-helper/`](ai-helper/) | AI Helper (Semaphore + Mouse Mover) | ESP32 | RGB/buzzer status semaphore for coding-agent hooks, servo-driven mouse mover |
+| [`garage/charger/`](garage/charger/) | Garage Battery Charger | ESP8266 | Voltage/temperature-gated relay charger for a generator's idle battery, with LCD status |
 
 ---
 
@@ -133,6 +134,24 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 - Buildable as one combined device (`ai-helper.yaml`) or two standalone devices (`semaphore-device.yaml`, `mouse-mover-device.yaml`)
 
 📁 [ai-helper/README.md](ai-helper/README.md)
+
+---
+
+## garage/charger
+
+**Idle-battery charger controller** for the garage generator - keeps the starter battery topped up between runs.
+
+- INA226 monitors battery voltage only (current/power are not read or used); DHT22 monitors ambient temperature
+- Hysteresis charging: relay turns ON at/below a configurable low-voltage threshold, OFF at/above a configurable high-voltage threshold
+- Charging is also gated by a configurable safe temperature band (won't charge if too cold or too hot)
+- All four thresholds plus the display timeout are configurable from Home Assistant (`number` entities) - nothing is hardcoded
+- HW-364A ESP8266 module with built-in 0.66" SSD1306 OLED (I2C on GPIO12/GPIO14) shows charging status, battery voltage, temperature, and the configured start/stop voltage thresholds; auto-off after an idle timeout, wakes on charge start/stop or button press; shows the fallback AP name while in captive-portal mode
+  - The display is declared at the controller's native `128x64` resolution (not the smaller visible glass) so a full-buffer clear reaches all of GDDRAM - otherwise leftover pixels from the factory demo firmware ghost through
+- `Last Charging Time` sensor shows the duration (`HH:mm`) of the last completed charging session, persisted across reboots
+- Built-in ESP8266 FLASH/BOOT button wakes the display
+- `Charging Feature` master switch lets an external automation (e.g. one triggered when the generator itself starts) force charging off regardless of thresholds; state persists across reboots
+- MQTT discovery enabled alongside the native API, `topic_prefix: ${device_name}`
+- No `http_request`/BLE - ESP8266 + Arduino framework (only supported combination for this chip), everything else follows the shared package convention
 
 ---
 

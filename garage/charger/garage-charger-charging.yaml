@@ -1,0 +1,343 @@
+substitutions:
+  # Hardware pins - HW-364A ESP8266 (ESP-12F) module with built-in SSD1306 OLED.
+  # I2C pins confirmed working (display rendered live content over several
+  # test flashes): SCL=GPIO12, SDA=GPIO14. Do not swap these again without a
+  # working boot log showing the display initialize successfully.
+  gc_i2c_scl_pin: GPIO12
+  gc_i2c_sda_pin: GPIO14
+  gc_relay_pin: GPIO5     # D1 - free pin, no boot-strap constraints
+  gc_dht_pin: GPIO4       # D2 - free pin, no boot-strap constraints
+  gc_button_pin: GPIO0    # built-in FLASH/BOOT button
+  gc_relay_inverted: "true"  # most relay modules are active-low
+
+  # I2C device addresses
+  gc_oled_address: "0x3C"
+  gc_ina226_address: "0x40"
+
+  # INA226 hardware constants - match your shunt/module. Only bus voltage is
+  # read; current/power are not used for control or exposed as entities.
+  gc_ina226_shunt: "0.1 ohm"
+  gc_ina226_max_current: "3.2A"
+
+  # Update cadence
+  gc_ina226_update_interval: 5s
+  gc_ina226_throttle: 2s
+  gc_dht_update_interval: 15s
+  gc_oled_update_interval: 1s
+  gc_decision_interval: 5s
+
+  # Threshold number ranges shown as HA sliders (not the thresholds themselves).
+  gc_voltage_cfg_min: "0.0"
+  gc_voltage_cfg_max: "30.0"
+  gc_voltage_cfg_step: "0.05"
+  gc_temp_cfg_min: "-20.0"
+  gc_temp_cfg_max: "80.0"
+  gc_temp_cfg_step: "0.5"
+
+  # Default threshold values - adjust from Home Assistant for your battery chemistry.
+  gc_init_low_voltage: "12.0"
+  gc_init_high_voltage: "13.8"
+  gc_init_temp_low: "0.0"
+  gc_init_temp_high: "45.0"
+  gc_init_display_timeout_s: "60"
+
+esphome:
+  on_boot:
+    priority: -10
+    then:
+      - script.execute: gc_display_timer
+
+globals:
+  # Unix timestamp (SNTP) when the current charging session started; 0 when
+  # not charging. Not restored across reboot - a session interrupted by a
+  # reboot doesn't produce a spurious duration.
+  - id: gc_charge_start_unix
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  # Duration in seconds of the last *completed* charging session. Persisted
+  # so "Last Charging Time" survives a reboot.
+  - id: gc_last_charge_duration_s
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+
+i2c:
+  id: gc_i2c
+  sda: ${gc_i2c_sda_pin}
+  scl: ${gc_i2c_scl_pin}
+  scan: true
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_gc
+    size: 12
+  - file: "gfonts://Roboto"
+    id: font_gc_small
+    size: 9
+
+sensor:
+  - platform: ina226
+    address: ${gc_ina226_address}
+    i2c_id: gc_i2c
+    shunt_resistance: ${gc_ina226_shunt}
+    max_current: ${gc_ina226_max_current}
+    update_interval: ${gc_ina226_update_interval}
+    bus_voltage:
+      id: gc_battery_voltage
+      name: ${friendly_name} Battery Voltage
+      filters:
+        - throttle: ${gc_ina226_throttle}
+
+  - platform: dht
+    pin: ${gc_dht_pin}
+    model: DHT22
+    update_interval: ${gc_dht_update_interval}
+    temperature:
+      id: gc_temperature
+      name: ${friendly_name} Temperature
+    humidity:
+      id: gc_humidity
+      name: ${friendly_name} Humidity
+
+  # Approximate SOC, linearly mapped between the two charge thresholds
+  # (Start Voltage = 0%, Stop Voltage = 100%) rather than a hardcoded
+  # lead-acid curve, so it automatically tracks whatever thresholds are
+  # tuned for the actual battery chemistry.
+  - platform: template
+    id: gc_battery_percent
+    name: ${friendly_name} Battery Percentage
+    icon: mdi:battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    device_class: battery
+    state_class: measurement
+    update_interval: ${gc_ina226_update_interval}
+    lambda: |-
+      const float pct = garage_charger::battery_percent(
+          id(gc_battery_voltage).has_state(), id(gc_battery_voltage).state,
+          id(gc_num_low_voltage).state, id(gc_num_high_voltage).state);
+      if (!std::isfinite(pct)) {
+        return {};
+      }
+      return pct;
+
+text_sensor:
+  - platform: template
+    id: gc_last_charge_time
+    name: ${friendly_name} Last Charging Time
+    icon: mdi:history
+    update_interval: never
+    lambda: |-
+      char buf[16];
+      garage_charger::format_duration_hhmm(id(gc_last_charge_duration_s), buf, sizeof(buf));
+      return std::string(buf);
+
+number:
+  - platform: template
+    id: gc_num_low_voltage
+    name: ${friendly_name} Charge Start Voltage
+    icon: mdi:battery-low
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: V
+    min_value: ${gc_voltage_cfg_min}
+    max_value: ${gc_voltage_cfg_max}
+    step: ${gc_voltage_cfg_step}
+    initial_value: ${gc_init_low_voltage}
+
+  - platform: template
+    id: gc_num_high_voltage
+    name: ${friendly_name} Charge Stop Voltage
+    icon: mdi:battery-high
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: V
+    min_value: ${gc_voltage_cfg_min}
+    max_value: ${gc_voltage_cfg_max}
+    step: ${gc_voltage_cfg_step}
+    initial_value: ${gc_init_high_voltage}
+
+  - platform: template
+    id: gc_num_temp_low
+    name: ${friendly_name} Charge Temp Min
+    icon: mdi:thermometer-low
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: "°C"
+    min_value: ${gc_temp_cfg_min}
+    max_value: ${gc_temp_cfg_max}
+    step: ${gc_temp_cfg_step}
+    initial_value: ${gc_init_temp_low}
+
+  - platform: template
+    id: gc_num_temp_high
+    name: ${friendly_name} Charge Temp Max
+    icon: mdi:thermometer-high
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: "°C"
+    min_value: ${gc_temp_cfg_min}
+    max_value: ${gc_temp_cfg_max}
+    step: ${gc_temp_cfg_step}
+    initial_value: ${gc_init_temp_high}
+
+  - platform: template
+    id: gc_num_display_timeout_s
+    name: ${friendly_name} Display Timeout
+    icon: mdi:timer-outline
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: s
+    min_value: 5
+    max_value: 600
+    step: 5
+    initial_value: ${gc_init_display_timeout_s}
+
+switch:
+  - platform: gpio
+    id: gc_relay_charge
+    name: ${friendly_name} Charging
+    icon: mdi:battery-charging
+    pin:
+      number: ${gc_relay_pin}
+      inverted: ${gc_relay_inverted}
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - logger.log: "Charging started"
+      - script.execute: gc_display_timer
+      - lambda: |-
+          if (id(ha_time).now().is_valid()) {
+            id(gc_charge_start_unix) = (uint32_t) id(ha_time).now().timestamp;
+          }
+    on_turn_off:
+      - logger.log: "Charging stopped"
+      - script.execute: gc_display_timer
+      - lambda: |-
+          auto now = id(ha_time).now();
+          if (now.is_valid() && id(gc_charge_start_unix) > 0) {
+            const uint32_t now_ts = (uint32_t) now.timestamp;
+            if (now_ts > id(gc_charge_start_unix)) {
+              id(gc_last_charge_duration_s) = now_ts - id(gc_charge_start_unix);
+            }
+          }
+          id(gc_charge_start_unix) = 0;
+      - component.update: gc_last_charge_time
+
+  # Master override so an external automation (e.g. triggered when the
+  # generator itself starts) can force charging off regardless of voltage/
+  # temperature, without touching the thresholds.
+  - platform: template
+    id: gc_charging_enabled
+    name: ${friendly_name} Charging Feature
+    icon: mdi:power
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    turn_on_action:
+      - logger.log: "Charging feature enabled"
+    turn_off_action:
+      - logger.log: "Charging feature disabled"
+      - if:
+          condition:
+            switch.is_on: gc_relay_charge
+          then:
+            - switch.turn_off: gc_relay_charge
+
+binary_sensor:
+  # Read-only mirror of the relay switch's state, so dashboards/automations
+  # have a plain status indicator that can't be toggled by mistake.
+  - platform: template
+    id: gc_is_charging
+    name: ${friendly_name} Is Charging
+    device_class: battery_charging
+    lambda: |-
+      return id(gc_relay_charge).state;
+
+  # Built-in FLASH/BOOT button - short press wakes the display, holding it
+  # for 10s+ clears the stored WiFi credentials (same action as the
+  # "WiFi Forget" HA button in the common package).
+  - platform: gpio
+    id: gc_button_boot
+    name: ${friendly_name} Button
+    internal: true
+    pin:
+      number: ${gc_button_pin}
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    on_multi_click:
+      - timing:
+          - ON for at most 2s
+        then:
+          - script.execute: gc_display_timer
+      - timing:
+          - ON for at least 10s
+        then:
+          - button.press: gc_wifi_forget_btn
+
+display:
+  - platform: ssd1306_i2c
+    id: gc_display
+    # Declaring the controller's true native resolution (128x64), not the
+    # smaller visible glass, so our full-buffer clear/push (auto_clear_enabled
+    # below) reaches every byte of GDDRAM - otherwise pixels outside our draw
+    # window (leftover from the factory demo firmware) never get overwritten
+    # and "ghost" through. Confirmed working on real hardware together with
+    # the GPIO12/GPIO14 I2C pins above.
+    model: "SSD1306 128x64"
+    address: ${gc_oled_address}
+    i2c_id: gc_i2c
+    update_interval: ${gc_oled_update_interval}
+    auto_clear_enabled: true
+    lambda: |-
+      const bool captive_active = !esphome::network::is_connected();
+      if (captive_active) {
+        // Keep re-arming the auto-off timer (mode: restart) so the display
+        // stays on for as long as we're stuck in AP/captive-portal fallback
+        // - otherwise you can't see the AP name to recover the device.
+        id(gc_display_timer).execute();
+      }
+      garage_charger::render_display(
+          it, id(font_gc), id(font_gc_small),
+          captive_active, "${ap_ssid}",
+          id(gc_relay_charge).state,
+          id(gc_temperature).has_state(), id(gc_temperature).state,
+          id(gc_humidity).has_state(), id(gc_humidity).state,
+          id(gc_battery_voltage).has_state(), id(gc_battery_voltage).state,
+          id(gc_num_low_voltage).state, id(gc_num_high_voltage).state);
+
+script:
+  - id: gc_display_timer
+    mode: restart
+    then:
+      - lambda: 'id(gc_display).turn_on();'
+      - delay: !lambda 'return (uint32_t) (id(gc_num_display_timeout_s).state * 1000);'
+      - lambda: 'id(gc_display).turn_off();'
+
+interval:
+  - interval: ${gc_decision_interval}
+    then:
+      - lambda: |-
+          if (!id(gc_charging_enabled).state) {
+            if (id(gc_relay_charge).state) {
+              id(gc_relay_charge).turn_off();
+            }
+            return;
+          }
+          const bool want_charge = garage_charger::decide_charging(
+              id(gc_relay_charge).state,
+              id(gc_battery_voltage).has_state(), id(gc_battery_voltage).state,
+              id(gc_temperature).has_state(), id(gc_temperature).state,
+              id(gc_num_low_voltage).state, id(gc_num_high_voltage).state,
+              id(gc_num_temp_low).state, id(gc_num_temp_high).state);
+          if (want_charge && !id(gc_relay_charge).state) {
+            id(gc_relay_charge).turn_on();
+          } else if (!want_charge && id(gc_relay_charge).state) {
+            id(gc_relay_charge).turn_off();
+          }

@@ -1,0 +1,72 @@
+logger:
+  level: INFO
+
+# Surfaces the last reset reason (e.g. "Task watchdog", "Brownout", "Software")
+# and free heap on boot + periodically, so reboots are diagnosable.
+debug:
+  update_interval: 30s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      name: ${friendly_name} Reset Reason
+  # Exposes the name (SSID) of the WiFi network the device is connected to,
+  # so you can confirm which network it joined without checking the router.
+  - platform: wifi_info
+    ssid:
+      name: ${friendly_name} WiFi Name
+      id: wifi_ssid
+      entity_category: diagnostic
+
+ota:
+  - platform: esphome
+
+time:
+  - platform: sntp
+    id: ha_time
+    timezone: ${time_zone}
+
+wifi:
+  ap:
+    ssid: ${ap_ssid}
+    password: ${ap_password}
+  fast_connect: true
+  reboot_timeout: 0s
+  # Router must support WPA2. Change to WPA if it's WPA-only (less secure).
+  min_auth_mode: WPA2
+
+captive_portal:
+
+# Forget the stored WiFi credentials and reboot. On restart the device can't
+# connect, so after `ap_timeout` (~1 min) it falls back to its own AP +
+# captive portal (${ap_ssid}) where you enter a new network. Only the WiFi
+# credentials are cleared - all other preferences (charger thresholds) are
+# kept, so this is NOT a factory reset.
+button:
+  - platform: template
+    id: gc_wifi_forget_btn
+    name: ${friendly_name} WiFi Forget
+    entity_category: config
+    icon: mdi:wifi-remove
+    on_press:
+      - logger.log: "Forgetting WiFi credentials; rebooting into setup AP"
+      - lambda: |-
+          // Overwrite the saved SSID/password with empty strings. save_wifi_sta
+          // persists to NVS immediately (calls global_preferences->sync()), so
+          // the change survives the reboot below.
+          wifi::global_wifi_component->save_wifi_sta("", "");
+      - delay: 1s
+      - lambda: "App.safe_reboot();"
+
+# http_request is ESP32-only in this ESPHome version and this device makes
+# no outbound HTTP calls, so it's omitted here (unlike the ESP32 devices'
+# common packages).
+web_server:
+  port: 80
+
+sensor:
+  - platform: wifi_signal
+    name: ${friendly_name} WiFi RSSI
+    id: wifi_rssi
+    update_interval: ${wifi_rssi_update}
+    entity_category: diagnostic

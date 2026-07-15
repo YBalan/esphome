@@ -1,0 +1,10 @@
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  port: 1883
+  keepalive: 30s
+  # If MQTT cannot recover for a while, reboot to self-heal connectivity.
+  reboot_timeout: 2min
+  topic_prefix: ${device_name}
+  discovery: true

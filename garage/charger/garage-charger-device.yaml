@@ -1,0 +1,23 @@
+substitutions:
+  device_name: garage-charger
+  friendly_name: Garage Charger
+  ap_ssid: AP-Garage-Charger
+  ap_password: password
+  time_zone: Europe/Kyiv
+  wifi_rssi_update: 60s
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  includes:
+    - garage-charger-charging.h
+
+esp8266:
+  board: d1_mini
+
+packages:
+  common: !include garage-charger-common.yaml
+  charging: !include garage-charger-charging.yaml
+  mqtt: !include garage-charger-mqtt.yaml
+
+api:
