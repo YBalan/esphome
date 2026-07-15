@@ -1,6 +1,13 @@
 logger:
   level: INFO
 
+# Default (~60s) batches flash writes, so newly-submitted WiFi credentials
+# (or other saved state) can be lost if the device loses power before the
+# next flush. Commit quickly instead - infrequent enough events that the
+# extra flash wear doesn't matter here.
+preferences:
+  flash_write_interval: 5s
+
 # Surfaces the last reset reason (e.g. "Task watchdog", "Brownout", "Software")
 # and free heap on boot + periodically, so reboots are diagnosable.
 debug:
@@ -32,8 +39,13 @@ wifi:
     password: ${ap_password}
   fast_connect: true
   reboot_timeout: 0s
+  # ESP8266's default power-save behavior can put the radio to sleep at the
+  # wrong moment mid-handshake, a well-known cause of "Auth Expired" auth
+  # failures on this chip specifically (not seen on ESP32). Keep it fully
+  # awake instead.
+  #power_save_mode: NONE
   # Router must support WPA2. Change to WPA if it's WPA-only (less secure).
-  min_auth_mode: WPA2
+  #min_auth_mode: WPA
 
 captive_portal:
 

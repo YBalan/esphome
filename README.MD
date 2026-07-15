@@ -16,7 +16,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 | [`garage/generator/`](garage/generator/) | Garage Generator Controller | ESP32 | Generator control + PZEM telemetry + RF learn/transmit + mirrored servos |
 | [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
 | [`ai-helper/`](ai-helper/) | AI Helper (Semaphore + Mouse Mover) | ESP32 | RGB/buzzer status semaphore for coding-agent hooks, servo-driven mouse mover |
-| [`garage/charger/`](garage/charger/) | Garage Battery Charger | ESP8266 | Voltage/temperature-gated relay charger for a generator's idle battery, with LCD status |
+| [`garage/charger/`](garage/charger/) | Generator Battery Charger | ESP32 | Voltage/temperature-gated relay charger for a generator's idle battery, with OLED status (`garage-charger-esp32-device.yaml`; the ESP8266 variant is obsolete - see below) |
 
 ---
 
@@ -141,17 +141,20 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 
 **Idle-battery charger controller** for the garage generator - keeps the starter battery topped up between runs.
 
+- **Primary target: ESP32** (`garage-charger-esp32-device.yaml`, `esp32dev` + esp-idf). The original ESP8266 build (`garage-charger-device.yaml`, HW-364A combo board) is **obsolete** - that board's onboard OLED appears to detune the ESP8266's antenna badly enough to cause persistent WiFi "Auth Expired" failures across multiple unrelated networks, not fixed by `fast_connect`, `power_save_mode`, or `min_auth_mode` changes. A separate plain ESP8266 board (no built-in OLED) connected fine, confirming the board, not the firmware. Kept only for reference.
+- Board-specific GPIO pins live in `garage-charger-esp8266-pins.yaml` / `garage-charger-esp32-pins.yaml`; everything else (sensors, relay logic, display rendering) is shared via `garage-charger-charging.yaml` and `garage-charger-charging.h`. Runs on an ESP32-WROOM-32 devkit with a built-in 0.96" OLED; I2C pins (GPIO21/22) are confirmed working on real hardware, relay (GPIO18) and DHT (GPIO19) use the repo's usual free-pin defaults but aren't individually confirmed yet.
+- Built-in blue LED (GPIO2) polarity is per-board (`gc_led_inverted`) - active-high on this ESP32 devkit, opposite of the ESP8266's active-low LED.
 - INA226 monitors battery voltage only (current/power are not read or used); DHT22 monitors ambient temperature
 - Hysteresis charging: relay turns ON at/below a configurable low-voltage threshold, OFF at/above a configurable high-voltage threshold
 - Charging is also gated by a configurable safe temperature band (won't charge if too cold or too hot)
 - All four thresholds plus the display timeout are configurable from Home Assistant (`number` entities) - nothing is hardcoded
-- HW-364A ESP8266 module with built-in 0.66" SSD1306 OLED (I2C on GPIO12/GPIO14) shows charging status, battery voltage, temperature, and the configured start/stop voltage thresholds; auto-off after an idle timeout, wakes on charge start/stop or button press; shows the fallback AP name while in captive-portal mode
-  - The display is declared at the controller's native `128x64` resolution (not the smaller visible glass) so a full-buffer clear reaches all of GDDRAM - otherwise leftover pixels from the factory demo firmware ghost through
+- 128x64 SSD1306 OLED shows charging status, battery voltage, temperature, and the configured start/stop voltage thresholds; auto-off after an idle timeout, wakes on charge start/stop or button press; shows the fallback AP name while in captive-portal mode
+  - The display is declared at the controller's native `128x64` resolution (not the smaller visible glass on the ESP8266 combo board) so a full-buffer clear reaches all of GDDRAM - otherwise leftover pixels from prior firmware ghost through
+- Built-in blue LED mirrors the charging relay state, so there's a visible indicator without looking at the OLED
 - `Last Charging Time` sensor shows the duration (`HH:mm`) of the last completed charging session, persisted across reboots
-- Built-in ESP8266 FLASH/BOOT button wakes the display
+- BOOT button wakes the display; holding it 10s+ triggers WiFi Forget
 - `Charging Feature` master switch lets an external automation (e.g. one triggered when the generator itself starts) force charging off regardless of thresholds; state persists across reboots
 - MQTT discovery enabled alongside the native API, `topic_prefix: ${device_name}`
-- No `http_request`/BLE - ESP8266 + Arduino framework (only supported combination for this chip), everything else follows the shared package convention
 
 ---
 
