@@ -3,8 +3,8 @@ substitutions:
   # I2C pins confirmed working (display rendered live content over several
   # test flashes): SCL=GPIO12, SDA=GPIO14. Do not swap these again without a
   # working boot log showing the display initialize successfully.
-  gc_i2c_scl_pin: GPIO12
-  gc_i2c_sda_pin: GPIO14
+  gc_i2c_scl_pin: GPIO12  # D6
+  gc_i2c_sda_pin: GPIO14  # D5
   gc_relay_pin: GPIO5     # D1 - free pin, no boot-strap constraints
   gc_dht_pin: GPIO4       # D2 - free pin, no boot-strap constraints
   gc_button_pin: GPIO0    # built-in FLASH/BOOT button
@@ -75,6 +75,9 @@ font:
   - file: "gfonts://Roboto"
     id: font_gc_small
     size: 9
+  - file: "gfonts://Roboto"
+    id: font_gc_big
+    size: 24
 
 sensor:
   - platform: ina226
@@ -304,7 +307,7 @@ display:
         id(gc_display_timer).execute();
       }
       garage_charger::render_display(
-          it, id(font_gc), id(font_gc_small),
+          it, id(font_gc), id(font_gc_small), id(font_gc_big),
           captive_active, "${ap_ssid}",
           id(gc_relay_charge).state,
           id(gc_temperature).has_state(), id(gc_temperature).state,

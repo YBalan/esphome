@@ -66,6 +66,7 @@ inline void render_display(
     DisplayType &it,
     FontType *font,
     FontType *font_small,
+    FontType *font_big,
     const bool captive_portal_active,
     const char *ap_name,
     const bool charging,
@@ -82,46 +83,65 @@ inline void render_display(
   // this frame doesn't happen to overwrite.
   it.clear();
 
+  // Panel is a genuine 128x64 bicolor SSD1306: top ~16px yellow, rest blue.
+  constexpr int kScreenW = 128;
+  constexpr int kScreenH = 64;
+  constexpr int kYellowZoneH = 16;
+
   if (captive_portal_active) {
     it.printf(0, 0, font, "AP MODE");
-    // Wrap the AP name across two lines - this panel is only ~64px wide, so
-    // each line holds roughly 9 characters at this font size.
-    char line1[10];
+    // Wrap the AP name across two lines - full panel width holds roughly 18
+    // characters per line at this font size.
+    char line1[19];
     std::snprintf(line1, sizeof(line1), "%s", ap_name != nullptr ? ap_name : "");
     it.printf(0, 16, font, "%s", line1);
     const size_t shown = std::strlen(line1);
     if (ap_name != nullptr && std::strlen(ap_name) > shown) {
       it.printf(0, 32, font, "%s", ap_name + shown);
     }
+    // Bottom: current battery voltage, still useful to see while stuck in
+    // AP/setup mode. Mid-sized font (same as the AP MODE/AP name text above).
+    if (voltage_valid && std::isfinite(voltage)) {
+      it.printf(kScreenW / 2, kScreenH, font, esphome::display::TextAlign::BOTTOM_CENTER, "%.1fV", voltage);
+    } else {
+      it.printf(kScreenW / 2, kScreenH, font, esphome::display::TextAlign::BOTTOM_CENTER, "V:n/a");
+    }
     return;
   }
 
-  // Row 0: big ON/OFF status, with the voltage reading in a smaller font
-  // right after it on the same line.
+  // Top-left (yellow zone): ON/OFF status, unchanged.
   it.printf(0, 0, font, "%s", charging ? "ON" : "OFF");
+
+  // Top-right (yellow zone): charge-start/charge-stop voltage thresholds on
+  // a single line (stacking two lines here kept overlapping/garbling - this
+  // panel's actual small-font glyph height is larger than expected and hard
+  // to pin down without hardware in the loop), flush against the right edge
+  // regardless of digit count.
+  it.printf(
+      kScreenW, 0, font_small, esphome::display::TextAlign::TOP_RIGHT, "L:%.1f H:%.1f", low_voltage, high_voltage);
+
+  // Center of the blue zone: the current battery voltage, as big as this
+  // panel reasonably fits, since it's the single most important glanceable
+  // value.
+  const int blue_center_y = kYellowZoneH + (kScreenH - kYellowZoneH) / 2;
   if (voltage_valid && std::isfinite(voltage)) {
-    it.printf(34, 3, font_small, "%.1fV", voltage);
+    it.printf(kScreenW / 2, blue_center_y, font_big, esphome::display::TextAlign::CENTER, "%.1fV", voltage);
   } else {
-    it.printf(34, 3, font_small, "n/a");
+    it.printf(kScreenW / 2, blue_center_y, font_big, esphome::display::TextAlign::CENTER, "n/a");
   }
 
-  // Row 1: temperature and humidity together.
-  char temp_buf[6];
+  // Bottom corners (blue zone): temperature (left) and humidity (right).
   if (temp_valid && std::isfinite(temperature_c)) {
-    std::snprintf(temp_buf, sizeof(temp_buf), "%.0fC", temperature_c);
+    it.printf(0, kScreenH, font_small, esphome::display::TextAlign::BOTTOM_LEFT, "%.0fC", temperature_c);
   } else {
-    std::snprintf(temp_buf, sizeof(temp_buf), "n/a");
+    it.printf(0, kScreenH, font_small, esphome::display::TextAlign::BOTTOM_LEFT, "n/a");
   }
-  char hum_buf[6];
   if (humidity_valid && std::isfinite(humidity_percent)) {
-    std::snprintf(hum_buf, sizeof(hum_buf), "%.0f%%", humidity_percent);
+    it.printf(
+        kScreenW, kScreenH, font_small, esphome::display::TextAlign::BOTTOM_RIGHT, "%.0f%%", humidity_percent);
   } else {
-    std::snprintf(hum_buf, sizeof(hum_buf), "n/a");
+    it.printf(kScreenW, kScreenH, font_small, esphome::display::TextAlign::BOTTOM_RIGHT, "n/a");
   }
-  it.printf(0, 16, font_small, "T:%s H:%s", temp_buf, hum_buf);
-
-  it.printf(0, 25, font_small, "Lo:%.2f", low_voltage);
-  it.printf(0, 34, font_small, "Hi:%.2f", high_voltage);
 }
 
 }  // namespace garage_charger

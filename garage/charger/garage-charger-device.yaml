@@ -20,4 +20,9 @@ packages:
   charging: !include garage-charger-charging.yaml
   mqtt: !include garage-charger-mqtt.yaml
 
+# Default reboot_timeout (15min) would otherwise reboot the device if it
+# can't reach Home Assistant - which raced with wifi.ap.ap_timeout and could
+# preempt the AP fallback before it ever stabilized. Disabled for the same
+# reason wifi.reboot_timeout is disabled in the common package.
 api:
+  reboot_timeout: 0s
