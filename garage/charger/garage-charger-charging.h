@@ -102,7 +102,7 @@ inline void render_display(
     // Bottom: current battery voltage, still useful to see while stuck in
     // AP/setup mode. Mid-sized font (same as the AP MODE/AP name text above).
     if (voltage_valid && std::isfinite(voltage)) {
-      it.printf(kScreenW / 2, kScreenH, font, esphome::display::TextAlign::BOTTOM_CENTER, "%.1fV", voltage);
+      it.printf(kScreenW / 2, kScreenH, font, esphome::display::TextAlign::BOTTOM_CENTER, "%.2fV", voltage);
     } else {
       it.printf(kScreenW / 2, kScreenH, font, esphome::display::TextAlign::BOTTOM_CENTER, "V:n/a");
     }
@@ -125,7 +125,7 @@ inline void render_display(
   // value.
   const int blue_center_y = kYellowZoneH + (kScreenH - kYellowZoneH) / 2;
   if (voltage_valid && std::isfinite(voltage)) {
-    it.printf(kScreenW / 2, blue_center_y, font_big, esphome::display::TextAlign::CENTER, "%.1fV", voltage);
+    it.printf(kScreenW / 2, blue_center_y, font_big, esphome::display::TextAlign::CENTER, "%.2fV", voltage);
   } else {
     it.printf(kScreenW / 2, blue_center_y, font_big, esphome::display::TextAlign::CENTER, "n/a");
   }

@@ -31,6 +31,7 @@ substitutions:
   # Default threshold values - adjust from Home Assistant for your battery chemistry.
   gc_init_low_voltage: "12.0"
   gc_init_high_voltage: "13.8"
+  gc_init_battery_min_voltage: "11.5"
   gc_init_temp_low: "0.0"
   gc_init_temp_high: "45.0"
   gc_init_display_timeout_s: "60"
@@ -75,14 +76,15 @@ font:
 
 sensor:
   - platform: ina226
+    id: gc_ina226
     address: ${gc_ina226_address}
     i2c_id: gc_i2c
     shunt_resistance: ${gc_ina226_shunt}
     max_current: ${gc_ina226_max_current}
     update_interval: ${gc_ina226_update_interval}
     bus_voltage:
-      id: gc_battery_voltage
-      name: ${friendly_name} Battery Voltage
+      id: gc_battery_voltage_raw
+      internal: true
       filters:
         - throttle: ${gc_ina226_throttle}
 
@@ -113,11 +115,30 @@ sensor:
     lambda: |-
       const float pct = garage_charger::battery_percent(
           id(gc_battery_voltage).has_state(), id(gc_battery_voltage).state,
-          id(gc_num_low_voltage).state, id(gc_num_high_voltage).state);
+          id(gc_num_battery_min_voltage).state, id(gc_num_high_voltage).state);
       if (!std::isfinite(pct)) {
         return {};
       }
       return pct;
+
+  - platform: template
+    id: gc_battery_voltage
+    name: ${friendly_name} Battery Voltage
+    icon: mdi:battery
+    unit_of_measurement: V
+    accuracy_decimals: 2
+    device_class: voltage
+    state_class: measurement
+    update_interval: ${gc_ina226_update_interval}
+    lambda: |-
+      if (!id(gc_battery_voltage_raw).has_state()) {
+        return {};
+      }
+      const float voltage = id(gc_battery_voltage_raw).state;
+      if (voltage > 0.0f) {
+        return voltage + id(gc_num_voltage_adjust).state;
+      }
+      return voltage;
 
 text_sensor:
   - platform: template
@@ -130,7 +151,67 @@ text_sensor:
       garage_charger::format_duration_hhmm(id(gc_last_charge_duration_s), buf, sizeof(buf));
       return std::string(buf);
 
+button:
+  - platform: template
+    id: gc_ina226_dump_btn
+    name: ${friendly_name} INA226 Raw Dump
+    entity_category: diagnostic
+    on_press:
+      - lambda: |-
+          auto &ina = id(gc_ina226);
+
+          uint16_t raw_bus_voltage = 0;
+          if (ina->read_byte_16(0x02, &raw_bus_voltage)) {
+            ESP_LOGI("ina226_raw", "BUS raw=0x%04X (%u) => %.3f V",
+                raw_bus_voltage, raw_bus_voltage, raw_bus_voltage * 0.00125f);
+          } else {
+            ESP_LOGW("ina226_raw", "BUS read failed");
+          }
+
+          uint16_t raw_shunt_voltage = 0;
+          if (ina->read_byte_16(0x01, &raw_shunt_voltage)) {
+            ESP_LOGI("ina226_raw", "SHUNT raw=0x%04X (%d) => %.6f V",
+                raw_shunt_voltage, (int16_t) raw_shunt_voltage,
+                (int16_t) raw_shunt_voltage * 0.0000025f);
+          } else {
+            ESP_LOGW("ina226_raw", "SHUNT read failed");
+          }
+
+          uint16_t raw_current = 0;
+          if (ina->read_byte_16(0x04, &raw_current)) {
+            ESP_LOGI("ina226_raw", "CURRENT raw=0x%04X (%d)", raw_current, (int16_t) raw_current);
+          } else {
+            ESP_LOGW("ina226_raw", "CURRENT read failed");
+          }
+
+          uint16_t raw_power = 0;
+          if (ina->read_byte_16(0x03, &raw_power)) {
+            ESP_LOGI("ina226_raw", "POWER raw=0x%04X (%u)", raw_power, raw_power);
+          } else {
+            ESP_LOGW("ina226_raw", "POWER read failed");
+          }
+
+          uint16_t raw_calibration = 0;
+          if (ina->read_byte_16(0x05, &raw_calibration)) {
+            ESP_LOGI("ina226_raw", "CAL raw=0x%04X (%u)", raw_calibration, raw_calibration);
+          } else {
+            ESP_LOGW("ina226_raw", "CAL read failed");
+          }
+
 number:
+  - platform: template
+    id: gc_num_battery_min_voltage
+    name: ${friendly_name} Min Battery Voltage
+    icon: mdi:battery-outline
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: V
+    min_value: ${gc_voltage_cfg_min}
+    max_value: ${gc_voltage_cfg_max}
+    step: ${gc_voltage_cfg_step}
+    initial_value: ${gc_init_battery_min_voltage}
+
   - platform: template
     id: gc_num_low_voltage
     name: ${friendly_name} Charge Start Voltage
@@ -143,6 +224,19 @@ number:
     max_value: ${gc_voltage_cfg_max}
     step: ${gc_voltage_cfg_step}
     initial_value: ${gc_init_low_voltage}
+
+  - platform: template
+    id: gc_num_voltage_adjust
+    name: ${friendly_name} Voltage Adjust
+    icon: mdi:plus-minus-variant
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: V
+    min_value: -10.0
+    max_value: 10.0
+    step: 0.05
+    initial_value: 0.0
 
   - platform: template
     id: gc_num_high_voltage
@@ -324,10 +418,11 @@ display:
     auto_clear_enabled: true
     lambda: |-
       const bool captive_active = !esphome::network::is_connected();
-      if (captive_active) {
+      if (captive_active || id(gc_calibration_mode).state) {
         // Keep re-arming the auto-off timer (mode: restart) so the display
-        // stays on for as long as we're stuck in AP/captive-portal fallback
-        // - otherwise you can't see the AP name to recover the device.
+        // stays on for as long as we're stuck in AP/captive-portal fallback,
+        // or while calibration mode is on so you can watch it live. Falls
+        // back to the normal auto-off timeout once calibration is off.
         id(gc_display_timer).execute();
       }
       garage_charger::render_display(

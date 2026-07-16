@@ -10,5 +10,5 @@ substitutions:
   gc_dht_pin: GPIO19      # free pin, no boot-strap constraints
   gc_button_pin: GPIO0    # BOOT button, present on most ESP32 dev boards
   gc_led_pin: GPIO2       # built-in blue LED on most esp32dev boards
-  gc_relay_inverted: "true"  # most relay modules are active-low
+  gc_relay_inverted: "false"  # this relay module is active-high (confirmed on real hardware)
   gc_led_inverted: "false"   # esp32dev built-in LED is active-high (opposite of the ESP8266's)
