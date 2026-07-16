@@ -1,0 +1,37 @@
+# OBSOLETE: this ESP8266 (HW-364A combo board) variant has an unresolved
+# hardware-level WiFi reliability problem (repeated "Auth Expired" auth
+# failures across multiple unrelated networks, not fixed by fast_connect,
+# power_save_mode, or min_auth_mode changes) - most likely the onboard OLED's
+# proximity to the antenna detuning it. A separate plain ESP8266 board
+# (without a built-in OLED) connected fine, confirming this board is the
+# problem, not the firmware. Use garage-charger-esp32-device.yaml instead.
+# Kept only for reference/history - do not use for new builds.
+substitutions:
+  device_name: generator-charger
+  friendly_name: Generator Charger
+  ap_ssid: AP-Generator-Charger
+  ap_password: password
+  time_zone: Europe/Kyiv
+  wifi_rssi_update: 60s
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  includes:
+    - garage-charger-charging.h
+
+esp8266:
+  board: d1_mini
+
+packages:
+  common: !include garage-charger-common.yaml
+  pins: !include garage-charger-esp8266-pins.yaml
+  charging: !include garage-charger-charging.yaml
+  mqtt: !include garage-charger-mqtt.yaml
+
+# Default reboot_timeout (15min) would otherwise reboot the device if it
+# can't reach Home Assistant - which raced with wifi.ap.ap_timeout and could
+# preempt the AP fallback before it ever stabilized. Disabled for the same
+# reason wifi.reboot_timeout is disabled in the common package.
+api:
+  reboot_timeout: 0s

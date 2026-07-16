@@ -1,0 +1,16 @@
+# OBSOLETE - see garage-charger-device.yaml. This board's onboard OLED
+# appears to detune the ESP8266's antenna badly enough to cause persistent
+# WiFi auth failures; use garage-charger-esp32-pins.yaml instead.
+substitutions:
+  # Hardware pins - HW-364A ESP8266 (ESP-12F) module with built-in SSD1306 OLED.
+  # I2C pins confirmed working (display rendered live content over several
+  # test flashes): SCL=GPIO12, SDA=GPIO14. Do not swap these again without a
+  # working boot log showing the display initialize successfully.
+  gc_i2c_scl_pin: GPIO12  # D6
+  gc_i2c_sda_pin: GPIO14  # D5
+  gc_relay_pin: GPIO5     # D1 - free pin, no boot-strap constraints
+  gc_dht_pin: GPIO4       # D2 - free pin, no boot-strap constraints
+  gc_button_pin: GPIO0    # built-in FLASH/BOOT button
+  gc_led_pin: GPIO2       # D4 - built-in blue LED
+  gc_relay_inverted: "true"  # most relay modules are active-low
+  gc_led_inverted: "true"    # HW-364A built-in LED is active-low

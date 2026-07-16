@@ -1,0 +1,13 @@
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  port: 1883
+  keepalive: 30s
+  # Disabled: MQTT can never connect without WiFi, and this was rebooting
+  # the device (2min) before ap_timeout ever got a chance to bring up the
+  # captive-portal AP for WiFi recovery. Same reasoning as wifi/api
+  # reboot_timeout being disabled.
+  reboot_timeout: 0s
+  topic_prefix: ${device_name}
+  discovery: true

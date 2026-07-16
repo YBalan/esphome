@@ -1,0 +1,14 @@
+substitutions:
+  # Hardware pins - ESP32-WROOM-32 devkit with a built-in 0.96" SSD1306 OLED,
+  # plus external INA226, relay module, and DHT22.
+  # I2C pins confirmed working: display renders live content on real hardware
+  # at SCL=GPIO22/SDA=GPIO21. Relay/DHT/button pins are the repo's usual
+  # free-pin defaults but haven't been individually confirmed on this board.
+  gc_i2c_scl_pin: GPIO22  # matches this repo's other ESP32 devices - confirmed working
+  gc_i2c_sda_pin: GPIO21  # confirmed working
+  gc_relay_pin: GPIO18    # free pin, no boot-strap constraints
+  gc_dht_pin: GPIO19      # free pin, no boot-strap constraints
+  gc_button_pin: GPIO0    # BOOT button, present on most ESP32 dev boards
+  gc_led_pin: GPIO2       # built-in blue LED on most esp32dev boards
+  gc_relay_inverted: "false"  # this relay module is active-high (confirmed on real hardware)
+  gc_led_inverted: "false"   # esp32dev built-in LED is active-high (opposite of the ESP8266's)
