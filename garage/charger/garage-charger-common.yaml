@@ -28,6 +28,9 @@ text_sensor:
 ota:
   - platform: esphome
 
+# safe_mode:
+#   disabled: true
+
 time:
   - platform: sntp
     id: ha_time
@@ -43,7 +46,7 @@ wifi:
   # wrong moment mid-handshake, a well-known cause of "Auth Expired" auth
   # failures on this chip specifically (not seen on ESP32). Keep it fully
   # awake instead.
-  #power_save_mode: NONE
+  power_save_mode: NONE
   # Router must support WPA2. Change to WPA if it's WPA-only (less secure).
   #min_auth_mode: WPA
 

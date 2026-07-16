@@ -156,6 +156,30 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 - `Charging Feature` master switch lets an external automation (e.g. one triggered when the generator itself starts) force charging off regardless of thresholds; state persists across reboots
 - MQTT discovery enabled alongside the native API, `topic_prefix: ${device_name}`
 
+### MQTT topics
+
+Config `number` entities are intentionally omitted here; this list covers only controls and sensors.
+
+**Controls**
+
+- `garage-charger-esp32/switch/charging/command` and `garage-charger-esp32/switch/charging/state`
+- `garage-charger-esp32/switch/charging_feature/command` and `garage-charger-esp32/switch/charging_feature/state`
+- `garage-charger-esp32/switch/calibration/command` and `garage-charger-esp32/switch/calibration/state`
+- `garage-charger-esp32/button/ina226_raw_dump/command`
+- `garage-charger-esp32/button/wifi_forget/command`
+
+**Sensors**
+
+- `garage-charger-esp32/sensor/wifi_rssi/state`
+- `garage-charger-esp32/sensor/battery_voltage/state`
+- `garage-charger-esp32/sensor/battery_percentage/state`
+- `garage-charger-esp32/sensor/temperature/state`
+- `garage-charger-esp32/sensor/humidity/state`
+- `garage-charger-esp32/text_sensor/reset_reason/state`
+- `garage-charger-esp32/text_sensor/wifi_name/state`
+- `garage-charger-esp32/text_sensor/last_charging_time/state`
+- `garage-charger-esp32/binary_sensor/is_charging/state`
+
 ---
 
 ## Common Setup

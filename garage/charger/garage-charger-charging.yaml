@@ -113,9 +113,12 @@ sensor:
     state_class: measurement
     update_interval: ${gc_ina226_update_interval}
     lambda: |-
+      const float battery_high = id(gc_is_charging).state
+          ? id(gc_num_high_voltage).state
+          : id(gc_num_battery_high_voltage).state;
       const float pct = garage_charger::battery_percent(
           id(gc_battery_voltage).has_state(), id(gc_battery_voltage).state,
-          id(gc_num_battery_min_voltage).state, id(gc_num_high_voltage).state);
+          id(gc_num_battery_min_voltage).state, battery_high);
       if (!std::isfinite(pct)) {
         return {};
       }
@@ -201,7 +204,7 @@ button:
 number:
   - platform: template
     id: gc_num_battery_min_voltage
-    name: ${friendly_name} Min Battery Voltage
+    name: ${friendly_name} Battery Low
     icon: mdi:battery-outline
     entity_category: config
     optimistic: true
@@ -211,6 +214,19 @@ number:
     max_value: ${gc_voltage_cfg_max}
     step: ${gc_voltage_cfg_step}
     initial_value: ${gc_init_battery_min_voltage}
+
+  - platform: template
+    id: gc_num_battery_high_voltage
+    name: ${friendly_name} Battery High
+    icon: mdi:battery-medium
+    entity_category: config
+    optimistic: true
+    restore_value: true
+    unit_of_measurement: V
+    min_value: ${gc_voltage_cfg_min}
+    max_value: ${gc_voltage_cfg_max}
+    step: ${gc_voltage_cfg_step}
+    initial_value: ${gc_init_high_voltage}
 
   - platform: template
     id: gc_num_low_voltage
