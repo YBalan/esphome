@@ -123,6 +123,14 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 
 ---
 
+## garage/charger
+
+**Garage battery charger** for the generator's idle battery. The full documentation lives in [garage/charger/README.md](garage/charger/README.md).
+
+📁 [garage/charger/README.md](garage/charger/README.md)
+
+---
+
 ## ai-helper
 
 **Coding-agent desk companion** — a status semaphore plus an optional mouse mover, sharing one ESPHome codebase.
@@ -136,49 +144,6 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 📁 [ai-helper/README.md](ai-helper/README.md)
 
 ---
-
-## garage/charger
-
-**Idle-battery charger controller** for the garage generator - keeps the starter battery topped up between runs.
-
-- **Primary target: ESP32** (`garage-charger-esp32-device.yaml`, `esp32dev` + esp-idf). The original ESP8266 build (`garage-charger-device.yaml`, HW-364A combo board) is **obsolete** - that board's onboard OLED appears to detune the ESP8266's antenna badly enough to cause persistent WiFi "Auth Expired" failures across multiple unrelated networks, not fixed by `fast_connect`, `power_save_mode`, or `min_auth_mode` changes. A separate plain ESP8266 board (no built-in OLED) connected fine, confirming the board, not the firmware. Kept only for reference.
-- Board-specific GPIO pins live in `garage-charger-esp8266-pins.yaml` / `garage-charger-esp32-pins.yaml`; everything else (sensors, relay logic, display rendering) is shared via `garage-charger-charging.yaml` and `garage-charger-charging.h`. Runs on an ESP32-WROOM-32 devkit with a built-in 0.96" OLED; I2C pins (GPIO21/22) are confirmed working on real hardware, relay (GPIO18) and DHT (GPIO19) use the repo's usual free-pin defaults but aren't individually confirmed yet.
-- Built-in blue LED (GPIO2) polarity is per-board (`gc_led_inverted`) - active-high on this ESP32 devkit, opposite of the ESP8266's active-low LED.
-- INA226 monitors battery voltage only (current/power are not read or used); DHT22 monitors ambient temperature
-- Hysteresis charging: relay turns ON at/below a configurable low-voltage threshold, OFF at/above a configurable high-voltage threshold
-- Charging is also gated by a configurable safe temperature band (won't charge if too cold or too hot)
-- All four thresholds plus the display timeout are configurable from Home Assistant (`number` entities) - nothing is hardcoded
-- 128x64 SSD1306 OLED shows charging status, battery voltage, temperature, and the configured start/stop voltage thresholds; auto-off after an idle timeout, wakes on charge start/stop or button press; shows the fallback AP name while in captive-portal mode
-  - The display is declared at the controller's native `128x64` resolution (not the smaller visible glass on the ESP8266 combo board) so a full-buffer clear reaches all of GDDRAM - otherwise leftover pixels from prior firmware ghost through
-- Built-in blue LED mirrors the charging relay state, so there's a visible indicator without looking at the OLED
-- `Last Charging Time` sensor shows the duration (`HH:mm`) of the last completed charging session, persisted across reboots
-- BOOT button wakes the display; holding it 10s+ triggers WiFi Forget
-- `Charging Feature` master switch lets an external automation (e.g. one triggered when the generator itself starts) force charging off regardless of thresholds; state persists across reboots
-- MQTT discovery enabled alongside the native API, `topic_prefix: ${device_name}`
-
-### MQTT topics
-
-Config `number` entities are intentionally omitted here; this list covers only controls and sensors.
-
-**Controls**
-
-- `garage-charger-esp32/switch/charging/command` and `garage-charger-esp32/switch/charging/state`
-- `garage-charger-esp32/switch/charging_feature/command` and `garage-charger-esp32/switch/charging_feature/state`
-- `garage-charger-esp32/switch/calibration/command` and `garage-charger-esp32/switch/calibration/state`
-- `garage-charger-esp32/button/ina226_raw_dump/command`
-- `garage-charger-esp32/button/wifi_forget/command`
-
-**Sensors**
-
-- `garage-charger-esp32/sensor/wifi_rssi/state`
-- `garage-charger-esp32/sensor/battery_voltage/state`
-- `garage-charger-esp32/sensor/battery_percentage/state`
-- `garage-charger-esp32/sensor/temperature/state`
-- `garage-charger-esp32/sensor/humidity/state`
-- `garage-charger-esp32/text_sensor/reset_reason/state`
-- `garage-charger-esp32/text_sensor/wifi_name/state`
-- `garage-charger-esp32/text_sensor/last_charging_time/state`
-- `garage-charger-esp32/binary_sensor/is_charging/state`
 
 ---
 
