@@ -231,6 +231,18 @@ sensor:
         - delta: 0.002
         - throttle: 5s
 
+  - platform: template
+    name: "JBD SoC Percentage Calculated"
+    id: bms_soc_pct_calc
+    state_topic: "jbdbms/soc_percent_calc"
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: |-
+      return jbdbms_lambdas::calculate_soc_percentage();
+
   # Wi-Fi signal level
   - platform: wifi_signal
     name: "JBD WiFi Signal RSSI"

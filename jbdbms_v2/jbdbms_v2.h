@@ -22,6 +22,26 @@ inline float calculate_charging_time() {
   return 0;
 }
 
+inline float calculate_soc_percentage() {
+  if (!id(bms_total_capacity).has_state() || !id(bms_ah).has_state()) {
+    return NAN;
+  }
+
+  float total_capacity = id(bms_total_capacity).state;
+  if (total_capacity <= 0.0f) {
+    return NAN;
+  }
+
+  float soc_percent = (id(bms_ah).state / total_capacity) * 100.0f;
+  if (soc_percent < 0.0f) {
+    soc_percent = 0.0f;
+  } else if (soc_percent > 100.0f) {
+    soc_percent = 100.0f;
+  }
+
+  return soc_percent;
+}
+
 inline std::string format_charging_time(float hours_raw) {
   if (hours_raw <= 0) {
     return "NA";
