@@ -512,6 +512,11 @@ output:
     pin: 2
     id: blue_led_out
 
+# Surfaces the last reset reason (e.g. "Task watchdog", "Brownout", "Software")
+# and free heap on boot + periodically, so reboots are diagnosable.
+debug:
+  update_interval: 30s     
+
 # 7. DIAGNOSTICS
 text_sensor:
   - platform: jk_bms_ble
@@ -521,11 +526,21 @@ text_sensor:
       state_topic: "jkbms/errors"
   # Charging Time
   - platform: template
-    name: "Charging Time Formatted"
+    name: "BMS Charging Time Formatted"
     state_topic: "jkbms/charging_time_human"
     update_interval: 10s
     lambda: |-
       return {jkbms_lambdas::format_charging_time(id(charging_time).state)};
+  - platform: debug
+    reset_reason:
+      name: BMS Reset Reason
+  # Exposes the name (SSID) of the WiFi network the device is connected to,
+  # so you can confirm which network it joined without checking the router.
+  - platform: wifi_info
+    ssid:
+      name: "BMS WiFi Name"
+      id: wifi_ssid
+      entity_category: diagnostic
       
 # 1. Timer script (controls how long it stays lit)
 script:
