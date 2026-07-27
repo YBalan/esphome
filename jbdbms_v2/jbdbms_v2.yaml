@@ -44,6 +44,11 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf # Stable for BLE + WiFi coexistence
+    advanced:
+        minimum_chip_revision: "3.1"
+    sdkconfig_options:
+      # Add headroom for occasional heavy loop iterations under RF/network bursts.
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "20"
     
 ota:
   - platform: esphome
@@ -61,6 +66,9 @@ wifi:
   fast_connect: true
   power_save_mode: NONE
   reboot_timeout: 0s
+  # Roam scans compete with BLE for the shared 2.4GHz radio and have been
+  # observed to cause multi-second esp32_ble stalls leading to task watchdog resets.
+  post_connect_roaming: false
 
 # Enables the web interface when in AP mode
 captive_portal:
@@ -92,20 +100,25 @@ esp32_ble_tracker:
   scan_parameters:
     # Passive scanning improves WiFi coexistence and reduces MQTT/API stalls.
     active: false
+  # ESPHome's own WiFi/BLE time-sharing coordination has been a suspect in
+  # multi-second esp32_ble stalls (buffer overflow -> MQTT/API disconnects).
+  software_coexistence: false
 
 ble_client:
   - mac_address: ${bms_mac_address}
     id: jbd_bms_ble_client
 
-# 3. JBD-BMS (XiaoXiang) driver integration
-# external_components:
-#   - source: github://syssi/esphome-jbd-bms@main
+#3. JBD-BMS (XiaoXiang) driver integration
 external_components:
-  - source:
-      type: git
-      url: https://github.com/YBalan/esphome-jbd-bms.git
-      ref: main
-    components: [jbd_bms_ble]
+  - source: github://syssi/esphome-jbd-bms@main
+
+#My Custom Forked version of the JBD-BMS driver to add some extra features and fixes
+# external_components:
+#   - source:
+#       type: git
+#       url: https://github.com/YBalan/esphome-jbd-bms.git
+#       ref: main
+#     components: [jbd_bms_ble]
 
 jbd_bms_ble:
   - ble_client_id: jbd_bms_ble_client
@@ -205,8 +218,9 @@ sensor:
       name: "JBD Charging Cycles"      
       state_topic: "jbdbms/cycles"            
       filters:
-        - delta: 1
-        - throttle: 60s
+        # Cycle count is a slowly-changing integer; delta suppressed all updates.
+        # Re-emit the current value every 60s so HA always shows a fresh state.
+        - heartbeat: 60s
 
     # Cell voltages (Min/Max)
     min_cell_voltage:
@@ -229,19 +243,7 @@ sensor:
       state_topic: "jbdbms/delta"
       filters:
         - delta: 0.002
-        - throttle: 5s
-
-  # - platform: template
-  #   name: "JBD SoC Percentage Calculated"
-  #   id: bms_soc_pct_calc
-  #   state_topic: "jbdbms/soc_percent_calc"
-  #   unit_of_measurement: "%"
-  #   device_class: battery
-  #   state_class: measurement
-  #   accuracy_decimals: 0
-  #   update_interval: 5s
-  #   lambda: |-
-  #     return jbdbms_lambdas::calculate_soc_percentage();
+        - throttle: 5s  
 
   # Wi-Fi signal level
   - platform: wifi_signal
@@ -271,8 +273,12 @@ sensor:
     accuracy_decimals: 1
     update_interval: 10s
     lambda: |-
-      return jbdbms_lambdas::calculate_charging_time();
-      
+      float new_value = jbdbms_lambdas::calculate_charging_time();
+      if (id(charging_time).has_state() && new_value == id(charging_time).state) {
+        return {};
+      }
+      return new_value;
+
    # Split: Positive values for Charging
   - platform: template
     name: "JBD Power Charging"
@@ -436,61 +442,6 @@ number:
         - lambda: |-
             jbdbms_lambdas::set_soc_high_limit(x);
 
-# 6.6 TEXT CONFIG (editable in HA, persisted)
-# Note: These fields are compile-time for connection setup and apply after rebuild/reflash.
-text:
-  - platform: template
-    name: "JBD BMS MAC Address Config"
-    id: bms_mac_address_config
-    mode: text
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${bms_mac_address}
-    set_action:
-      then:
-        - lambda: |-
-            jbdbms_lambdas::set_bms_mac_config(x);
-
-  - platform: template
-    name: "JBD MQTT Broker Config"
-    id: mqtt_broker_config
-    mode: text
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${mqtt_broker}
-    set_action:
-      then:
-        - lambda: |-
-            jbdbms_lambdas::set_mqtt_broker_config(x);
-
-  - platform: template
-    name: "JBD MQTT Username Config"
-    id: mqtt_username_config
-    mode: text
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${mqtt_username}
-    set_action:
-      then:
-        - lambda: |-
-            jbdbms_lambdas::set_mqtt_username_config(x);
-
-  - platform: template
-    name: "JBD MQTT Password Config"
-    id: mqtt_password_config
-    mode: password
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${mqtt_password}
-    set_action:
-      then:
-        - lambda: |-
-            jbdbms_lambdas::set_mqtt_password_config(x);
-
 # Internal Blue LED
 output:
   - platform: gpio
@@ -508,14 +459,26 @@ text_sensor:
     jbd_bms_ble_id: my_bms
     errors:
       name: "JBD Errors"
+      id: bms_errors
       state_topic: "jbdbms/errors"
+      filters:
+        - lambda: |-
+            if (id(bms_errors).has_state() && x == id(bms_errors).state) {
+              return {};
+            }
+            return x;
 
   - platform: template
     name: "JBD Charging Time Formatted"
+    id: charging_time_formatted
     state_topic: "jbdbms/charging_time_human"
     update_interval: 10s
     lambda: |-
-      return {jbdbms_lambdas::format_charging_time(id(charging_time).state)};
+      std::string new_value = jbdbms_lambdas::format_charging_time(id(charging_time).state);
+      if (id(charging_time_formatted).has_state() && new_value == id(charging_time_formatted).state) {
+        return {};
+      }
+      return new_value;
 
   - platform: debug
     reset_reason:

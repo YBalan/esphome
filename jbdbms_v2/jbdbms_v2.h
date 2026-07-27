@@ -84,26 +84,6 @@ inline void set_soc_high_limit(float value) {
   ESP_LOGI("soc_limits", "SOC High Limit set to %.0f Ah", rounded_value);
 }
 
-inline void set_bms_mac_config(const std::string &value) {
-  id(bms_mac_address_config).publish_state(value);
-  ESP_LOGI("cfg", "BMS MAC config saved: %s (applies after rebuild/reflash)", value.c_str());
-}
-
-inline void set_mqtt_broker_config(const std::string &value) {
-  id(mqtt_broker_config).publish_state(value);
-  ESP_LOGI("cfg", "MQTT broker config saved: %s (applies after rebuild/reflash)", value.c_str());
-}
-
-inline void set_mqtt_username_config(const std::string &value) {
-  id(mqtt_username_config).publish_state(value);
-  ESP_LOGI("cfg", "MQTT username config saved (applies after rebuild/reflash)");
-}
-
-inline void set_mqtt_password_config(const std::string &value) {
-  id(mqtt_password_config).publish_state(value);
-  ESP_LOGI("cfg", "MQTT password config saved (applies after rebuild/reflash)");
-}
-
 inline void init_soc_limits(float low_initial, float high_initial, float low_limit_percentage, float high_limit_percentage) {
   if (!id(bms_total_capacity).has_state()) {
     ESP_LOGW("init_limits", "JBD Total Capacity not available");
