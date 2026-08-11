@@ -78,7 +78,7 @@ captive_portal:
   #port: 80
 
 api: #For Home Assistant
-  reboot_timeout: 0s
+  reboot_timeout: 5min
 
 # MQTT configuration
 mqtt:    

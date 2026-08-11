@@ -68,7 +68,8 @@ captive_portal:
 #web_server:
   #port: 80
 
-api: #For Home Assistant  
+api: #For Home Assistant
+  reboot_timeout: 5min  
 
 # MQTT configuration (fill in your broker details)
 mqtt:    
@@ -79,7 +80,7 @@ mqtt:
   topic_prefix: jkbms
   discovery: true
   #level: NONE
-  #reboot_timeout: 0s
+  reboot_timeout: 0s
   #keepalive: 60s
   # If you use HiveMQ Cloud (port 8883), add: certificate_authority: ...
 
