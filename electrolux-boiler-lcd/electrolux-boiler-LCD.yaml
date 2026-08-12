@@ -41,6 +41,7 @@ mqtt:
   password: !secret mqtt_password
   port: 1883
   topic_prefix: boiler/lcd
+  reboot_timeout: 0s
   discovery: true
   on_message:
     - topic: "boiler/debug" # If the boiler has log_topic enabled
@@ -193,8 +194,6 @@ binary_sensor:
   - platform: template
     id: is_bst
     lambda: 'return id(mqtt_raw_bst).state == "ON";'
-  - platform: status
-    id: online_status
 
   - platform: gpio
     pin: { number: 0, inverted: true, mode: INPUT_PULLUP }

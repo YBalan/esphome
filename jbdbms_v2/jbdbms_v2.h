@@ -22,6 +22,26 @@ inline float calculate_charging_time() {
   return 0;
 }
 
+inline float calculate_soc_percentage() {
+  if (!id(bms_total_capacity).has_state() || !id(bms_ah).has_state()) {
+    return NAN;
+  }
+
+  float total_capacity = id(bms_total_capacity).state;
+  if (total_capacity <= 0.0f) {
+    return NAN;
+  }
+
+  float soc_percent = (id(bms_ah).state / total_capacity) * 100.0f;
+  if (soc_percent < 0.0f) {
+    soc_percent = 0.0f;
+  } else if (soc_percent > 100.0f) {
+    soc_percent = 100.0f;
+  }
+
+  return soc_percent;
+}
+
 inline std::string format_charging_time(float hours_raw) {
   if (hours_raw <= 0) {
     return "NA";
@@ -62,26 +82,6 @@ inline void set_soc_high_limit(float value) {
   float rounded_value = roundf(value);
   id(soc_high_limit_number).publish_state(rounded_value);
   ESP_LOGI("soc_limits", "SOC High Limit set to %.0f Ah", rounded_value);
-}
-
-inline void set_bms_mac_config(const std::string &value) {
-  id(bms_mac_address_config).publish_state(value);
-  ESP_LOGI("cfg", "BMS MAC config saved: %s (applies after rebuild/reflash)", value.c_str());
-}
-
-inline void set_mqtt_broker_config(const std::string &value) {
-  id(mqtt_broker_config).publish_state(value);
-  ESP_LOGI("cfg", "MQTT broker config saved: %s (applies after rebuild/reflash)", value.c_str());
-}
-
-inline void set_mqtt_username_config(const std::string &value) {
-  id(mqtt_username_config).publish_state(value);
-  ESP_LOGI("cfg", "MQTT username config saved (applies after rebuild/reflash)");
-}
-
-inline void set_mqtt_password_config(const std::string &value) {
-  id(mqtt_password_config).publish_state(value);
-  ESP_LOGI("cfg", "MQTT password config saved (applies after rebuild/reflash)");
 }
 
 inline void init_soc_limits(float low_initial, float high_initial, float low_limit_percentage, float high_limit_percentage) {

@@ -28,7 +28,7 @@ void lcd_cycle_brightness() {
 
 // Forces the backlight on at the saved brightness level when in AP mode (offline).
 void lcd_ensure_backlight_ap_mode() {
-    if (!id(online_status).state) {
+    if (!esphome::network::is_connected()) {
         auto call = id(display_backlight).make_call();
         call.set_brightness(id(current_brightness_val));
         call.set_state(true);
@@ -79,11 +79,22 @@ static void lcd_draw_trend(Display& it, const std::string& trend) {
     }
 }
 
+// Draws a red "MQTT OFFLINE" banner across the top of the screen, on top of
+// whatever else was already drawn - MQTT can drop out while WiFi/API stay up
+// (e.g. broker restart), so this needs to be visible independent of that.
+template<typename Display>
+static void lcd_draw_mqtt_banner(Display& it) {
+    if (mqtt::global_mqtt_client->is_connected()) return;
+    int w = it.get_width();
+    it.filled_rectangle(0, 0, w, LCD_MQTT_BANNER_H, id(red));
+    it.printf(w / 2, LCD_MQTT_BANNER_H / 2, &id(font_small), id(white), TextAlign::CENTER, LCD_STR_MQTT_OFFLINE);
+}
+
 // Renders the boiler LCD screen: AP-mode setup page or live gauge/info page.
 template<typename Display>
 static void lcd_draw_screen(Display& it) {
     // AP mode: show Wi-Fi setup instructions
-    if (!id(online_status).state) {
+    if (!esphome::network::is_connected()) {
         int w = it.get_width();
         int h = it.get_height();
         int cx = w / 2;
@@ -137,5 +148,8 @@ static void lcd_draw_screen(Display& it) {
     lcd_draw_trend(it, id(mqtt_raw_trend).state);
 
     it.printf(LCD_MAIN_RSSI_X, LCD_MAIN_RSSI_Y, &id(font_small), Color(LCD_COLOR_DIM, LCD_COLOR_DIM, LCD_COLOR_DIM), "%.0f dBm", id(wifi_rssi).state);
+
+    // Drawn last so it overlays on top of everything else on the screen.
+    lcd_draw_mqtt_banner(it);
 }
 

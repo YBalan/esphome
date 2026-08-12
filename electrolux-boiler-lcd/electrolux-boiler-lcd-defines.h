@@ -53,6 +53,9 @@
 #define LCD_MAIN_BST_X              230   // X position of BST label (bottom-right)
 #define LCD_MAIN_BST_Y              118   // Y position of BST label
 
+// ─── MQTT Status Banner ───────────────────────────────────────────────────────
+#define LCD_MQTT_BANNER_H           14    // Height of the "MQTT OFFLINE" banner strip
+
 // ─── Trend Arrow ──────────────────────────────────────────────────────────────
 // Narrow filled-triangle arrow drawn between the HEATING label (bottom ~Y=19)
 // and the top of the gauge arc (~Y=30). Stable draws a dash (–).
@@ -73,3 +76,4 @@
 #define LCD_STR_TREND_UP            "Up"
 #define LCD_STR_TREND_DOWN          "Down"
 #define LCD_STR_TREND_STABLE        "Stable"
+#define LCD_STR_MQTT_OFFLINE        "MQTT OFFLINE"
