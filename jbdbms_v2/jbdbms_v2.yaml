@@ -35,6 +35,8 @@ esphome:
     priority: -100 
     then:
       - script.execute: init_soc_limits
+      - script.execute: apply_relay_restart_behavior
+      - script.execute: apply_relay_soc_rules
       - script.execute: display_timer
 
 preferences:
@@ -125,6 +127,35 @@ jbd_bms_ble:
     id: my_bms
     update_interval: ${bms_update_interval} 
 
+# 3.5 PERSISTED STATE (charging duration and relay restart behavior)
+globals:
+  # Accumulated seconds of the current (or, once stopped, the last) charging
+  # session. Persisted so a reboot mid-charge resumes counting instead of
+  # losing the elapsed time.
+  - id: bms_charging_duration_s
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+
+  # Captures whether charging was already active at boot from the first
+  # available current sample. This avoids misclassifying a later new session
+  # as a resume just because a persisted duration exists.
+  - id: bms_boot_current_sampled
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: bms_charging_was_active_at_boot
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Persists the relay's latest commanded state so "Last State" can be
+  # applied on restart even with a safety-first hardware default at boot.
+  - id: bms_relay_last_state
+    type: bool
+    restore_value: yes
+    initial_value: "false"
+
 # 4. SENSORS (Telemetry)
 sensor:
   - platform: jbd_bms_ble
@@ -153,6 +184,17 @@ sensor:
       name: "JBD Current"
       state_topic: "jbdbms/current"
       id: bms_a
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return !id(bms_boot_current_sampled);'
+              then:
+                - lambda: |-
+                    id(bms_charging_was_active_at_boot) = x >= 5.0f;
+                    id(bms_boot_current_sampled) = true;
+                    ESP_LOGI("charging_duration", "Boot sample captured: current=%.2f A, active_at_boot=%s",
+                             x, id(bms_charging_was_active_at_boot) ? "true" : "false");
       filters:
         - delta: 0.1
         - throttle: 2s
@@ -353,6 +395,60 @@ binary_sensor:
     on_press:
       - script.execute: display_timer
 
+  # The BMS's own "charging" flag reflects MOSFET enable and can remain true
+  # near idle current. Duration tracking is based on actual current instead.
+  - platform: template
+    name: "JBD Charging Active"
+    id: bms_charging_active
+    device_class: battery_charging
+    lambda: |-
+      // Add hysteresis so current noise near the threshold does not retrigger
+      // on_press/on_release and accidentally reset an active charging session.
+      static bool active = false;
+      if (!id(bms_a).has_state()) {
+        return false;
+      }
+      const float current_a = id(bms_a).state;
+      if (!active && current_a >= 5.0f) {
+        active = true;
+      } else if (active && current_a <= 3.0f) {
+        active = false;
+      }
+      return active;
+    on_press:
+      - lambda: |-
+          // First edge after boot:
+          // - if charging was already active at boot -> resume (do not reset)
+          // - otherwise -> this is a new session (reset to 0)
+          // Later edges are always new sessions and must reset.
+          static bool first_edge = true;
+          const bool was_first_edge = first_edge;
+          const bool resuming = was_first_edge && id(bms_charging_was_active_at_boot);
+          if (!resuming) {
+            id(bms_charging_duration_s) = 0;
+          }
+          first_edge = false;
+          ESP_LOGI("charging_duration", "on_press fired (current=%.2f A), first_edge=%s, active_at_boot=%s, resuming=%s, duration=%u s",
+                   id(bms_a).state,
+                   was_first_edge ? "true" : "false",
+                   id(bms_charging_was_active_at_boot) ? "true" : "false",
+                   resuming ? "true" : "false",
+                   id(bms_charging_duration_s));
+    on_release:
+      - lambda: |-
+          ESP_LOGI("charging_duration", "on_release fired (current=%.2f A), duration frozen at %u s",
+                   id(bms_a).state, id(bms_charging_duration_s));
+      - component.update: bms_charging_duration_formatted
+
+# Accumulates the persisted charging-duration counter while charging is active.
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          if (id(bms_charging_active).state) {
+            id(bms_charging_duration_s) += 10;
+          }
+
 button:
     # Factory reset: wipes all stored preferences and reboots.
   - platform: factory_reset
@@ -392,8 +488,12 @@ switch:
     state_topic: "jbdbms/relay/state"
     command_topic: "jbdbms/relay/set"    
     on_turn_on:
+      - lambda: |-
+          id(bms_relay_last_state) = true;
       - output.turn_on: blue_led_out
     on_turn_off:
+      - lambda: |-
+          id(bms_relay_last_state) = false;
       - output.turn_off: blue_led_out
     
   # JBD Internal MOSFET Switches
@@ -409,6 +509,25 @@ switch:
       command_topic: "jbdbms/switch/discharge/set"
 
 # 6.5 CONFIGURABLE NUMBERS (SOC Limits)
+select:
+  - platform: template
+    name: "JBD Relay Restart Behavior"
+    id: relay_restart_behavior
+    entity_category: config
+    icon: "mdi:restart-alert"
+    optimistic: true
+    restore_value: true
+    initial_option: "Last State"
+    options:
+      - "Always OFF"
+      - "Always ON"
+      - "Last State"
+    set_action:
+      then:
+        - lambda: |-
+            id(relay_restart_behavior).publish_state(x);
+            ESP_LOGI("relay_boot", "Restart behavior set to: %s", x.c_str());
+
 number:
   - platform: template
     name: "JBD SoC Low Limit (Ah)"
@@ -425,6 +544,7 @@ number:
       then:
         - lambda: |-
             jbdbms_lambdas::set_soc_low_limit(x);
+        - script.execute: apply_relay_soc_rules
 
   - platform: template
     name: "JBD SoC High Limit (Ah)"
@@ -441,6 +561,7 @@ number:
       then:
         - lambda: |-
             jbdbms_lambdas::set_soc_high_limit(x);
+        - script.execute: apply_relay_soc_rules
 
 # Internal Blue LED
 output:
@@ -480,6 +601,17 @@ text_sensor:
       }
       return new_value;
 
+  # Current charging session duration (h m). Keeps counting across a reboot
+  # that happens mid-charge, and freezes at the final value when charging
+  # stops (see bms_charging_duration_s global and JBD Charging Active logic).
+  - platform: template
+    name: "JBD Charging Duration"
+    id: bms_charging_duration_formatted
+    state_topic: "jbdbms/charging_duration_current"
+    update_interval: 10s
+    lambda: |-
+      return {jbdbms_lambdas::format_duration_hm(id(bms_charging_duration_s))};
+
   - platform: debug
     reset_reason:
       name: "JBD Reset Reason"
@@ -501,6 +633,55 @@ script:
           timeout: 30s
       - lambda: |-
           jbdbms_lambdas::init_soc_limits(${soc_low_limit_initial}, ${soc_high_limit_initial}, ${soc_low_limit_percentage}, ${soc_high_limit_percentage});
+
+  - id: apply_relay_restart_behavior
+    then:
+      - lambda: |-
+          const std::string mode = id(relay_restart_behavior).current_option();
+          ESP_LOGI("relay_boot", "Applying relay restart behavior: %s", mode.c_str());
+      - if:
+          condition:
+            lambda: 'return id(relay_restart_behavior).current_option() == "Always ON";'
+          then:
+            - switch.turn_on: bms_relay
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(relay_restart_behavior).current_option() == "Always OFF";'
+                then:
+                  - switch.turn_off: bms_relay
+                else:
+                  - if:
+                      condition:
+                        lambda: 'return id(bms_relay_last_state);'
+                      then:
+                        - switch.turn_on: bms_relay
+                      else:
+                        - switch.turn_off: bms_relay
+
+  - id: apply_relay_soc_rules
+    then:
+      - wait_until:
+          condition:
+            lambda: 'return id(bms_ah).has_state();'
+          timeout: 45s
+      - lambda: |-
+          if (!id(bms_ah).has_state()) {
+            ESP_LOGW("relay_soc", "SOC state not available yet; skipping relay SOC-rule sync");
+            return;
+          }
+          const float soc = id(bms_ah).state;
+          const float low = id(soc_low_limit_number).state;
+          const float high = id(soc_high_limit_number).state;
+          if (soc < low) {
+            id(bms_relay).turn_on();
+            ESP_LOGI("relay_soc", "SOC %.2f < low %.2f -> relay ON", soc, low);
+          } else if (soc >= high) {
+            id(bms_relay).turn_off();
+            ESP_LOGI("relay_soc", "SOC %.2f >= high %.2f -> relay OFF", soc, high);
+          } else {
+            ESP_LOGI("relay_soc", "SOC %.2f within [%.2f, %.2f) -> keep current relay state", soc, low, high);
+          }
 
   - id: display_timer
     mode: restart
