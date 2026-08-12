@@ -25,19 +25,27 @@ inline float calculate_charging_time() {
   }
 }
 
-// Format charging time as human readable (h m)
+// Format a duration given in minutes as human readable (h m)
+inline std::string format_minutes_hm(uint32_t total_minutes) {
+  uint32_t h = total_minutes / 60;
+  uint32_t m = total_minutes % 60;
+
+  char buf[20];
+  snprintf(buf, sizeof(buf), "%dh %dm", (int) h, (int) m);
+  return std::string(buf);
+}
+
+// Format charging time remaining (hours) as human readable (h m)
 inline std::string format_charging_time(float hours_raw) {
   if (hours_raw <= 0) {
     return "NA";
   }
-  
-  int total_minutes = (int)(hours_raw * 60);
-  int h = total_minutes / 60;
-  int m = total_minutes % 60;
-  
-  char buf[20];
-  snprintf(buf, sizeof(buf), "%dh %dm", h, m);
-  return std::string(buf);
+  return format_minutes_hm((uint32_t)(hours_raw * 60));
+}
+
+// Format an accumulated charging duration (seconds) as human readable (h m)
+inline std::string format_duration_hm(uint32_t total_seconds) {
+  return format_minutes_hm(total_seconds / 60);
 }
 
 // Get power in (charging) in watts

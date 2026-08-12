@@ -104,8 +104,30 @@ external_components:
 jk_bms_ble:
   - ble_client_id: jkbms_ble
     id: my_bms
-    update_interval: ${bms_update_interval} 
+    update_interval: ${bms_update_interval}
     protocol_version: JK02_32S
+
+# 3.5 PERSISTED STATE (charging duration tracking)
+globals:
+  # Accumulated seconds of the current (or, once stopped, the last) charging
+  # session. Persisted so a reboot mid-charge resumes counting instead of
+  # losing the elapsed time.
+  - id: bms_charging_duration_s
+    type: uint32_t
+    restore_value: yes
+    initial_value: "0"
+
+  # Captures whether charging was already active at boot from the first
+  # available current sample. This avoids misclassifying a later new session
+  # as a resume just because a persisted duration exists.
+  - id: bms_boot_current_sampled
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: bms_charging_was_active_at_boot
+    type: bool
+    restore_value: no
+    initial_value: "false"
 
 # 4. SENSORS (Telemetry)
 sensor:
@@ -135,6 +157,17 @@ sensor:
       name: "BMS Current"
       state_topic: "jkbms/current"
       id: bms_a
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return !id(bms_boot_current_sampled);'
+              then:
+                - lambda: |-
+                    id(bms_charging_was_active_at_boot) = x >= 5.0f;
+                    id(bms_boot_current_sampled) = true;
+                    ESP_LOGI("charging_duration", "Boot sample captured: current=%.2f A, active_at_boot=%s",
+                             x, id(bms_charging_was_active_at_boot) ? "true" : "false");
       filters:
         - delta: 0.1
         - throttle: 2s
@@ -329,9 +362,9 @@ binary_sensor:
       state_topic: "jkbms/status/discharging"
     balancing:
       name: "BMS Balancing State"
-      state_topic: "jkbms/status/balancing"    
-      
-    # GPIO button 0 (Buiktin button "Boot" to wake dislay)
+      state_topic: "jkbms/status/balancing"
+
+    # GPIO button 0 (Builtin button "Boot" to wake dislay)
   - platform: gpio
     pin:
       number: 0
@@ -340,6 +373,65 @@ binary_sensor:
     id: wake_button
     on_press:
       - script.execute: display_timer
+
+  # The BMS's own "charging" flag reflects the charge MOSFET/switch enable
+  # bit, which can stay true with near-zero current (charger disconnected,
+  # battery topped off, CV tail end). Duration tracking needs actual current
+  # flow, so gate it on current instead.
+  - platform: template
+    name: "BMS Charging Active"
+    id: bms_charging_active
+    device_class: battery_charging
+    lambda: |-
+      // Add hysteresis so current noise near the threshold does not retrigger
+      // on_press/on_release and accidentally reset an active charging session.
+      static bool active = false;
+      if (!id(bms_a).has_state()) {
+        return false;
+      }
+      const float current_a = id(bms_a).state;
+      if (!active && current_a >= 5.0f) {
+        active = true;
+      } else if (active && current_a <= 3.0f) {
+        active = false;
+      }
+      return active;
+    on_press:
+      - lambda: |-
+          // 'first_edge' is a RAM-only static, not an ESPHome global, so it
+          // is always true again after a real reboot - unlike a persisted
+          // flag it can never get stuck true from an earlier session.
+          // First edge after boot:
+          // - if charging was already active at boot -> resume (do not reset)
+          // - otherwise -> this is a new session (reset to 0)
+          // Later edges are always new sessions and must reset.
+          static bool first_edge = true;
+          const bool was_first_edge = first_edge;
+          const bool resuming = was_first_edge && id(bms_charging_was_active_at_boot);
+          if (!resuming) {
+            id(bms_charging_duration_s) = 0;
+          }
+          first_edge = false;
+          ESP_LOGI("charging_duration", "on_press fired (current=%.2f A), first_edge=%s, active_at_boot=%s, resuming=%s, duration=%u s",
+                   id(bms_a).state,
+                   was_first_edge ? "true" : "false",
+                   id(bms_charging_was_active_at_boot) ? "true" : "false",
+                   resuming ? "true" : "false",
+                   id(bms_charging_duration_s));
+    on_release:
+      - lambda: |-
+          ESP_LOGI("charging_duration", "on_release fired (current=%.2f A), duration frozen at %u s",
+                   id(bms_a).state, id(bms_charging_duration_s));
+      - component.update: bms_charging_duration_formatted
+
+# Accumulates the persisted charging-duration counter while charging is active.
+interval:
+  - interval: 10s
+    then:
+      - lambda: |-
+          if (id(bms_charging_active).state) {
+            id(bms_charging_duration_s) += 10;
+          }
 
 button:
     # Factory reset: wipes all stored preferences and reboots.
@@ -532,6 +624,17 @@ text_sensor:
     update_interval: 10s
     lambda: |-
       return {jkbms_lambdas::format_charging_time(id(charging_time).state)};
+  # Current charging session duration (h m). Keeps counting across a
+  # reboot that happens mid-charge, and freezes at the final value when
+  # charging stops (see bms_charging_duration_s global and the
+  # BMS Charging Active binary_sensor's on_press/on_release above).
+  - platform: template
+    name: "BMS Charging Duration"
+    id: bms_charging_duration_formatted
+    state_topic: "jkbms/charging_duration_current"
+    update_interval: 10s
+    lambda: |-
+      return {jkbms_lambdas::format_duration_hm(id(bms_charging_duration_s))};
   - platform: debug
     reset_reason:
       name: BMS Reset Reason
