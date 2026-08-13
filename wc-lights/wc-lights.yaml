@@ -23,8 +23,8 @@ substitutions:
   bath_endstop_mode_default: "NC"
   door_debounce_on: 150ms
   door_debounce_off: 150ms
-  bath_door_debounce_on: 400ms
-  bath_door_debounce_off: 400ms
+  bath_door_debounce_on: 150ms
+  bath_door_debounce_off: 150ms
 
   # MOSFET PWM dimming
   # Increase if you notice visible flicker, decrease if MOSFET gets warm.
@@ -68,6 +68,9 @@ substitutions:
   visit_sensor_update: 1s
   main_light_transition: 150ms
 
+preferences:  
+  flash_write_interval: 30s
+
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
@@ -107,6 +110,20 @@ esphome:
             id(bath_time_inside_sensor),
             now_ms
           );
+
+          ESP_LOGI("boot_restore", "WC   - door: %s, user_inside: %s, door_open_started_ms: %u, entry_started_ms: %u",
+                   id(wc_door_sensor)->state ? "open" : "closed",
+                   id(wc_user_inside_flag) ? "true" : "false",
+                   id(wc_door_open_started_ms),
+                   id(wc_entry_started_ms));
+          ESP_LOGI("boot_restore", "Bath - door: %s, user_inside: %s, door_open_started_ms: %u, entry_started_ms: %u",
+                   id(bath_door_sensor)->state ? "open" : "closed",
+                   id(bath_user_inside_flag) ? "true" : "false",
+                   id(bath_door_open_started_ms),
+                   id(bath_entry_started_ms));
+
+          // Only allow door-triggered scripts to run once sensors have settled and state is restored.
+          id(boot_settled) = true;
       - script.execute: update_status_strip
 
 esp32:
@@ -147,6 +164,7 @@ captive_portal:
   #port: 80
 
 api:
+  reboot_timeout: 0s
 
 globals:
   - id: wc_user_inside_flag
@@ -231,6 +249,12 @@ globals:
     initial_value: "0"
 
   - id: status_strip_test_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Blocks door on_press/on_release scripts until post-boot sensor settling and state restore complete.
+  - id: boot_settled
     type: bool
     restore_value: no
     initial_value: "false"
@@ -581,7 +605,7 @@ light:
 binary_sensor:
   - platform: gpio
     id: wc_door_raw
-    internal: true
+    internal: false
     pin:
       number: ${wc_door_pin}
       mode:
@@ -594,7 +618,7 @@ binary_sensor:
 
   - platform: gpio
     id: bath_door_raw
-    internal: true
+    internal: false
     pin:
       number: ${bath_door_pin}
       mode:
@@ -610,26 +634,44 @@ binary_sensor:
     name: WC - Door
     device_class: door
     lambda: |-
-      return wc_lights::resolve_endstop_from_raw(id(wc_door_raw).state, id(wc_endstop_mode).current_option());
+      const bool raw = id(wc_door_raw_inverted).state ? !id(wc_door_raw).state : id(wc_door_raw).state;
+      return wc_lights::resolve_endstop_from_raw(raw, id(wc_endstop_mode).current_option());
     on_press:
       then:
-        - script.execute: handle_wc_door_open
+        - if:
+            condition:
+              lambda: return id(boot_settled);
+            then:
+              - script.execute: handle_wc_door_open
     on_release:
       then:
-        - script.execute: handle_wc_door_close
+        - if:
+            condition:
+              lambda: return id(boot_settled);
+            then:
+              - script.execute: handle_wc_door_close
 
   - platform: template
     id: bath_door_sensor
     name: Bath - Door
     device_class: door
     lambda: |-
-      return wc_lights::resolve_endstop_from_raw(id(bath_door_raw).state, id(bath_endstop_mode).current_option());
+      const bool raw = id(bath_door_raw_inverted).state ? !id(bath_door_raw).state : id(bath_door_raw).state;
+      return wc_lights::resolve_endstop_from_raw(raw, id(bath_endstop_mode).current_option());
     on_press:
       then:
-        - script.execute: handle_bath_door_open
+        - if:
+            condition:
+              lambda: return id(boot_settled);
+            then:
+              - script.execute: handle_bath_door_open
     on_release:
       then:
-        - script.execute: handle_bath_door_close
+        - if:
+            condition:
+              lambda: return id(boot_settled);
+            then:
+              - script.execute: handle_bath_door_close
 
   - platform: template
     id: wc_user_inside
@@ -748,7 +790,23 @@ sensor:
     lambda: |-
       return static_cast<float>(id(bath_visit_count));
 
+# Surfaces the last reset reason (e.g. "Task watchdog", "Brownout", "Software")
+# and free heap on boot + periodically, so reboots are diagnosable.
+debug:
+  update_interval: 30s
+
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "WC Lights Reset Reason"
+  # Exposes the name (SSID) of the WiFi network the device is connected to,
+  # so you can confirm which network it joined without checking the router.
+  - platform: wifi_info
+    ssid:
+      name: "WC Lights WiFi Name"
+      id: wifi_ssid
+      entity_category: diagnostic
+
   - platform: template
     id: wc_total_inside_text_sensor
     name: WC - Total Time Inside
@@ -798,6 +856,22 @@ text_sensor:
       return wc_lights::format_visit_duration_from_seconds(id(bath_max_visit_seconds));
 
 button:
+  # Forget only the saved WiFi credentials and reboot; on restart the device
+    # falls back to its own AP + captive portal (${ap_ssid}) for a new network.
+    # Other preferences are kept, so this is NOT a factory reset.
+  - platform: template
+    name: "WC Lights WiFi Forget"
+    id: wifi_forget_btn
+    entity_category: config
+    icon: "mdi:wifi-remove"
+    on_press:
+      - logger.log: "Forgetting WiFi credentials; rebooting into setup AP"
+      - lambda: |-
+          // save_wifi_sta persists the empty credentials to NVS immediately.
+          wifi::global_wifi_component->save_wifi_sta("", "");
+      - delay: 1s
+      - lambda: "App.safe_reboot();"
+
   - platform: template
     id: reset_visit_counters_button
     name: Device - Reset Visit Counters
@@ -831,11 +905,42 @@ button:
     icon: mdi:wifi-cog
     entity_category: config
 
-  - platform: restart
+  - platform: template
     id: restart_device_button
     name: Device - Restart Device
     icon: mdi:restart
     entity_category: config
+    on_press:
+      - lambda: |-
+          ESP_LOGI("restart_button", "WC   - door: %s, user_inside: %s, door_open_started_ms: %u, entry_started_ms: %u",
+                   id(wc_door_sensor)->state ? "open" : "closed",
+                   id(wc_user_inside_flag) ? "true" : "false",
+                   id(wc_door_open_started_ms),
+                   id(wc_entry_started_ms));
+          ESP_LOGI("restart_button", "Bath - door: %s, user_inside: %s, door_open_started_ms: %u, entry_started_ms: %u",
+                   id(bath_door_sensor)->state ? "open" : "closed",
+                   id(bath_user_inside_flag) ? "true" : "false",
+                   id(bath_door_open_started_ms),
+                   id(bath_entry_started_ms));
+      - delay: 1s
+      - lambda: "App.safe_reboot();"
+
+switch:
+  - platform: template
+    id: wc_door_raw_inverted
+    name: WC - Door Raw Inverted
+    entity_category: config
+    icon: mdi:swap-horizontal
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+  - platform: template
+    id: bath_door_raw_inverted
+    name: Bath - Door Raw Inverted
+    entity_category: config
+    icon: mdi:swap-horizontal
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
 
 select:
   - platform: template
