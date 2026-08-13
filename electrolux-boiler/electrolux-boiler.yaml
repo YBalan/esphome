@@ -204,7 +204,23 @@ binary_sensor:
             else:
               - output.turn_off: blue_led
 
+# Surfaces the last reset reason (e.g. "Task watchdog", "Brownout", "Software")
+# and free heap on boot + periodically, so reboots are diagnosable.
+debug:
+  update_interval: 30s  
+
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: "Boiler Reset Reason"
+  # Exposes the name (SSID) of the WiFi network the device is connected to,
+  # so you can confirm which network it joined without checking the router.
+  - platform: wifi_info
+    ssid:
+      name: "Boiler WiFi Name"
+      id: wifi_ssid
+      entity_category: diagnostic
+
   - platform: template
     name: "Boiler Temp Trend"
     id: temp_trend
@@ -250,6 +266,25 @@ button:
     name: "Boiler Reset Device WiFi"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
+  # Forget only the saved WiFi credentials and reboot; on restart the device
+    # falls back to its own AP + captive portal (${ap_ssid}) for a new network.
+    # Other preferences are kept, so this is NOT a factory reset.
+  - platform: template
+    name: "Boiler WiFi Forget"
+    id: wifi_forget_btn
+    entity_category: config
+    icon: "mdi:wifi-remove"
+    on_press:
+      - logger.log: "Forgetting WiFi credentials; rebooting into setup AP"
+      - lambda: |-
+          // save_wifi_sta persists the empty credentials to NVS immediately.
+          wifi::global_wifi_component->save_wifi_sta("", "");
+      - delay: 1s
+      - lambda: "App.safe_reboot();"
+  - platform: restart
+    name: "Boiler Restart Device"
+    id: restart_btn
+    icon: "mdi:restart"
   # Reset Total Energy Button
   - platform: template
     name: "Boiler Reset Total Energy"
