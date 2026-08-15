@@ -26,6 +26,7 @@ substitutions:
   # Boiler defaults
   default_target_temp: "70"   # °C — initial target temperature
   default_power_level: "2"    # 1=700 W, 2=1300 W, 3=2000 W
+  default_bst_enabled: "false" # BST state applied on boot when Boiler Boot Behavior = "Default"
 
   # Boiler mode labels — must exactly match BOILER_STR_MODE_* defines in electrolux-boiler-defines.h
   mode_low:      "700W (Low)"
@@ -43,6 +44,8 @@ substitutions:
   wifi_rssi_interval: 30s  # How often WiFi signal strength is sampled
   clock_sync_interval: 24h # How often the boiler clock is re-synced to NTP
   energy_interval: 30s     # Energy accumulation cadence — should match boiler update rate (~30 s)
+  boot_settings_delay: 5s  # Grace period after boot before re-sending settings — lets the boiler's own controller finish powering up first
+  command_delay: 300ms     # Gap between boiler UART commands during boot-state restore
 
   # Timer defaults — scheduled clock time (HH:MM) at which the boiler will begin heating
   default_timer_hours: "23"   # Start hour (0–23)
@@ -53,10 +56,13 @@ esphome:
   includes:
     - electrolux-boiler-defines.h
     - electrolux-boiler.h
-  on_boot:    
+  on_boot:
     - priority: 800
       then:
         - logger.log: "ON_BOOT IS WORKING"
+    - priority: -100 # Run last, once WiFi/API/MQTT setup has been kicked off
+      then:
+        - script.execute: apply_boiler_boot_behavior
         
 esp32:
   board: esp32dev
@@ -84,13 +90,14 @@ wifi:
   fast_connect: true
 
 # Enables the web interface when in AP mode
-captive_portal:
+captive_portal:  
 
 # Simple web server to change settings if already connected
-web_server:
-  port: 80
+#web_server:
+#  port: 80
 
 api: #For Home Assistant
+  reboot_timeout: 0s
 
 # MQTT configuration
 mqtt:    
@@ -105,15 +112,31 @@ mqtt:
   discovery: true
 
 globals:
+  # These 4 globals are the boiler settings we "remember": always kept in sync
+  # with the real device (updated both by user commands and by every RX status
+  # packet), and persisted (restore_value) so they still hold the last known
+  # state after an ESP reboot. Whether that persisted state gets pushed back
+  # to the boiler on boot — or is left alone, letting the next UART status
+  # packet repopulate it from the boiler itself — is controlled by the
+  # "Boiler Boot Behavior" select; see apply_boiler_boot_behavior.
   - id: global_boiler_power_on
     type: bool
+    restore_value: true
     initial_value: 'true'
   - id: global_boiler_target_temp
     type: int
+    restore_value: true
     initial_value: '${default_target_temp}'
   - id: global_boiler_power_level
     type: int
+    restore_value: true
     initial_value: '${default_power_level}' # 1=700, 2=1300, 3=2000
+  - id: global_bst_enabled
+    type: bool
+    restore_value: true
+    initial_value: '${default_bst_enabled}'
+  # Timer start time is NOT part of the remembered/boot-behavior set — it is
+  # always just whatever the boiler last reported over UART this power cycle.
   - id: global_timer_hours
     type: int
     initial_value: '${default_timer_hours}'
@@ -339,10 +362,16 @@ switch:
     lambda: |-
       return id(bst_active).state;
     turn_on_action:
+      - globals.set:
+          id: global_bst_enabled
+          value: 'true'
       - uart.write: !lambda |-
           return boiler_build_bst_packet(true);
-      - logger.log: "MQTT/HA: BST Turned ON"    
+      - logger.log: "MQTT/HA: BST Turned ON"
     turn_off_action:
+      - globals.set:
+          id: global_bst_enabled
+          value: 'false'
       - uart.write: !lambda |-
           return boiler_build_bst_packet(false);
       - logger.log: "MQTT/HA: BST Turned OFF"
@@ -363,11 +392,30 @@ select:
     set_action:
       - lambda: |-
           if (x == BOILER_STR_MODE_TIMER) {
-            id(send_boiler_timer).execute();            
+            id(send_boiler_timer).execute();
           } else {
             boiler_set_power_level(x);
             id(send_boiler_command).execute();
           }
+
+  # Controls what happens on ESP boot (see apply_boiler_boot_behavior):
+  # "Default" pushes nothing — main power/mode/temp/BST simply repopulate from
+  # the boiler's own next UART status packet. "Last State" re-applies the
+  # persisted globals (last known main power/mode/temp/BST before the reboot).
+  - platform: template
+    name: "Boiler Boot Behavior"
+    id: boiler_boot_behavior
+    entity_category: config
+    icon: "mdi:restart-alert"
+    optimistic: true
+    restore_value: true
+    initial_option: "Last State"
+    options:
+      - "Default"
+      - "Last State"
+    set_action:
+      - lambda: |-
+          id(boiler_boot_behavior).publish_state(x);
 
 # 3. Temperature slider
 number:
@@ -451,6 +499,38 @@ script:
       #- delay: 200ms
       #- uart.write: !lambda |-
           #return boiler_build_state_request();
+  - id: send_boiler_bst
+    then:
+      - uart.write: !lambda |-
+          return boiler_build_bst_packet(id(global_bst_enabled));
+
+  # Runs once at boot. "Default" pushes nothing — main power/mode/temp/BST are
+  # left as whatever they powered up with and simply repopulate from the
+  # boiler's own next UART status packet. "Last State" waits boot_settings_delay
+  # for the boiler's controller to finish powering up, then re-applies the
+  # persisted globals (last known main power/mode/temp/BST before the reboot)
+  # back onto the boiler and the HA controls.
+  - id: apply_boiler_boot_behavior
+    then:
+      - if:
+          condition:
+            lambda: 'return id(boiler_boot_behavior).current_option() == "Last State";'
+          then:
+            - lambda: 'boiler_capture_boot_state();'
+            - delay: ${boot_settings_delay}
+            - lambda: 'boiler_apply_boot_state();'
+            - script.execute: send_boiler_command
+            - delay: ${command_delay}
+            - if:
+                condition:
+                  lambda: 'return (uint8_t)id(global_boiler_power_level) == BOILER_MODE_TIMER;'
+                then:
+                  - script.execute: send_boiler_timer
+                  - script.wait: send_boiler_timer
+                  - delay: ${command_delay}
+            - script.execute: send_boiler_bst
+          else:
+            - logger.log: "Boot behavior: Default — no settings pushed; boiler state will sync from its next UART status packet"
  
 text:
   - platform: template

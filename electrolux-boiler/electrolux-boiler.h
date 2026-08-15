@@ -100,6 +100,26 @@ static const char* boiler_calc_temp_trend(float cur_t, uint8_t mode, bool heatin
 
 // ─── Main Functions ───────────────────────────────────────────────────────────
 
+static bool boiler_boot_state_captured = false;
+static bool boiler_boot_power_on;
+static int boiler_boot_target_temp;
+static int boiler_boot_power_level;
+static bool boiler_boot_bst_enabled;
+
+void boiler_capture_boot_state() {
+    boiler_boot_power_on = id(global_boiler_power_on);
+    boiler_boot_target_temp = id(global_boiler_target_temp);
+    boiler_boot_power_level = id(global_boiler_power_level);
+    boiler_boot_bst_enabled = id(global_bst_enabled);
+    boiler_boot_state_captured = true;
+
+    ESP_LOGI(TAG_STATE, "Last State captured: power=%s level=%d temp=%d bst=%s",
+             boiler_boot_power_on ? "ON" : "OFF",
+             boiler_boot_power_level,
+             boiler_boot_target_temp,
+             boiler_boot_bst_enabled ? "ON" : "OFF");
+}
+
 void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<uint8_t>& bytes) {
     UARTDebug::log_hex(direction, bytes, ':');
 
@@ -148,7 +168,8 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     id(boiler_switch).publish_state(id(global_boiler_power_on));
 
     // Bacteria Stop Technology
-    id(bst_active).publish_state(bytes[BOILER_RX_IDX_BST] == BOILER_BST_ACTIVE);
+    id(global_bst_enabled) = (bytes[BOILER_RX_IDX_BST] == BOILER_BST_ACTIVE);
+    id(bst_active).publish_state(id(global_bst_enabled));
 
     // Smart Heating Detector: heating when cur_t is below tar_t by threshold
     id(is_heating).publish_state(heating);
@@ -167,9 +188,17 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
     id(timer_human).publish_state(time_buf);
 
     std::string raw_string = boiler_bytes_to_dec_str(bytes);
-    
+
     boiler_log_rx(bytes, bytes[BOILER_RX_IDX_CS]);  // Log RX packet on RX tag for easy comparison with outgoing packets
     id(raw_packet_history).publish_state(raw_string);
+
+    // Full parsed-state dump — every received status packet, on its own tag so it
+    // can be filtered independently of the raw hex/dec RX log above.
+    ESP_LOGI(TAG_STATE, "State: power=%s level=%d temp=%d bst=%s",
+             id(global_boiler_power_on) ? "ON" : "OFF",
+             id(global_boiler_power_level),
+             id(global_boiler_target_temp),
+             id(global_bst_enabled) ? "ON" : "OFF");
 }
 
 // Find the mode map entry whose label matches `x` and apply its level to the global.
@@ -196,6 +225,36 @@ void boiler_update_energy() {
         id(global_total_energy_wh) += BOILER_WH_PER_INTERVAL(boiler_get_power_watts());
     id(boiler_power_w).publish_state(id(is_heating).state ? (float)boiler_get_power_watts() : 0.0f);
     id(boiler_total_energy).publish_state(id(global_total_energy_wh) / BOILER_WH_TO_KWH);
+}
+
+// Re-apply the persisted last-known settings — main power, power mode, target
+// temp, BST — to the globals and HA controls. Called once at boot, after
+// boot_settings_delay, by apply_boiler_boot_behavior when "Boiler Boot
+// Behavior" is set to "Last State". Timer start time is intentionally not
+// included: it isn't part of the remembered set and is always just whatever
+// the boiler last reported over UART this power cycle. The YAML automation
+// sends the UART commands afterward so it can sequence them with delays.
+void boiler_apply_boot_state() {
+    if (boiler_boot_state_captured) {
+        id(global_boiler_power_on) = boiler_boot_power_on;
+        id(global_boiler_target_temp) = boiler_boot_target_temp;
+        id(global_boiler_power_level) = boiler_boot_power_level;
+        id(global_bst_enabled) = boiler_boot_bst_enabled;
+    }
+
+    id(boiler_switch).publish_state(id(global_boiler_power_on));
+    id(boiler_target_temp_set).publish_state((float)id(global_boiler_target_temp));
+    id(bst_active).publish_state(id(global_bst_enabled));
+
+    auto it = BOILER_MODE_MAP.find((uint8_t)id(global_boiler_power_level));
+    if (it != BOILER_MODE_MAP.end())
+        id(boiler_mode_switch).publish_state(it->second.label);
+
+    ESP_LOGI(TAG_STATE, "Last State applied: power=%s level=%d temp=%d bst=%s",
+             id(global_boiler_power_on) ? "ON" : "OFF",
+             id(global_boiler_power_level),
+             id(global_boiler_target_temp),
+             id(global_bst_enabled) ? "ON" : "OFF");
 }
 
 std::vector<uint8_t> boiler_build_tx_packet() {
