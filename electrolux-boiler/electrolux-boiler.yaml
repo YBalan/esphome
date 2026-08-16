@@ -44,7 +44,7 @@ substitutions:
   wifi_rssi_interval: 30s  # How often WiFi signal strength is sampled
   clock_sync_interval: 24h # How often the boiler clock is re-synced to NTP
   energy_interval: 30s     # Energy accumulation cadence — should match boiler update rate (~30 s)
-  boot_settings_delay: 5s  # Grace period after boot before re-sending settings — lets the boiler's own controller finish powering up first
+  boot_settings_delay: 5s  # Grace period after the first status packet before re-sending settings
   command_delay: 300ms     # Gap between boiler UART commands during boot-state restore
 
   # Timer defaults — scheduled clock time (HH:MM) at which the boiler will begin heating
@@ -60,9 +60,6 @@ esphome:
     - priority: 800
       then:
         - logger.log: "ON_BOOT IS WORKING"
-    - priority: -100 # Run last, once WiFi/API/MQTT setup has been kicked off
-      then:
-        - script.execute: apply_boiler_boot_behavior
         
 esp32:
   board: esp32dev
@@ -286,7 +283,7 @@ button:
         - script.execute: send_boiler_timer
     # WiFi Reset Button
   - platform: factory_reset
-    name: "Boiler Reset Device WiFi"
+    name: "Boiler Factory Reset"
     id: reset_wifi_btn
     icon: "mdi:wifi-reset"
   # Forget only the saved WiFi credentials and reboot; on restart the device
@@ -504,7 +501,7 @@ script:
       - uart.write: !lambda |-
           return boiler_build_bst_packet(id(global_bst_enabled));
 
-  # Runs once at boot. "Default" pushes nothing — main power/mode/temp/BST are
+  # Runs once after the first valid UART status packet. "Default" pushes nothing — main power/mode/temp/BST are
   # left as whatever they powered up with and simply repopulate from the
   # boiler's own next UART status packet. "Last State" waits boot_settings_delay
   # for the boiler's controller to finish powering up, then re-applies the
@@ -516,7 +513,6 @@ script:
           condition:
             lambda: 'return id(boiler_boot_behavior).current_option() == "Last State";'
           then:
-            - lambda: 'boiler_capture_boot_state();'
             - delay: ${boot_settings_delay}
             - lambda: 'boiler_apply_boot_state();'
             - script.execute: send_boiler_command

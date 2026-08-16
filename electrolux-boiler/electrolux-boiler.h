@@ -101,6 +101,7 @@ static const char* boiler_calc_temp_trend(float cur_t, uint8_t mode, bool heatin
 // ─── Main Functions ───────────────────────────────────────────────────────────
 
 static bool boiler_boot_state_captured = false;
+static bool boiler_first_status_handled = false;
 static bool boiler_boot_power_on;
 static int boiler_boot_target_temp;
 static int boiler_boot_power_level;
@@ -134,6 +135,12 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
         ESP_LOGW(TAG_RX, "Checksum Error! Expected %02X (%d), got %02X (%d)",
                  checksum, checksum, bytes[BOILER_RX_IDX_CS], bytes[BOILER_RX_IDX_CS]);
         return;
+    }
+
+    const bool first_status_packet = !boiler_first_status_handled;
+    if (first_status_packet) {
+        boiler_capture_boot_state();
+        boiler_first_status_handled = true;
     }
 
     float cur_t = bytes[BOILER_RX_IDX_CUR_T];
@@ -199,6 +206,9 @@ void boiler_parse_rx_packet(esphome::uart::UARTDirection direction, std::vector<
              id(global_boiler_power_level),
              id(global_boiler_target_temp),
              id(global_bst_enabled) ? "ON" : "OFF");
+
+    if (first_status_packet)
+        id(apply_boiler_boot_behavior).execute();
 }
 
 // Find the mode map entry whose label matches `x` and apply its level to the global.
@@ -234,6 +244,7 @@ void boiler_update_energy() {
 // included: it isn't part of the remembered set and is always just whatever
 // the boiler last reported over UART this power cycle. The YAML automation
 // sends the UART commands afterward so it can sequence them with delays.
+// TODO: Think and Debug why power_on and bst_enabled has the wrong values after boot.
 void boiler_apply_boot_state() {
     if (boiler_boot_state_captured) {
         id(global_boiler_power_on) = boiler_boot_power_on;
