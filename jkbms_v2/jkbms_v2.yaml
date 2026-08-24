@@ -399,9 +399,9 @@ binary_sensor:
         return false;
       }
       const float current_a = id(bms_a).state;
-      if (!active && current_a >= 5.0f) {
+      if (!active && current_a >= 7.0f) {
         active = true;
-      } else if (active && current_a <= 3.0f) {
+      } else if (active && current_a <= 5.0f) {
         active = false;
       }
       return active;
