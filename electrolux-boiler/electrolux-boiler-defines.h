@@ -100,6 +100,7 @@
 #define TAG_TX      "boiler_tx"   // UART transmit: outgoing command packets
 #define TAG_CLOCK   "clock_sync"  // NTP-to-boiler clock synchronisation
 #define TAG_TREND   "temp_trend"  // Temperature trend calculation
+#define TAG_STATE   "boiler_state" // Full parsed-state dump, logged on every received status packet
 
 // ─── Mode Map ─────────────────────────────────────────────────────────────────
 // Holds all per-mode data in one place: display label, internal power level,

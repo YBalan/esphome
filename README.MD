@@ -13,10 +13,11 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 | [`electrolux-boiler-remote/`](electrolux-boiler-remote/) | Boiler Rotary Remote | ESP32 | TFT display + rotary encoder for local boiler control |
 | [`jbdbms_v2/`](jbdbms_v2/) | JBD / XiaoXiang BMS | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
 | [`jkbms_v2/`](jkbms_v2/) | JK-BMS (Jikong) | ESP32 | BLE → MQTT bridge with OLED display and relay automation |
+| [`RS232/Logicpower/`](RS232/Logicpower/) | LogicPower LPM-PSW-4500VA UPS | ESP32 | RS232 telemetry gateway using a MAX3232 converter and native PIPSolar integration |
 | [`garage/generator/`](garage/generator/) | Garage Generator Controller | ESP32 | Generator control + PZEM telemetry + RF learn/transmit + mirrored servos |
+| [`garage/charger/`](garage/charger/) | Generator Battery Charger | ESP32 | Voltage/temperature-gated relay charger for a generator's idle battery, with OLED status (`garage-charger-esp32-device.yaml`; the ESP8266 variant is obsolete - see below) |
 | [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
 | [`ai-helper/`](ai-helper/) | AI Helper (Semaphore + Mouse Mover) | ESP32 | RGB/buzzer status semaphore for coding-agent hooks, servo-driven mouse mover |
-| [`garage/charger/`](garage/charger/) | Generator Battery Charger | ESP32 | Voltage/temperature-gated relay charger for a generator's idle battery, with OLED status (`garage-charger-esp32-device.yaml`; the ESP8266 variant is obsolete - see below) |
 
 ---
 
@@ -91,6 +92,21 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 - MQTT topic prefix: `jkbms/`
 
 📁 [jkbms_v2/README.md](jkbms_v2/README.md)
+
+---
+
+## RS232/Logicpower
+
+**LogicPower LPM-PSW-4500VA UPS gateway** for Home Assistant over its RS232 service port.
+
+- ESP32 UART connection through a MAX3232 RS232-to-TTL converter at 2400 baud, 8N1
+- Native ESPHome PIPSolar package currently active, exposing live AC, battery, load, temperature, mode, warning, fault, rating, and raw protocol entities
+- Potentially unsafe PIPSolar configuration switches are disabled by default; 48 V-oriented voltage/current outputs are not exposed for this 24 V UPS
+- Custom Megatec/Q1 parser and command package retained as a fallback if runtime responses show that the UPS is not PIP-compatible
+- Native Home Assistant API, OTA updates, fallback AP, SNTP time, and WiFi diagnostics
+- MAX3232 TTL output voltage must be verified before connecting it to the ESP32's non-5 V-tolerant RX pin
+
+📁 [RS232/Logicpower/README.md](RS232/Logicpower/README.md)
 
 ---
 

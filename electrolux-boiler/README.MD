@@ -78,6 +78,7 @@ ESPHome configuration and 3D-printable enclosure parts for integrating an Electr
 | Boiler Timer Start Minute | Number (box) | 0 – 55, step 5 |
 | Sync Boiler Clock | Button | Sends current NTP time to boiler |
 | Run Boiler Timer | Button | Syncs clock → sends timer start packet → requests state |
+| Boiler Boot Behavior | Select | `Default` · `Last State` — see [Boot Behavior](#boot-behavior) below |
 | Reset Device WiFi | Button | Factory reset (WiFi credentials) |
 | Boiler Raw Command | Text input | Send raw decimal packet, prefix `C:` to auto-append checksum |
 
@@ -91,6 +92,15 @@ The timer is a **scheduled start time** (not a countdown). When activated:
 The boiler will start heating at the scheduled clock time using the current target temperature.
 
 > ⚠️ **Timer mode is treated as not-heating**: while the boiler reports `Timer` mode it is idle (waiting for the scheduled start), so `is_heating` is always `false`. This means no energy is accumulated and the temperature trend is clamped to `Stable` or `Down`.
+
+### Boot Behavior
+
+Main power, power mode, target temp, and BST — the 4 "remembered" settings — are tracked in globals that are kept in sync with the boiler (every RX status packet and every user command) and persisted to flash. Timer start time is *not* remembered; it's always just whatever the boiler last reported over UART. `Boiler Boot Behavior` decides what happens to the 4 remembered settings on every ESP32 boot:
+
+- **Default** — pushes nothing to the boiler; main power/mode/temp/BST simply repopulate from the boiler's own next UART status packet (~30 s cadence)
+- **Last State** — waits a few seconds (`boot_settings_delay`, default 5 s) for the boiler's controller to finish powering up, then re-applies the persisted values from before the reboot
+
+This matters because the boiler's own controller can lose its settings (e.g. a mains outage) independently of the ESP32, which may stay powered via its USB supply — see the note at the top of this doc. With "Last State", the HA controls (power switch, mode select, temp number, BST switch) are updated to match the re-applied values.
 
 ### Energy Tracking
 

@@ -1,0 +1,29 @@
+substitutions:
+  device_name: logicpower-ups
+  friendly_name: LogicPower UPS
+  ap_ssid: AP-LogicPower-UPS
+  ap_password: password
+  time_zone: Europe/Kyiv
+  wifi_rssi_update: 60s
+  ups_tx_pin: GPIO17
+  ups_rx_pin: GPIO16
+  ups_update_interval: 5s
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}  
+  #includes:
+  #  - logicpower-ups-megatec.h
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+packages:
+  common: !include logicpower-ups-common.yaml
+  #megatec: !include logicpower-ups-megatec.yaml
+  pipsolar: !include logicpower-ups-pipsolar.yaml
+
+api:
+  reboot_timeout: 0s
