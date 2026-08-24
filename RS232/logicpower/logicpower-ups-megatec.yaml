@@ -1,0 +1,285 @@
+uart:
+  id: ups_uart
+  tx_pin: ${ups_tx_pin}
+  rx_pin: ${ups_rx_pin}
+  baud_rate: 2400
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      delimiter: "\r"
+    sequence:
+      - lambda: |-
+          logicpower_megatec::parse_response(direction, bytes);
+
+interval:
+  - interval: ${ups_update_interval}
+    startup_delay: 2s
+    then:
+      - uart.write: "Q1\r"
+  - interval: 10min
+    startup_delay: 5s
+    then:
+      - uart.write: "F\r"
+  - interval: 1h
+    startup_delay: 8s
+    then:
+      - uart.write: "I\r"
+
+sensor:
+  - platform: template
+    id: ups_input_voltage
+    name: ${friendly_name} Input Voltage
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+  - platform: template
+    id: ups_input_fault_voltage
+    name: ${friendly_name} Input Fault Voltage
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+  - platform: template
+    id: ups_output_voltage
+    name: ${friendly_name} Output Voltage
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+  - platform: template
+    id: ups_output_load
+    name: ${friendly_name} Output Load
+    unit_of_measurement: "%"
+    state_class: measurement
+    accuracy_decimals: 0
+  - platform: template
+    id: ups_input_frequency
+    name: ${friendly_name} Input Frequency
+    unit_of_measurement: Hz
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 1
+  - platform: template
+    id: ups_battery_voltage
+    name: ${friendly_name} Battery Voltage
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 2
+  - platform: template
+    id: ups_temperature
+    name: ${friendly_name} Temperature
+    unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+  - platform: template
+    id: ups_rated_output_voltage
+    name: ${friendly_name} Rated Output Voltage
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 1
+    entity_category: diagnostic
+  - platform: template
+    id: ups_rated_output_current
+    name: ${friendly_name} Rated Output Current
+    unit_of_measurement: A
+    device_class: current
+    accuracy_decimals: 1
+    entity_category: diagnostic
+  - platform: template
+    id: ups_rated_battery_voltage
+    name: ${friendly_name} Rated Battery Voltage
+    unit_of_measurement: V
+    device_class: voltage
+    accuracy_decimals: 1
+    entity_category: diagnostic
+  - platform: template
+    id: ups_rated_input_frequency
+    name: ${friendly_name} Rated Input Frequency
+    unit_of_measurement: Hz
+    device_class: frequency
+    accuracy_decimals: 1
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: template
+    id: ups_connected
+    name: ${friendly_name} Connected
+    device_class: connectivity
+    entity_category: diagnostic
+    lambda: return logicpower_megatec::is_connected();
+  - platform: template
+    id: ups_utility_fail
+    name: ${friendly_name} Utility Fail
+    device_class: problem
+  - platform: template
+    id: ups_battery_low
+    name: ${friendly_name} Battery Low
+    device_class: battery
+  - platform: template
+    id: ups_bypass_active
+    name: ${friendly_name} Bypass Or AVR Active
+  - platform: template
+    id: ups_failed
+    name: ${friendly_name} Failed
+    device_class: problem
+  - platform: template
+    id: ups_standby_type
+    name: ${friendly_name} Standby Type
+    entity_category: diagnostic
+  - platform: template
+    id: ups_test_active
+    name: ${friendly_name} Battery Test Active
+    device_class: running
+  - platform: template
+    id: ups_shutdown_active
+    name: ${friendly_name} Shutdown Active
+    device_class: running
+  - platform: template
+    id: ups_beeper_on
+    name: ${friendly_name} Beeper On
+
+text_sensor:
+  - platform: template
+    id: ups_status
+    name: ${friendly_name} Status
+    icon: mdi:power-plug-battery
+  - platform: template
+    id: ups_identification
+    name: ${friendly_name} Identification
+    entity_category: diagnostic
+  - platform: template
+    id: ups_ratings
+    name: ${friendly_name} Ratings Response
+    entity_category: diagnostic
+  - platform: template
+    id: ups_last_response
+    name: ${friendly_name} Last Response
+    entity_category: diagnostic
+  - platform: template
+    id: ups_last_command
+    name: ${friendly_name} Last Command
+    entity_category: diagnostic
+  - platform: template
+    id: ups_last_command_result
+    name: ${friendly_name} Last Command Result
+    entity_category: diagnostic
+
+number:
+  - platform: template
+    id: ups_test_minutes
+    name: ${friendly_name} Battery Test Minutes
+    min_value: 1
+    max_value: 99
+    step: 1
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: ups_shutdown_delay_minutes
+    name: ${friendly_name} Shutdown Delay Minutes
+    min_value: 1
+    max_value: 10
+    step: 1
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    entity_category: config
+  - platform: template
+    id: ups_restart_delay_minutes
+    name: ${friendly_name} Restart Delay Minutes
+    min_value: 1
+    max_value: 9999
+    step: 1
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    entity_category: config
+
+button:
+  - platform: template
+    name: ${friendly_name} Refresh Status
+    icon: mdi:refresh
+    on_press:
+      - uart.write: "Q1\r"
+  - platform: template
+    name: ${friendly_name} Query Ratings
+    entity_category: diagnostic
+    on_press:
+      - uart.write: "F\r"
+  - platform: template
+    name: ${friendly_name} Query Identification
+    entity_category: diagnostic
+    on_press:
+      - uart.write: "I\r"
+  - platform: template
+    name: ${friendly_name} Toggle Beeper
+    icon: mdi:volume-high
+    on_press:
+      - lambda: logicpower_megatec::send_command("Q\r", "Toggle beeper");
+  - platform: template
+    name: ${friendly_name} Start Quick Battery Test
+    icon: mdi:battery-sync
+    on_press:
+      - lambda: logicpower_megatec::send_command("T\r", "Start quick battery test");
+  - platform: template
+    name: ${friendly_name} Start Timed Battery Test
+    icon: mdi:battery-clock
+    on_press:
+      - lambda: |-
+          const std::string command = "T" + logicpower_megatec::two_digits((int) id(ups_test_minutes).state) + "\r";
+          logicpower_megatec::send_command(command, "Start timed battery test");
+  - platform: template
+    name: ${friendly_name} Start Deep Battery Test
+    icon: mdi:battery-heart-variant
+    on_press:
+      - lambda: logicpower_megatec::send_command("TL\r", "Start deep battery test");
+  - platform: template
+    name: ${friendly_name} Stop Battery Test
+    icon: mdi:battery-remove
+    on_press:
+      - lambda: logicpower_megatec::send_command("CT\r", "Stop battery test");
+  - platform: template
+    name: ${friendly_name} Cancel Shutdown Or Load On
+    icon: mdi:power-on
+    entity_category: config
+    on_press:
+      - lambda: logicpower_megatec::send_command("C\r", "Cancel shutdown or load on");
+  - platform: template
+    name: ${friendly_name} Schedule Shutdown Return On Mains
+    icon: mdi:power-cycle
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const std::string command = "S" + logicpower_megatec::two_digits((int) id(ups_shutdown_delay_minutes).state) + "\r";
+          logicpower_megatec::send_command(command, "Schedule shutdown; return on mains");
+  - platform: template
+    name: ${friendly_name} Schedule Shutdown Timed Restart
+    icon: mdi:restart-alert
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const std::string command = "S" + logicpower_megatec::two_digits((int) id(ups_shutdown_delay_minutes).state)
+                                      + "R" + logicpower_megatec::four_digits((int) id(ups_restart_delay_minutes).state) + "\r";
+          logicpower_megatec::send_command(command, "Schedule shutdown and timed restart");
+  - platform: template
+    name: ${friendly_name} Schedule Shutdown Stay Off
+    icon: mdi:power-off
+    entity_category: config
+    on_press:
+      - lambda: |-
+          const std::string command = "S" + logicpower_megatec::two_digits((int) id(ups_shutdown_delay_minutes).state) + "R0000\r";
+          logicpower_megatec::send_command(command, "Schedule shutdown and stay off");
+  - platform: template
+    name: ${friendly_name} Load Off Now
+    icon: mdi:power-plug-off
+    entity_category: config
+    on_press:
+      - lambda: logicpower_megatec::send_command("S00R0000\r", "Load off now");

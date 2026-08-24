@@ -1,0 +1,316 @@
+uart:
+  id: ups_uart
+  tx_pin: ${ups_tx_pin}
+  rx_pin: ${ups_rx_pin}
+  baud_rate: 2400
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+
+pipsolar:
+  - id: logicpower_pipsolar
+    uart_id: ups_uart
+    update_interval: ${ups_update_interval}
+
+sensor:
+  - platform: pipsolar
+    pipsolar_id: logicpower_pipsolar
+    grid_voltage:
+      name: ${friendly_name} Grid Voltage
+    grid_frequency:
+      name: ${friendly_name} Grid Frequency
+    ac_output_voltage:
+      name: ${friendly_name} AC Output Voltage
+    ac_output_frequency:
+      name: ${friendly_name} AC Output Frequency
+    ac_output_apparent_power:
+      name: ${friendly_name} AC Output Apparent Power
+    ac_output_active_power:
+      name: ${friendly_name} AC Output Active Power
+    output_load_percent:
+      name: ${friendly_name} Output Load
+    bus_voltage:
+      name: ${friendly_name} Bus Voltage
+    battery_voltage:
+      name: ${friendly_name} Battery Voltage
+    battery_charging_current:
+      name: ${friendly_name} Battery Charging Current
+    battery_capacity_percent:
+      name: ${friendly_name} Battery Capacity
+    inverter_heat_sink_temperature:
+      name: ${friendly_name} Heat Sink Temperature
+    battery_discharge_current:
+      name: ${friendly_name} Battery Discharge Current
+    battery_voltage_offset_for_fans_on:
+      name: ${friendly_name} Fan Voltage Offset
+      entity_category: diagnostic
+      disabled_by_default: true
+    eeprom_version:
+      name: ${friendly_name} EEPROM Version
+      entity_category: diagnostic
+      disabled_by_default: true
+    pv_input_current_for_battery:
+      name: ${friendly_name} PV Input Current
+      entity_category: diagnostic
+      disabled_by_default: true
+    pv_input_voltage:
+      name: ${friendly_name} PV Input Voltage
+      entity_category: diagnostic
+      disabled_by_default: true
+    battery_voltage_scc:
+      name: ${friendly_name} SCC Battery Voltage
+      entity_category: diagnostic
+      disabled_by_default: true
+    pv_charging_power:
+      name: ${friendly_name} PV Charging Power
+      entity_category: diagnostic
+      disabled_by_default: true
+
+    grid_rating_voltage:
+      name: ${friendly_name} Grid Rating Voltage
+      entity_category: diagnostic
+    grid_rating_current:
+      name: ${friendly_name} Grid Rating Current
+      entity_category: diagnostic
+    ac_output_rating_voltage:
+      name: ${friendly_name} AC Output Rating Voltage
+      entity_category: diagnostic
+    ac_output_rating_frequency:
+      name: ${friendly_name} AC Output Rating Frequency
+      entity_category: diagnostic
+    ac_output_rating_current:
+      name: ${friendly_name} AC Output Rating Current
+      entity_category: diagnostic
+    ac_output_rating_apparent_power:
+      name: ${friendly_name} AC Output Rating Apparent Power
+      entity_category: diagnostic
+    ac_output_rating_active_power:
+      name: ${friendly_name} AC Output Rating Active Power
+      entity_category: diagnostic
+    battery_rating_voltage:
+      name: ${friendly_name} Battery Rating Voltage
+      entity_category: diagnostic
+    battery_recharge_voltage:
+      name: ${friendly_name} Battery Recharge Voltage
+      entity_category: diagnostic
+    battery_under_voltage:
+      name: ${friendly_name} Battery Under Voltage
+      entity_category: diagnostic
+    battery_bulk_voltage:
+      name: ${friendly_name} Battery Bulk Voltage
+      entity_category: diagnostic
+    battery_float_voltage:
+      name: ${friendly_name} Battery Float Voltage
+      entity_category: diagnostic
+    battery_type:
+      name: ${friendly_name} Battery Type Code
+      entity_category: diagnostic
+    current_max_ac_charging_current:
+      name: ${friendly_name} Maximum AC Charging Current
+      entity_category: diagnostic
+    current_max_charging_current:
+      name: ${friendly_name} Maximum Charging Current
+      entity_category: diagnostic
+    input_voltage_range:
+      name: ${friendly_name} Input Voltage Range Code
+      entity_category: diagnostic
+    output_source_priority:
+      name: ${friendly_name} Output Source Priority Code
+      entity_category: diagnostic
+    charger_source_priority:
+      name: ${friendly_name} Charger Source Priority Code
+      entity_category: diagnostic
+    parallel_max_num:
+      name: ${friendly_name} Parallel Maximum Units
+      entity_category: diagnostic
+      disabled_by_default: true
+    machine_type:
+      name: ${friendly_name} Machine Type Code
+      entity_category: diagnostic
+    topology:
+      name: ${friendly_name} Topology Code
+      entity_category: diagnostic
+    output_mode:
+      name: ${friendly_name} Output Mode Code
+      entity_category: diagnostic
+    battery_redischarge_voltage:
+      name: ${friendly_name} Battery Redischarge Voltage
+      entity_category: diagnostic
+    pv_ok_condition_for_parallel:
+      name: ${friendly_name} PV Parallel Condition Code
+      entity_category: diagnostic
+      disabled_by_default: true
+    pv_power_balance:
+      name: ${friendly_name} PV Power Balance Code
+      entity_category: diagnostic
+      disabled_by_default: true
+
+binary_sensor:
+  - platform: pipsolar
+    pipsolar_id: logicpower_pipsolar
+    load_status:
+      name: ${friendly_name} Load Enabled
+    charging_status:
+      name: ${friendly_name} Charging
+      device_class: battery_charging
+    ac_charging_status:
+      name: ${friendly_name} AC Charging
+      device_class: battery_charging
+    scc_charging_status:
+      name: ${friendly_name} SCC Charging
+      device_class: battery_charging
+      disabled_by_default: true
+    switch_on:
+      name: ${friendly_name} Inverter On
+    warnings_present:
+      name: ${friendly_name} Warnings Present
+      device_class: problem
+    faults_present:
+      name: ${friendly_name} Faults Present
+      device_class: problem
+    warning_line_fail:
+      name: ${friendly_name} Line Fail Warning
+      device_class: problem
+    warning_over_temperature:
+      name: ${friendly_name} Over Temperature Warning
+      device_class: problem
+    warning_fan_lock:
+      name: ${friendly_name} Fan Lock Warning
+      device_class: problem
+    warning_battery_voltage_high:
+      name: ${friendly_name} Battery Voltage High Warning
+      device_class: problem
+    warning_battery_low_alarm:
+      name: ${friendly_name} Battery Low Warning
+      device_class: problem
+    warning_battery_under_shutdown:
+      name: ${friendly_name} Battery Under Shutdown Warning
+      device_class: problem
+    warning_over_load:
+      name: ${friendly_name} Overload Warning
+      device_class: problem
+    fault_inverter_fault:
+      name: ${friendly_name} Inverter Fault
+      device_class: problem
+    fault_bus_over:
+      name: ${friendly_name} Bus Over Voltage Fault
+      device_class: problem
+    fault_bus_under:
+      name: ${friendly_name} Bus Under Voltage Fault
+      device_class: problem
+    fault_bus_soft_fail:
+      name: ${friendly_name} Bus Soft Start Fault
+      device_class: problem
+    fault_inverter_voltage_too_low:
+      name: ${friendly_name} Inverter Voltage Low Fault
+      device_class: problem
+    fault_inverter_voltage_too_high:
+      name: ${friendly_name} Inverter Voltage High Fault
+      device_class: problem
+    fault_inverter_over_current:
+      name: ${friendly_name} Inverter Over Current Fault
+      device_class: problem
+    fault_inverter_soft_failed:
+      name: ${friendly_name} Inverter Soft Start Fault
+      device_class: problem
+    fault_self_test_failed:
+      name: ${friendly_name} Self Test Fault
+      device_class: problem
+    fault_battery_open:
+      name: ${friendly_name} Battery Open Fault
+      device_class: problem
+    fault_current_sensor_failed:
+      name: ${friendly_name} Current Sensor Fault
+      device_class: problem
+    fault_battery_short:
+      name: ${friendly_name} Battery Short Fault
+      device_class: problem
+    fault_code:
+      name: ${friendly_name} Fault Code Present
+      device_class: problem
+    configuration_status:
+      name: ${friendly_name} Configuration Changed
+      entity_category: diagnostic
+      disabled_by_default: true
+    add_sbu_priority_version:
+      name: ${friendly_name} SBU Priority Version
+      entity_category: diagnostic
+      disabled_by_default: true
+    scc_firmware_version:
+      name: ${friendly_name} SCC Firmware Version Flag
+      entity_category: diagnostic
+      disabled_by_default: true
+    battery_voltage_to_steady_while_charging:
+      name: ${friendly_name} Battery Voltage Steady While Charging
+      entity_category: diagnostic
+      disabled_by_default: true
+    charging_to_floating_mode:
+      name: ${friendly_name} Charging To Float
+      entity_category: diagnostic
+      disabled_by_default: true
+    dustproof_installed:
+      name: ${friendly_name} Dustproof Installed
+      entity_category: diagnostic
+      disabled_by_default: true
+
+text_sensor:
+  - platform: pipsolar
+    pipsolar_id: logicpower_pipsolar
+    device_mode:
+      name: ${friendly_name} Device Mode
+    last_qpigs:
+      name: ${friendly_name} Last QPIGS Response
+      entity_category: diagnostic
+    last_qpiri:
+      name: ${friendly_name} Last QPIRI Response
+      entity_category: diagnostic
+    last_qmod:
+      name: ${friendly_name} Last QMOD Response
+      entity_category: diagnostic
+    last_qflag:
+      name: ${friendly_name} Last QFLAG Response
+      entity_category: diagnostic
+      disabled_by_default: true
+    last_qpiws:
+      name: ${friendly_name} Last QPIWS Response
+      entity_category: diagnostic
+    last_qt:
+      name: ${friendly_name} Last QT Response
+      entity_category: diagnostic
+      disabled_by_default: true
+    last_qmn:
+      name: ${friendly_name} Last QMN Response
+      entity_category: diagnostic
+      disabled_by_default: true
+
+switch:
+  - platform: pipsolar
+    pipsolar_id: logicpower_pipsolar
+    output_source_priority_utility:
+      name: ${friendly_name} Set Utility Priority
+      entity_category: config
+      disabled_by_default: true
+    output_source_priority_solar:
+      name: ${friendly_name} Set Solar Priority
+      entity_category: config
+      disabled_by_default: true
+    output_source_priority_battery:
+      name: ${friendly_name} Set Battery Priority
+      entity_category: config
+      disabled_by_default: true
+    output_source_priority_hybrid:
+      name: ${friendly_name} Set Hybrid Priority
+      entity_category: config
+      disabled_by_default: true
+    input_voltage_range:
+      name: ${friendly_name} Appliance Input Range
+      entity_category: config
+      disabled_by_default: true
+    pv_ok_condition_for_parallel:
+      name: ${friendly_name} PV Parallel Condition
+      entity_category: config
+      disabled_by_default: true
+    pv_power_balance:
+      name: ${friendly_name} PV Power Balance
+      entity_category: config
+      disabled_by_default: true
