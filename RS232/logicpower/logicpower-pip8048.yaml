@@ -1,7 +1,7 @@
 substitutions:
   device_name: logicpower-ups
   friendly_name: LogicPower UPS
-  ap_ssid: AP-LogicPower-UPS
+  ap_ssid: AP-LogicPower
   ap_password: password
   time_zone: Europe/Kyiv
   wifi_rssi_update: 60s
@@ -13,8 +13,9 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  includes:
-    - logicpower-ups-megatec.h
+  project:
+    name: syssi.esphome-pipsolar
+    version: "322e2b2"
 
 esp32:
   board: esp32dev
@@ -23,8 +24,7 @@ esp32:
 
 packages:
   common: !include logicpower-ups-common.yaml
-  megatec: !include logicpower-ups-megatec.yaml
-  # pipsolar: !include logicpower-ups-pipsolar.yaml
+  pip8048: !include logicpower-ups-syssi-pip8048.yaml
 
 api:
   reboot_timeout: 0s

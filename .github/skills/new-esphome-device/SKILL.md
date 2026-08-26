@@ -10,8 +10,8 @@ user-invocable: true
 Every device in this repo is composed from packages. The shared baseline lives in a
 `<device-name>-common.yaml` file and MUST be included by each device via `packages.common`.
 Do not re-declare anything the common package already provides (wifi, ap, captive_portal,
-ota, web_server, http_request, time, logger, debug, wifi-forget button, or the WiFi
-RSSI / WiFi Name / Reset Reason diagnostic sensors).
+ota, web_server, http_request, time, logger, debug, restart/wifi-forget buttons, or the
+WiFi RSSI / WiFi Name / Reset Reason diagnostic sensors).
 
 ## Naming Conventions
 Follow these for all further development so files stay discoverable and includes stay
@@ -34,6 +34,7 @@ The base package **must** be named `<device-name>-common.yaml`.
 - `ota` (esphome platform)
 - `time` (sntp, id `ha_time`, `timezone: ${time_zone}`)
 - `wifi` with fallback `ap` (`${ap_ssid}` / `${ap_password}`), `fast_connect`, `captive_portal`
+- `button`: **Restart Device** (native ESPHome restart button)
 - `button`: **WiFi Forget** (clears stored credentials, reboots into setup AP)
 - `web_server` (port 80) and `http_request` (with watchdog-safe timeouts)
 

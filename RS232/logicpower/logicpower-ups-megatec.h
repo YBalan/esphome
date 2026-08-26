@@ -9,6 +9,7 @@ namespace logicpower_megatec {
 
 static const char *const TAG = "logicpower_megatec";
 static uint32_t last_status_ms = 0;
+static std::string last_wire_command;
 
 inline std::string trim_response(const std::vector<uint8_t> &bytes) {
   std::string response(bytes.begin(), bytes.end());
@@ -20,6 +21,11 @@ inline std::string trim_response(const std::vector<uint8_t> &bytes) {
 
 inline bool is_connected() {
   return last_status_ms != 0 && millis() - last_status_ms < 15000;
+}
+
+inline bool is_command_echo(const std::string &response) {
+  return response == "Q1" || response == "F" || response == "I" ||
+         (!last_wire_command.empty() && response == last_wire_command);
 }
 
 inline void publish_status(const char *flags) {
@@ -112,6 +118,10 @@ inline void parse_response(esphome::uart::UARTDirection direction, std::vector<u
   if (response.empty()) {
     return;
   }
+  if (is_command_echo(response)) {
+    ESP_LOGD(TAG, "Ignored command echo: %s", response.c_str());
+    return;
+  }
 
   id(ups_last_response).publish_state(response);
   if (response.front() == '(' && parse_status(response)) {
@@ -136,6 +146,10 @@ inline void parse_response(esphome::uart::UARTDirection direction, std::vector<u
 
 inline void send_command(const std::string &command, const char *description) {
   id(ups_uart).write_str(command.c_str());
+  last_wire_command = command;
+  while (!last_wire_command.empty() && (last_wire_command.back() == '\r' || last_wire_command.back() == '\n')) {
+    last_wire_command.pop_back();
+  }
   id(ups_last_command).publish_state(description);
   id(ups_last_command_result).publish_state("Sent");
   ESP_LOGI(TAG, "Sent %s", description);
