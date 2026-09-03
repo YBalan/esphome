@@ -250,14 +250,14 @@ sensor:
 
     # Cells: the most important part. Publish if it changed by 0.01V
     min_cell_voltage:
-      name: "Min Cell"
+      name: "BMS Min Cell"
       state_topic: "jkbms/min_c_v"
       filters:
         - delta: 0.01
         - throttle: 5s
         
     max_cell_voltage:
-      name: "Max Cell"
+      name: "BMS Max Cell"
       state_topic: "jkbms/max_c_v"
       filters:
         - delta: 0.01
@@ -283,11 +283,23 @@ sensor:
         
     # Wi-Fi signal level
   - platform: wifi_signal
-    name: "WiFi Signal RSSI"
+    name: "BMS WiFi Signal RSSI"
     id: wifi_rssi
     update_interval: 15s
     state_topic: "jkbms/wifi_rssi"
     force_update: true
+
+  # Wi-Fi channel number. wifi_info has no channel text sensor, so read it
+  # straight off the WiFiComponent.
+  - platform: template
+    name: "BMS WiFi Channel"
+    id: wifi_channel
+    icon: "mdi:wifi"
+    accuracy_decimals: 0
+    update_interval: 15s
+    entity_category: diagnostic
+    state_topic: "jkbms/wifi_channel"
+    lambda: return wifi::global_wifi_component->get_wifi_channel();
 
   # Bluetooth (BLE) signal level from the BMS
   - platform: ble_rssi
@@ -301,7 +313,7 @@ sensor:
       - throttle: 15s # Skip values more often than once every 15 seconds
       
   - platform: template
-    name: "Charging Time Remaining"
+    name: "BMS Charging Time Remaining"
     id: charging_time
     unit_of_measurement: "h"
     state_topic: "jkbms/charging_time_hours"
@@ -312,7 +324,7 @@ sensor:
       
   # Split: Positive values for Charging
   - platform: template
-    name: "Power Charging"
+    name: "BMS Power Charging"
     id: power_in
     unit_of_measurement: "W"
     device_class: power
@@ -323,7 +335,7 @@ sensor:
 
   # Split: Absolute values for Discharging
   - platform: template
-    name: "Power Discharging"
+    name: "BMS Power Discharging"
     id: power_out
     unit_of_measurement: "W"
     device_class: power
@@ -333,7 +345,7 @@ sensor:
       return jkbms_lambdas::get_power_out();
    # Total Energy Charged (kWh)
   - platform: integration
-    name: "Battery Energy In"
+    name: "BMS Battery Energy In"
     sensor: power_in
     time_unit: h
     unit_of_measurement: "kWh"
@@ -347,7 +359,7 @@ sensor:
 
   # Total Energy Discharged (kWh)
   - platform: integration
-    name: "Battery Energy Out"
+    name: "BMS Battery Energy Out"
     sensor: power_out
     time_unit: h
     unit_of_measurement: "kWh"
@@ -692,7 +704,7 @@ text_sensor:
       name: "BMS WiFi Name"
       id: wifi_ssid
       entity_category: diagnostic
-      
+
 # 1. Timer script (controls how long it stays lit)
 script:
   # Initialize SOC limits based on actual BMS total capacity

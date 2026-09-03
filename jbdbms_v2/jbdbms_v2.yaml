@@ -295,6 +295,18 @@ sensor:
     state_topic: "jbdbms/wifi_rssi"
     force_update: true
 
+  # Wi-Fi channel number. wifi_info has no channel text sensor, so read it
+  # straight off the WiFiComponent.
+  - platform: template
+    name: "JBD WiFi Channel"
+    id: wifi_channel
+    icon: "mdi:wifi"
+    accuracy_decimals: 0
+    update_interval: 15s
+    entity_category: diagnostic
+    state_topic: "jbdbms/wifi_channel"
+    lambda: return wifi::global_wifi_component->get_wifi_channel();
+
   # Bluetooth (BLE) signal level
   - platform: ble_rssi
     mac_address: ${bms_mac_address}
