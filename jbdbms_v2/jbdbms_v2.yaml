@@ -50,7 +50,7 @@ esp32:
         minimum_chip_revision: "3.1"
     sdkconfig_options:
       # Add headroom for occasional heavy loop iterations under RF/network bursts.
-      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "20"
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
     
 ota:
   - platform: esphome
