@@ -1,0 +1,78 @@
+substitutions:
+  device_name: logicpower-ups
+  friendly_name: LogicPower UPS
+  ap_ssid: AP-LogicPower
+  ap_password: password
+  time_zone: Europe/Kyiv
+  wifi_rssi_update: 60s
+  ups_tx_pin: GPIO17
+  ups_rx_pin: GPIO16
+  ups_baud_rate: "2400"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  includes:
+    - logicpower-powermanager.h
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+packages:
+  common: !include logicpower-ups-common.yaml
+
+api:
+  reboot_timeout: 0s
+
+# Plain RS232 comport monitor: no protocol decoding, just raw traffic visibility and a way to
+# send arbitrary bytes from Home Assistant. See README.md for how to read the results.
+uart:
+  id: ups_uart
+  tx_pin: ${ups_tx_pin}
+  rx_pin: ${ups_rx_pin}
+  baud_rate: ${ups_baud_rate}  
+  debug:
+    direction: BOTH
+    #dummy_receiver: true
+    # after:
+      #delimiter: "\r"
+    sequence:
+      - lambda: |-
+          logicpower_powermanager::on_uart_frame(direction, bytes);
+
+text_sensor:
+  - platform: template
+    id: ups_last_rx_raw
+    name: ${friendly_name} Last RX Raw (hex)
+    entity_category: diagnostic
+  - platform: template
+    id: ups_last_rx_ascii
+    name: ${friendly_name} Last RX ASCII
+    entity_category: diagnostic
+  - platform: template
+    id: ups_last_tx_raw
+    name: ${friendly_name} Last TX Raw (hex)
+    entity_category: diagnostic
+  - platform: template
+    id: ups_last_tx_ascii
+    name: ${friendly_name} Last TX ASCII
+    entity_category: diagnostic
+
+text:
+  - platform: template
+    id: ups_raw_command
+    name: ${friendly_name} Raw Command
+    icon: mdi:console
+    mode: text
+    optimistic: true
+    #entity_category: config
+    initial_value: "QPIGS"
+
+button:
+  - platform: template
+    name: ${friendly_name} Send Raw Command
+    icon: mdi:send
+    on_press:
+      - lambda: logicpower_powermanager::send_from_text_field(id(ups_raw_command).state);

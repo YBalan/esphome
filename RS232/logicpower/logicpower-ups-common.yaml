@@ -1,5 +1,5 @@
 logger:
-  level: INFO
+  level: DEBUG
 
 debug:
   update_interval: 30s
@@ -32,6 +32,11 @@ wifi:
 captive_portal:
 
 button:
+  - platform: restart
+    name: ${friendly_name} Restart Device
+    entity_category: config
+    icon: mdi:restart
+
   - platform: template
     name: ${friendly_name} WiFi Forget
     entity_category: config

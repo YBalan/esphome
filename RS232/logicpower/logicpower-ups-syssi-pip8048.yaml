@@ -1,0 +1,119 @@
+external_components:
+  - source: github://syssi/esphome-pipsolar@322e2b284f35ba87eceb9ab53744759184a6b117
+    components: [pip8048]
+    refresh: 1d
+
+uart:
+  id: ups_uart
+  tx_pin: ${ups_tx_pin}
+  rx_pin: ${ups_rx_pin}
+  baud_rate: ${ups_baud_rate}
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+  debug:
+    direction: BOTH
+    dummy_receiver: false
+    after:
+      delimiter: "\r"
+    sequence:
+      - lambda: UARTDebug::log_string(direction, bytes);
+
+pip8048:
+  id: logicpower_pip8048
+  uart_id: ups_uart
+  update_interval: ${ups_update_interval}
+
+sensor:
+  - platform: pip8048
+    pipsolar_id: logicpower_pip8048
+    grid_voltage:
+      name: ${friendly_name} Grid Voltage
+    grid_frequency:
+      name: ${friendly_name} Grid Frequency
+    ac_output_voltage:
+      name: ${friendly_name} AC Output Voltage
+    ac_output_frequency:
+      name: ${friendly_name} AC Output Frequency
+    ac_output_apparent_power:
+      name: ${friendly_name} AC Output Apparent Power
+    ac_output_active_power:
+      name: ${friendly_name} AC Output Active Power
+    output_load_percent:
+      name: ${friendly_name} Output Load
+    bus_voltage:
+      name: ${friendly_name} Bus Voltage
+    battery_voltage:
+      name: ${friendly_name} Battery Voltage
+    battery_charging_current:
+      name: ${friendly_name} Battery Charging Current
+    battery_capacity_percent:
+      name: ${friendly_name} Battery Capacity
+    inverter_heat_sink_temperature:
+      name: ${friendly_name} Heat Sink Temperature
+    battery_discharge_current:
+      name: ${friendly_name} Battery Discharge Current
+    grid_rating_voltage:
+      name: ${friendly_name} Grid Rating Voltage
+      entity_category: diagnostic
+    grid_rating_current:
+      name: ${friendly_name} Grid Rating Current
+      entity_category: diagnostic
+    ac_output_rating_voltage:
+      name: ${friendly_name} AC Output Rating Voltage
+      entity_category: diagnostic
+    ac_output_rating_frequency:
+      name: ${friendly_name} AC Output Rating Frequency
+      entity_category: diagnostic
+    ac_output_rating_current:
+      name: ${friendly_name} AC Output Rating Current
+      entity_category: diagnostic
+    ac_output_rating_apparent_power:
+      name: ${friendly_name} AC Output Rating Apparent Power
+      entity_category: diagnostic
+    ac_output_rating_active_power:
+      name: ${friendly_name} AC Output Rating Active Power
+      entity_category: diagnostic
+    battery_rating_voltage:
+      name: ${friendly_name} Battery Rating Voltage
+      entity_category: diagnostic
+
+binary_sensor:
+  - platform: pip8048
+    pipsolar_id: logicpower_pip8048
+    load_status:
+      name: ${friendly_name} Load Enabled
+    charging_status:
+      name: ${friendly_name} Charging
+      device_class: battery_charging
+    ac_charging_status:
+      name: ${friendly_name} AC Charging
+      device_class: battery_charging
+    scc_charging_status:
+      name: ${friendly_name} SCC Charging
+      device_class: battery_charging
+      disabled_by_default: true
+    switch_on:
+      name: ${friendly_name} Inverter On
+
+text_sensor:
+  - platform: pip8048
+    pipsolar_id: logicpower_pip8048
+    device_mode:
+      name: ${friendly_name} Device Mode
+    last_qpigs:
+      name: ${friendly_name} Last QPIGS Response
+      entity_category: diagnostic
+    last_qpiri:
+      name: ${friendly_name} Last QPIRI Response
+      entity_category: diagnostic
+    last_qmod:
+      name: ${friendly_name} Last QMOD Response
+      entity_category: diagnostic
+    last_qflag:
+      name: ${friendly_name} Last QFLAG Response
+      entity_category: diagnostic
+      disabled_by_default: true
+    last_qpiws:
+      name: ${friendly_name} Last QPIWS Response
+      entity_category: diagnostic

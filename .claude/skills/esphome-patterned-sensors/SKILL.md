@@ -15,7 +15,7 @@ user-invocable: true
 ## Inputs
 - Target YAML path.
 - Device type and transport: UART, BLE, RF, I2C, ADC, or template-only.
-- Sensor set to add: power, energy, runtime, uptime, temperature trend, status, availability, RSSI.
+- Sensor set to add: power, energy, runtime, uptime, temperature trend, status, availability, RSSI, WiFi channel.
 - Update cadence and filtering needs.
 - Persistence policy: what must survive reboot and what must be ephemeral.
 - Optional C++ helper include path when sensor logic needs lambdas or protocol parsing.
@@ -97,8 +97,11 @@ Always provide results in this order:
   - Avoid aggressive update rates that can starve API traffic.
 - RSSI diagnostics (if available):
   - Add `wifi_signal` sensor for WiFi devices.
+  - Add a WiFi Channel diagnostic alongside it: a `template` sensor with
+    `lambda: return wifi::global_wifi_component->get_wifi_channel();`, since
+    `wifi_info` has no built-in channel text sensor.
   - Optionally add a percent representation using `copy` when useful for dashboards.
-  - Mark RSSI entities as diagnostics-oriented and keep update cadence moderate.
+  - Mark RSSI and WiFi Channel entities as diagnostics-oriented (`entity_category: diagnostic`) and keep update cadence moderate.
 
 ## Safety Checks Before Completion
 - No hardcoded credentials introduced.
@@ -114,3 +117,4 @@ Always provide results in this order:
 - /esphome-patterned-sensors For a new BLE battery device, add stable telemetry sensors with conservative filters.
 - /esphome-patterned-sensors Add temperature trend and availability sensors using helper lambdas and safe guards.
 - /esphome-patterned-sensors Add RSSI diagnostics if available and move update thresholds to Home Assistant controls.
+- /esphome-patterned-sensors Add a WiFi Channel diagnostic sensor next to the existing WiFi RSSI sensor.

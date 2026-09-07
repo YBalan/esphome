@@ -1,0 +1,115 @@
+substitutions:
+  device_name: logicpower-ups
+  friendly_name: LogicPower UPS
+  ap_ssid: AP-LogicPower
+  ap_password: password
+  time_zone: Europe/Kyiv
+  wifi_rssi_update: 60s
+  ups_tx_pin: GPIO17
+  ups_rx_pin: GPIO16
+  ups_baud_rate: "2400"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  project:
+    name: logicpower.ups-protocol-probe
+    version: "1.0.0"
+  on_boot:
+    priority: -100
+    then:
+      - delay: 5s
+      - script.execute: run_protocol_probe
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+packages:
+  common: !include logicpower-ups-common.yaml
+
+api:
+  reboot_timeout: 0s
+
+uart:
+  id: ups_uart
+  tx_pin: ${ups_tx_pin}
+  rx_pin: ${ups_rx_pin}
+  baud_rate: ${ups_baud_rate}
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+  debug:
+    direction: BOTH
+    dummy_receiver: true
+    after:
+      delimiter: "\r"
+    sequence:
+      - lambda: UARTDebug::log_string(direction, bytes);
+
+script:
+  - id: run_protocol_probe
+    mode: restart
+    then:
+      - logger.log: "PROBE PI30 QPI (CRC)"
+      - uart.write: [0x51, 0x50, 0x49, 0xBE, 0xAC, 0x0D]
+      - delay: 1s
+      - logger.log: "PROBE PI30 QMOD (CRC)"
+      - uart.write: [0x51, 0x4D, 0x4F, 0x44, 0x49, 0xC1, 0x0D]
+      - delay: 1s
+      - logger.log: "PROBE PI30 QPIGS (CRC)"
+      - uart.write: [0x51, 0x50, 0x49, 0x47, 0x53, 0xB7, 0xA9, 0x0D]
+      - delay: 1s
+      - logger.log: "PROBE PI30 QPIRI (CRC)"
+      - uart.write: [0x51, 0x50, 0x49, 0x52, 0x49, 0xF8, 0x54, 0x0D]
+      - delay: 1s
+      - logger.log: "PROBE PI30 QPIWS (CRC)"
+      - uart.write: [0x51, 0x50, 0x49, 0x57, 0x53, 0xB4, 0xDA, 0x0D]
+      - delay: 1s
+
+      - logger.log: "PROBE PI18 PI (framed with CRC)"
+      - uart.write: [0x5E, 0x50, 0x30, 0x30, 0x35, 0x50, 0x49, 0x71, 0x8B, 0x0D]
+      - delay: 1s
+      - logger.log: "PROBE PI18 MOD (framed with CRC)"
+      - uart.write: [0x5E, 0x50, 0x30, 0x30, 0x36, 0x4D, 0x4F, 0x44, 0xDD, 0xBE, 0x0D]
+      - delay: 1s
+
+      - logger.log: "PROBE PI17 PI (framed, no CRC)"
+      - uart.write: "^P003PI\r"
+      - delay: 1s
+      - logger.log: "PROBE PI17 MOD (framed, no CRC)"
+      - uart.write: "^P004MOD\r"
+      - delay: 1s
+
+      - logger.log: "PROBE PI16 QPI (no CRC)"
+      - uart.write: "QPI\r"
+      - delay: 1s
+      - logger.log: "PROBE PI16 QMOD (no CRC)"
+      - uart.write: "QMOD\r"
+      - delay: 1s
+      - logger.log: "PROBE PI16 QPIGS (no CRC)"
+      - uart.write: "QPIGS\r"
+      - delay: 1s
+      - logger.log: "PROBE PI16 QPIRI (no CRC)"
+      - uart.write: "QPIRI\r"
+      - delay: 1s
+
+      - logger.log: "PROBE Megatec Q1"
+      - uart.write: "Q1\r"
+      - delay: 1s
+      - logger.log: "PROBE Megatec F"
+      - uart.write: "F\r"
+      - delay: 1s
+      - logger.log: "PROBE Megatec I"
+      - uart.write: "I\r"
+      - delay: 2s
+      - logger.log: "PROBE COMPLETE"
+
+button:
+  - platform: template
+    name: ${friendly_name} Run Probe
+    entity_category: diagnostic
+    icon: mdi:serial-port
+    on_press:
+      - script.execute: run_protocol_probe

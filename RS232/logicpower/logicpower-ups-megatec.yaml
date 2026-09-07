@@ -2,7 +2,7 @@ uart:
   id: ups_uart
   tx_pin: ${ups_tx_pin}
   rx_pin: ${ups_rx_pin}
-  baud_rate: 2400
+  baud_rate: ${ups_baud_rate}
   data_bits: 8
   parity: NONE
   stop_bits: 1

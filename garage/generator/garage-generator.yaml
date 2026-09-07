@@ -76,7 +76,7 @@ esp32:
       minimum_chip_revision: "3.1"
     sdkconfig_options:
       # Add headroom for occasional heavy loop iterations under RF/network bursts.
-      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "15"
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
     
 ota:
   - platform: esphome
@@ -128,6 +128,11 @@ logger:
   #tx_buffer_size: 1024
   # Keep serial monitor from holding reset/boot straps in programming mode.
   deassert_rts_dtr: true
+
+# Surfaces the last reset reason (e.g. "Task watchdog", "Brownout", "Software")
+# and free heap on boot + periodically, so reboots are diagnosable.
+debug:
+  update_interval: 30s
 
 globals:
   - id: motor_hours_total
@@ -277,17 +282,6 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
 
 button:
-  - platform: template
-    id: ha_btn_wifi_reset
-    name: ${friendly_name} WiFi Reset
-    icon: mdi:wifi-refresh
-    entity_category: diagnostic
-    on_press:
-      # Force WiFi reconnection without full device reboot.
-      - wifi.disable:
-      - delay: 2s
-      - wifi.enable:
-
     # Factory reset: wipes all stored preferences and reboots.
   - platform: factory_reset
     name: ${friendly_name} Factory Reset
@@ -412,6 +406,18 @@ sensor:
     name: ${friendly_name} WiFi RSSI
     update_interval: 30s
 
+  # Wi-Fi channel number. wifi_info has no channel text sensor, so read it
+  # straight off the WiFiComponent.
+  - platform: template
+    id: wifi_channel
+    name: ${friendly_name} WiFi Channel
+    icon: mdi:wifi
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 30s
+    lambda: |-
+      return wifi::global_wifi_component->get_wifi_channel();
+
   - platform: pzemac
     #modbus_id: modbus_pzem
     #address: 0x01
@@ -473,6 +479,16 @@ sensor:
       return garage::motor_hours_total_value();  
 
 text_sensor:
+  - platform: debug
+    reset_reason:
+      name: ${friendly_name} Reset Reason
+  # Exposes the name (SSID) of the WiFi network the device is connected to,
+  # so you can confirm which network it joined without checking the router.
+  - platform: wifi_info
+    ssid:
+      name: ${friendly_name} WiFi Name
+      id: wifi_ssid
+      entity_category: diagnostic
   - platform: template
     id: last_run_start_sensor
     name: ${friendly_name} Last Run Start
