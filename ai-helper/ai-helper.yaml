@@ -29,7 +29,7 @@ esp32:
       # Baseline task-watchdog window (default 5s). http_request temporarily
       # raises this to its watchdog_timeout during a request; this covers the
       # rest of the main loop (LCD, servo cycles) against transient stalls.
-      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "15"
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
 
 packages:
   common: !include ai-helper-common.yaml
