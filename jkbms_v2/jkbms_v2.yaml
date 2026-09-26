@@ -5,6 +5,7 @@ substitutions:
   # Hardware
   bms_mac_address: !secret bms_mac_address
   relay_control_pin: "14"
+  grid_sensor_pin: "27"
 
   # MQTT defaults
   mqtt_broker: !secret mqtt_broker
@@ -450,6 +451,36 @@ binary_sensor:
                    id(bms_a).state, id(bms_charging_duration_s));
       - component.update: bms_charging_duration_formatted
 
+  # Raw signal from the isolated AC/grid presence detector module (opto-
+  # coupler output) on GPIO12. Kept internal: its polarity depends on
+  # wiring/module batch, so "BMS Grid Low" (switch, below) selects which
+  # raw level means grid-on, and "IsGridOn" (template, below) applies it.
+  #
+  # Note: GPIO12 (MTDI) is an ESP32 boot strapping pin that selects flash
+  # voltage. Driving it HIGH at boot/reset can prevent some boards from
+  # booting. Wire/orient the module so it reads LOW while mains power is
+  # present (the normal boot condition), reserving HIGH for "grid down".
+  - platform: gpio
+    pin: ${grid_sensor_pin}
+    id: grid_sensor_raw
+    internal: true
+    filters:
+      - delayed_on_off: 500ms
+
+  # Grid/mains presence, derived from the raw GPIO12 signal above and the
+  # "BMS Grid Low" switch (handles either wiring polarity without a reflash).
+  - platform: template
+    name: "IsGridOn"
+    id: is_grid_on
+    device_class: power
+    lambda: |-
+      if (!id(grid_sensor_raw).has_state()) {
+        return {};
+      }
+      const bool raw_high = id(grid_sensor_raw).state;
+      const bool active_low = id(grid_low).state;
+      return active_low ? !raw_high : raw_high;
+
 # Accumulates the persisted charging-duration counter while charging is active.
 interval:
   - interval: 10s
@@ -521,7 +552,23 @@ switch:
       - script.execute: apply_relay_soc_rules
     turn_off_action:
       - logger.log: "Control relay logic disabled; relay state will remain unchanged"
-    
+
+  # Selects which raw level of the GPIO12 grid sensor means "grid on":
+  # ON = LOW means grid on (active-low module), OFF = HIGH means grid on.
+  # Flip this from Home Assistant to match your module's wiring without
+  # needing to reflash. See "IsGridOn" and the raw GPIO12 sensor above.
+  - platform: template
+    name: "BMS Grid Low"
+    id: grid_low
+    entity_category: config
+    icon: "mdi:transmission-tower"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - logger.log: "Grid sensor polarity set to active-LOW (LOW = grid on)"
+    turn_off_action:
+      - logger.log: "Grid sensor polarity set to active-HIGH (HIGH = grid on)"
+
   # JKBMS Switches
   - platform: jk_bms_ble
     jk_bms_ble_id: my_bms
