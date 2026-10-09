@@ -723,7 +723,10 @@ display:
     address: 0x3C
     setup_priority: -100 
     lambda: |-
-      it.printf(0, 0, id(font_small), "JBD-BMS MONITOR");
+      it.printf(0, 0, id(font_small), "JBD-BMS");
+      if (id(wifi_rssi).has_state()) {
+        it.printf(127, 0, id(font_small), TextAlign::TOP_RIGHT, "%.0fdBm", id(wifi_rssi).state);
+      }
       it.line(0, 13, 128, 13);
       if (id(bms_v).has_state()) {
         it.printf(0, 15, id(font_large), "%.2f V", id(bms_v).state);
