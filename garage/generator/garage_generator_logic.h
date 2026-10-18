@@ -848,6 +848,7 @@ inline void zero_pzem_sensors_if_stale(const uint32_t max_age_ms = 5000U) {
   publish_sensor_zero_if_needed(id(pzem_voltage).state, id(pzem_voltage));
   publish_sensor_zero_if_needed(id(pzem_current).state, id(pzem_current));
   publish_sensor_zero_if_needed(id(pzem_power).state, id(pzem_power));
+  publish_sensor_zero_if_needed(id(pzem_energy).state, id(pzem_energy));
   publish_sensor_zero_if_needed(id(pzem_frequency).state, id(pzem_frequency));
   publish_sensor_zero_if_needed(id(pzem_power_factor).state, id(pzem_power_factor));
 }
