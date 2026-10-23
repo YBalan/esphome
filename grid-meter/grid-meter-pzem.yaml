@@ -34,28 +34,34 @@ sensor:
     current:
       id: pzem_current
       name: ${friendly_name} Current
+      accuracy_decimals: 2
       filters:
-        - throttle: 3s
+        - delta: 1        
+        #- throttle: 3s
     power:
       id: pzem_power
       name: ${friendly_name} Power
       filters:
-        - throttle: 5s
+        - delta: 5
+        #- throttle: 5s
     energy:
       id: pzem_energy
       name: ${friendly_name} Energy
       filters:
+        #- delta: 1
         - throttle: 29s
     frequency:
       id: pzem_frequency
       name: ${friendly_name} Frequency
       filters:
-        - throttle: 11s
+        - delta: 0.1
+        #- throttle: 11s
     power_factor:
       id: pzem_power_factor
       name: ${friendly_name} Power Factor
       filters:
-        - throttle: 7s
+        - delta: 0.1
+        #- throttle: 7s
 
 interval:
   - interval: 1s
