@@ -12,6 +12,10 @@ The PZEM-004T is powered from the measured mains line, so when the grid drops it
 |---|---|
 | Cable entry in the front wall, marked `T T L N`: current clamp leads (T T) and mains (L N) | Angled view of the wired box |
 
+| ![Installed in the panel](photo/IMG_20261023_195134.jpg) | ![Live readings in Home Assistant](photo/-5393493190586868761_121.jpg) |
+|---|---|
+| Installed in the electrical panel, with the current clamp on the panel wiring above the breakers | Live readings on the device page in the Home Assistant app: current, energy, frequency, power, power factor and voltage |
+
 ---
 
 ## Hardware
