@@ -18,6 +18,7 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 | [`garage/charger/`](garage/charger/) | Generator Battery Charger | ESP32 | Voltage/temperature-gated relay charger for a generator's idle battery, with OLED status (`garage-charger-esp32-device.yaml`; the ESP8266 variant is obsolete - see below) |
 | [`wc-lights/`](wc-lights/) | WC + Bath Lighting Controller | ESP32 | Door-driven light automation, RGB status strip, visit statistics |
 | [`ai-helper/`](ai-helper/) | AI Helper (Semaphore + Mouse Mover) | ESP32 | RGB/buzzer status semaphore for coding-agent hooks, servo-driven mouse mover |
+| [`grid-meter/`](grid-meter/) | Grid Meter | ESP32 | PZEM-004T mains meter; all values drop to 0 when the PZEM stops answering (grid off) |
 
 ---
 
@@ -157,6 +158,18 @@ A collection of ESPHome firmware configurations for home automation hardware: bo
 - Buildable as one combined device (`ai-helper.yaml`) or two standalone devices (`semaphore-device.yaml`, `mouse-mover-device.yaml`)
 
 📁 [ai-helper/README.md](ai-helper/README.md)
+
+---
+
+## grid-meter
+
+**Mains grid meter** — ESP32 + PZEM-004T over UART, reporting voltage, current, power, energy, frequency and power factor to Home Assistant.
+
+- PZEM is powered from the measured line, so it goes silent when the grid drops; after 5 s without a reply every PZEM value is published as `0` instead of freezing on the last reading
+- Staggered publish throttles per value, same as the garage generator
+- Built on the shared `grid-meter-common.yaml` base (WiFi/AP, OTA, web server, diagnostics)
+
+📁 [grid-meter/README.md](grid-meter/README.md)
 
 ---
 

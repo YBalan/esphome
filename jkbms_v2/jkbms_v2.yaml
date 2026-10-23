@@ -107,7 +107,9 @@ ble_client:
 
 # 3. JK-BMS driver integration
 external_components:
-  - source: github://syssi/esphome-jk-bms@main
+  # Pinned to a known commit (2026-10-09) so rebuilds are reproducible; `@main`
+  # silently changes the driver between builds. Bump deliberately when needed.
+  - source: github://syssi/esphome-jk-bms@b4f711d180671143c35f9e36079f8652591c52a8
 
 jk_bms_ble:
   - ble_client_id: jkbms_ble
@@ -287,6 +289,36 @@ sensor:
         # Re-emit the current value every 60s so HA always shows a fresh state.
         - heartbeat: 60s
         
+    # Crash diagnostics: the device has no serial access in production, so the
+    # last values in Home Assistant history before a "exception/panic" reset are
+    # the only evidence. Heap/stack trends separate OOM from stack overflow.
+  - platform: debug
+    free:
+      name: "BMS Heap Free"
+    block:
+      name: "BMS Heap Largest Block"
+    min_free:
+      name: "BMS Heap Min Free"      # lowest free heap since boot
+    fragmentation:
+      name: "BMS Heap Fragmentation"
+    loop_time:
+      name: "BMS Loop Max Time"      # longest main-loop iteration per interval
+
+  - platform: uptime
+    name: "BMS Uptime"
+    entity_category: diagnostic
+
+  # Unused stack of the main loop task. Low values (< ~500 B) point to a
+  # stack overflow; the lambda runs on that task, so it measures the right one.
+  - platform: template
+    name: "BMS Loop Stack Free"
+    id: loop_stack_free
+    entity_category: diagnostic
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: return (float) uxTaskGetStackHighWaterMark(nullptr);
+
     # Wi-Fi signal level
   - platform: wifi_signal
     name: "BMS WiFi Signal RSSI"
@@ -489,6 +521,15 @@ interval:
           if (id(bms_charging_active).state) {
             id(bms_charging_duration_s) += 10;
           }
+
+  # Refresh the OLED once a second, but only while it is lit (see display block).
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(my_display).is_on();'
+          then:
+            - component.update: my_display
 
 button:
     # Factory reset: wipes all stored preferences and reboots.
@@ -861,8 +902,18 @@ display:
     model: "SSD1306 128x64"
     address: 0x3C
     # The screen will be off on boot until the first button press
-    setup_priority: -100 
+    setup_priority: -100
+    # No polling: SSD1306::update() flushes the whole 1 KB buffer over I2C
+    # (~0.2 s of blocked main loop at the default 50 kHz) even when the panel
+    # is off. Redraws are driven by a 1 s `interval:` (see above), only while
+    # the screen is on. Don't call component.update from the boot script: it
+    # could run before this display's setup() has allocated its buffer.
+    update_interval: never
     lambda: |-
+      // Screen is off: draw nothing.
+      if (!id(my_display).is_on()) {
+        return;
+      }
       it.printf(0, 0, id(font_small), "JK-BMS");
       if (id(wifi_rssi).has_state()) {
         it.printf(127, 0, id(font_small), TextAlign::TOP_RIGHT, "%.0fdBm", id(wifi_rssi).state);
