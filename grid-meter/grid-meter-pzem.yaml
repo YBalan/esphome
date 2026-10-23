@@ -1,0 +1,64 @@
+substitutions:
+  # UART for PZEM-004T (ESP RX <- PZEM TX, ESP TX -> PZEM RX)
+  gpio_uart_rx: "16"
+  gpio_uart_tx: "17"
+
+  pzem_update_interval: 2s
+  # No PZEM reply for this long -> all values are published as 0
+  pzem_stale_timeout_ms: "5000"
+
+globals:
+  - id: pzem_last_rx_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+
+uart:
+  id: uart_pzem
+  rx_pin: ${gpio_uart_rx}
+  tx_pin: ${gpio_uart_tx}
+  baud_rate: 9600
+
+sensor:
+  - platform: pzemac
+    update_interval: ${pzem_update_interval}
+    voltage:
+      id: pzem_voltage
+      name: ${friendly_name} Voltage
+      filters:
+        - throttle: 2s
+      on_value:
+        then:
+          - lambda: |-
+              grid_meter::mark_pzem_rx_if_finite(x);
+    current:
+      id: pzem_current
+      name: ${friendly_name} Current
+      filters:
+        - throttle: 3s
+    power:
+      id: pzem_power
+      name: ${friendly_name} Power
+      filters:
+        - throttle: 5s
+    energy:
+      id: pzem_energy
+      name: ${friendly_name} Energy
+      filters:
+        - throttle: 29s
+    frequency:
+      id: pzem_frequency
+      name: ${friendly_name} Frequency
+      filters:
+        - throttle: 11s
+    power_factor:
+      id: pzem_power_factor
+      name: ${friendly_name} Power Factor
+      filters:
+        - throttle: 7s
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          grid_meter::zero_pzem_sensors_if_stale(${pzem_stale_timeout_ms});
