@@ -5,7 +5,7 @@ substitutions:
 
   pzem_update_interval: 2s
   # No PZEM reply for this long -> all values are published as 0
-  pzem_stale_timeout_ms: "5000"
+  pzem_stale_timeout_ms: "30000"
 
 globals:
   - id: pzem_last_rx_ms
@@ -26,45 +26,54 @@ sensor:
       id: pzem_voltage
       name: ${friendly_name} Voltage
       filters:
-        - throttle: 2s
-      on_value:
-        then:
-          - lambda: |-
-              grid_meter::mark_pzem_rx_if_finite(x);
+        - delta: 2
+        - lambda: |-
+            if (x > 400.0 || x < 0) { return 0.0; } else { return x; } 
+        - throttle: 10s      
     current:
       id: pzem_current
       name: ${friendly_name} Current
       accuracy_decimals: 2
       filters:
-        - delta: 1        
+        - delta: 1   
+        - lambda: |-
+            if (x > 100.0 || x < 0) { return 0.0; } else { return x; }     
         #- throttle: 3s
     power:
       id: pzem_power
       name: ${friendly_name} Power
       filters:
         - delta: 5
+        - lambda: |-
+            if (x > 23000 || x < 0) { return 0.0; } else { return x; }
         #- throttle: 5s
     energy:
       id: pzem_energy
       name: ${friendly_name} Energy
       filters:
         #- delta: 1
+        - lambda: |-
+            if (x > 100000 || x < 0) { return 0.0; } else { return x; }
         - throttle: 29s
     frequency:
       id: pzem_frequency
       name: ${friendly_name} Frequency
       filters:
         - delta: 0.1
+        - lambda: |-
+            if (x > 100 || x < 0) { return 0.0; } else { return x; }
         #- throttle: 11s
     power_factor:
       id: pzem_power_factor
       name: ${friendly_name} Power Factor
       filters:
         - delta: 0.1
+        - lambda: |-
+            if (x > 1 || x < 0) { return 0.0; } else { return x; }
         #- throttle: 7s
 
-interval:
-  - interval: 1s
-    then:
-      - lambda: |-
-          grid_meter::zero_pzem_sensors_if_stale(${pzem_stale_timeout_ms});
+# interval:
+#   - interval: 1s
+#     then:
+#       - lambda: |-
+#           grid_meter::zero_pzem_sensors_if_stale(${pzem_stale_timeout_ms});
