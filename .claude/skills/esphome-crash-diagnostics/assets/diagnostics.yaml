@@ -1,0 +1,71 @@
+# Snippets for esphome-crash-diagnostics. Merge into the device YAML; do NOT include this
+# file as-is. `platform: debug` may appear only once per platform, so if the device already
+# has a debug sensor / text_sensor entry, add the keys below to that entry instead.
+# Uses ${friendly_name}; hardcode the prefix if the device does not define it.
+
+# --- Layer 1: telemetry (any ESP32) -----------------------------------------------------
+# No serial in production, so the last values in HA history before a reset are the only
+# evidence. Heap/stack trends separate out-of-memory from stack overflow from a stalled loop.
+debug:
+  update_interval: 30s   # already present via the common package; keep a single entry
+
+sensor:
+  - platform: debug
+    free:
+      name: "${friendly_name} Heap Free"
+    block:
+      name: "${friendly_name} Heap Largest Block"
+    min_free:
+      name: "${friendly_name} Heap Min Free"        # lowest free heap since boot
+    fragmentation:
+      name: "${friendly_name} Heap Fragmentation"
+    loop_time:
+      name: "${friendly_name} Loop Max Time"        # longest main-loop iteration per interval
+
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+    entity_category: diagnostic
+
+  # Unused stack of the main loop task. Low values (< ~500 B) point to a stack overflow;
+  # the lambda runs on that task, so it measures the right one.
+  - platform: template
+    name: "${friendly_name} Loop Stack Free"
+    entity_category: diagnostic
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: return (float) uxTaskGetStackHighWaterMark(nullptr);
+
+# --- Layer 2: task-watchdog forensics (ESP32 + esp-idf) ---------------------------------
+esphome:
+  includes:
+    - wdt_forensics.h       # copy of assets/wdt_forensics.h next to the device YAML
+  on_boot:
+    priority: -100          # run last, when every entity exists
+    then:
+      - lambda: |-
+          id(wdt_last_report).publish_state(wdt_forensics::take_last_report());
+
+text_sensor:
+  # Shows "<component> (uptime Ns)" after a task-watchdog reset, "n/a" after any other reset.
+  - platform: template
+    name: "${friendly_name} Last Watchdog"
+    id: wdt_last_report
+    entity_category: diagnostic
+    icon: "mdi:dog"
+
+# --- Layer 3: Home Assistant history card -----------------------------------------------
+# Paste into a dashboard (Edit -> Add card -> Manual). Pick the real entity IDs with the
+# entity picker or from Developer Tools -> States; HA generates them from the names above.
+# History-graph draws one chart per unit, so bytes and seconds land in separate charts of
+# the same card.
+#
+# type: history-graph
+# title: Crash diagnostics
+# hours_to_show: 24
+# entities:
+#   - entity: sensor.<device>_heap_free
+#   - entity: sensor.<device>_heap_min_free
+#   - entity: sensor.<device>_heap_largest_block
+#   - entity: sensor.<device>_loop_stack_free
+#   - entity: sensor.<device>_uptime
