@@ -43,11 +43,56 @@ It shows `<component> (uptime Ns)` after a *task* watchdog reset.
   after all, or RTC memory was lost (power cycle).
 - `n/a` after any other reset reason; that is expected.
 
+## 3b. Reading `Last Panic` and its backtrace
+`Last Panic` is ESPHome's crash-handler output on one line, e.g.
+`Reason: Abort | Crashed core: 1 | PC:  0x400D1234  (fault location) | elf=1a2b3c4d`
+or `Reason: Fault - LoadProhibited (cause 28) | Crashed core: 0 | PC: ... | EXCVADDR: 0x00000004  (faulting address) | elf=...`
+(shape taken from ESPHome's source, not yet from a captured panic).
+- **Reason**: `Fault` = CPU exception (the name after it says which: `LoadProhibited` is a bad
+  read, often a null/dangling pointer; `StoreProhibited` a bad write; `IllegalInstruction` or
+  `InstrFetchProhibited` a corrupted jump or stack); `Abort` = `abort()`, a failed assert or a
+  bad_alloc stub (ESPHome builds without exceptions, so `throw` becomes abort); `Interrupt wdt`
+  = the interrupt watchdog, with the stack of whatever the CPU was doing at that moment;
+  `Task wdt` = the task watchdog. The handler reclassifies `abort()` itself, so unlike the old
+  custom wrapper an `abort()` is not reported as `IllegalInstruction`. The Reset Reason entity
+  (`task watchdog`) still helps to cross-check. `other-build` in the text means the crash was
+  recorded by a previous firmware (it survives the OTA reboot): its addresses belong to that
+  build's ELF, not the running one.
+- **A failed allocation** is an abort too: ESPHome has no exceptions, so `operator new`
+  failing ends in `__wrap___cxa_allocate_exception` → `abort`. The frames below it name the
+  code that wanted the memory; that is the *victim*, not necessarily the culprit. Compare
+  `Heap Free`, `Heap Largest Block` and `Heap Min Free` just before the reset.
+- **EXCVADDR** (faults only): the address being accessed. Near 0 means null pointer; a
+  stack-like address means an overflow.
+- **core**: which CPU crashed. The task name is no longer recorded; infer it from the
+  backtrace (`loopTask` frames are ESPHome's main loop; `tiT` lwIP, `wifi`, `btc`/`BTU`
+  Bluetooth and `esphome_mqtt` are system tasks). The sensor backtrace lists the crashed
+  core first and, after `| other core:`, the second core's stack.
+- **backtrace**: decode the addresses on the PC (`decode_panic.py`, or
+  `xtensa-esp32-elf-addr2line -pfiaC -e firmware.elf <addresses>`) with the ELF of the build
+  that was running. The first few lines are the crash handler itself (`panic_abort`,
+  `esp_system_abort`, `abort`); the first line after them is the real site. A trailing
+  `<-CORRUPTED` means the stack was damaged, itself a clue for a stack overflow or memory
+  overwrite.
+- The `elf=` value is the ELF SHA-256 prefix ESP-IDF stores in the firmware image (the same
+  value its own panic text prints). It should match the first 8 digits of
+  `Get-FileHash <elf> -Algorithm SHA256`; if it does not, you are decoding with the wrong
+  build and the names are not reliable. (The `elf=` value was confirmed on a real device with
+  the old wrapper on ESPHome 2026.2.4; the new header makes the same call but has only been
+  built, not yet tested with a real panic.)
+
 ## 4. Known culprits seen in this repo
 - **MQTT publishing on the main loop.** With `idf_send_async: false` (the ESP32 default)
   each publish runs in the loop and can block up to the 10 s network timeout, twice
   (one immediate retry). A dead or flapping broker produces `Last Watchdog = mqtt`.
   `log_topic` (on by default when `topic_prefix` is set) turns every log line into a publish.
+- **MQTT discovery burst after a (re)connect.** On every connect `check_connected()` calls
+  `schedule_resend_state()` on every MQTT component, and each one then builds its discovery
+  JSON into a growing `std::string` (`MQTTComponent::process_resend` → `send_discovery_` →
+  `publish_json`). A backtrace ending there with `operator new` on top is an out-of-memory
+  abort during that burst. With `idf_send_async: true` the main loop can also run ahead of the
+  sender and keep up to 30 copied payloads in heap at once. Entities that duplicate what the
+  native API already provides (`discovery: false`) remove the burst entirely.
 - **`esp32_ble_tracker` "Scan never terminated, rebooting".** Fires when a scan overruns
   `scan_duration * 2` s (default 10 s) after a loop stall, giving `Reboot request from
   esp32_ble_tracker`. It is the same stall as above, caught earlier than the 30 s watchdog.
@@ -60,7 +105,8 @@ It shows `<component> (uptime Ns)` after a *task* watchdog reset.
   driver silently.
 
 ## 5. Interrupt watchdog notes
-The task-watchdog hook cannot see it. Typical causes: flash writes (NVS/`preferences`,
+`Last Watchdog` cannot see it, but panic capture can: the `Last Panic` reason is
+`Interrupt wdt` and the backtrace shows where the CPU was stuck. Typical causes: flash writes (NVS/`preferences`,
 OTA) while a high-rate ISR or the radio needs flash-resident code; long critical sections;
 a second core holding a spinlock. Mitigations: write preferences less often
 (`flash_write_interval`), keep ISRs in IRAM and short, avoid `delay()` in interrupts.

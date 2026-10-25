@@ -31,10 +31,29 @@ esphome:
   name: ${device_name}
   includes:
     - jkbms_v2.h
+    - panic_capture.h
+  # Panic report (no serial in prod): ESPHome's own crash handler (2026.3+) stores the crash
+  # site across the reboot; panic_capture.h turns it into the "BMS Last Panic" sensors.
+  # Don't add -Wl,--wrap=esp_panic_handler or define __wrap_esp_panic_handler here:
+  # ESPHome already does, and a second definition fails at link time.
   # Start the timer and initialize SOC limits when the system boots
   on_boot:
     priority: -100 # Run last, when everything has already finished loading
     then:
+      # Report which component the main loop was stuck in if the last reset was
+      # a task watchdog (see esp_task_wdt_isr_user_handler in jkbms_v2.h).
+      - lambda: |-
+          id(wdt_last_report).publish_state(jkbms_wdt::take_last_report());
+      # Report where the last panic happened (exception/abort/any watchdog): reason,
+      # crashed core, PC, backtrace addresses. See panic_capture.h for how to decode.
+      - lambda: |-
+          panic_capture::load_previous();
+          id(panic_last_report).publish_state(panic_capture::summary());
+          id(panic_last_backtrace).publish_state(panic_capture::backtrace());
+          if (panic_capture::summary() != "n/a") {
+            ESP_LOGW("panic_capture", "Previous panic: %s", panic_capture::summary().c_str());
+            ESP_LOGW("panic_capture", "Backtrace: %s", panic_capture::backtrace().c_str());
+          }
       - script.execute: init_soc_limits
       - script.execute: apply_relay_restart_behavior
       - script.execute: apply_relay_soc_rules
@@ -49,10 +68,20 @@ esp32:
   framework:
     type: esp-idf
     advanced:
-        minimum_chip_revision: "3.1"
+        # This unit is an ESP32 rev3.0 (see "ESP32 Chip" in the boot log). Don't raise it:
+        # an image needing a newer chip is refused by OTA ("Finishing update failed").
+        minimum_chip_revision: "3.0"
+        # Main loop task stack (default 8192). Measured free was ~5 KB, so this is
+        # extra headroom for deep lambda/BLE/MQTT call chains; it is taken from heap.
+        loop_task_stack_size: 12288
+        # Both suggested by the device itself at boot (2026.10): flash vendor driver is
+        # GigaDevice, and the running bootloader already supports SRAM1 as IRAM (+40 KB).
+        # sram1_as_iram needs that bootloader: don't copy it to a unit that doesn't print the hint.
+        flash_chip: gd
+        sram1_as_iram: true
     sdkconfig_options:
         # Add headroom for occasional heavy loop iterations under RF/network bursts.
-        CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
+        CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"        
     
 ota:
   - platform: esphome
@@ -86,15 +115,34 @@ mqtt:
   password: ${mqtt_password}
   port: 1883
   topic_prefix: jkbms
-  discovery: true
+  # HA gets its entities from the native API and IoT MQTT Panel reads plain
+  # topics, so the discovery JSON is not needed. Building it for every entity
+  # after each (re)connect ran the device out of heap (panic in
+  # MQTTComponent::send_discovery_ -> operator new -> abort). State topics
+  # under topic_prefix are unaffected.
+  discovery: false
   #level: NONE
   reboot_timeout: 0s
+  # A dead/flapping broker must never stall the main loop. By default every
+  # publish runs on the main loop and can block up to the 10 s network
+  # timeout (twice, it is retried once), which trips the 30 s task watchdog
+  # ("mqtt") and the BLE tracker's scan timeout ("Reboot request from
+  # esp32_ble_tracker"). Async hands publishes to a separate task via a
+  # queue; when the broker is unreachable messages are dropped, not waited on.
+  idf_send_async: true
+  # Don't mirror every log line to MQTT: it is one more publish per line.
+  #log_topic:
   #keepalive: 60s
   # If you use HiveMQ Cloud (port 8883), add: certificate_authority: ...
 
 # Enable logger
 logger:
   level: INFO
+  # Feeds panic_capture::load_previous() (on_boot) with the crash handler's ERROR lines.
+  on_message:
+    level: ERROR
+    then:
+      - lambda: 'panic_capture::on_log(tag, message);'
 
 # 2. Bluetooth settings
 esp32_ble_tracker:
@@ -106,10 +154,8 @@ ble_client:
     id: jkbms_ble
 
 # 3. JK-BMS driver integration
-external_components:
-  # Pinned to a known commit (2026-10-09) so rebuilds are reproducible; `@main`
-  # silently changes the driver between builds. Bump deliberately when needed.
-  - source: github://syssi/esphome-jk-bms@b4f711d180671143c35f9e36079f8652591c52a8
+external_components:  
+  - source: github://syssi/esphome-jk-bms@main
 
 jk_bms_ble:
   - ble_client_id: jkbms_ble
@@ -476,11 +522,11 @@ binary_sensor:
                    was_first_edge ? "true" : "false",
                    id(bms_charging_was_active_at_boot) ? "true" : "false",
                    resuming ? "true" : "false",
-                   id(bms_charging_duration_s));
+                   (unsigned) id(bms_charging_duration_s));
     on_release:
       - lambda: |-
           ESP_LOGI("charging_duration", "on_release fired (current=%.2f A), duration frozen at %u s",
-                   id(bms_a).state, id(bms_charging_duration_s));
+                   id(bms_a).state, (unsigned) id(bms_charging_duration_s));
       - component.update: bms_charging_duration_formatted
 
   # Raw signal from the isolated AC/grid presence detector module (opto-
@@ -558,6 +604,27 @@ button:
     name: "BMS Restart Device"
     id: restart_btn
     icon: "mdi:restart"
+
+    # One-off checks of the panic capture. Disabled in HA until you enable the
+    # entity; pressing one crashes and reboots the device on purpose. After the
+    # reboot "BMS Last Panic" and "BMS Last Panic Backtrace" must be filled in.
+  - platform: template
+    name: "BMS Test Panic (abort)"
+    id: test_panic_abort_btn
+    entity_category: diagnostic
+    disabled_by_default: true
+    icon: "mdi:bug-outline"
+    on_press:
+      - lambda: "abort();"
+
+  - platform: template
+    name: "BMS Test Panic (fault)"
+    id: test_panic_fault_btn
+    entity_category: diagnostic
+    disabled_by_default: true
+    icon: "mdi:bug-outline"
+    on_press:
+      - lambda: "*(volatile int *) 0 = 1;"
 
 # 6. CONTROL (Switches)
 # Allow turning charge/discharge on/off via MQTT
@@ -694,62 +761,62 @@ number:
 # 6.6 TEXT CONFIG (editable in Home Assistant, persisted)
 # Note: BLE MAC and MQTT connection fields in ESPHome are compile-time settings.
 # Changes here are stored for convenience and can be used as next-build defaults.
-text:
-  - platform: template
-    name: "BMS MAC Address Config"
-    id: bms_mac_address_config
-    mode: text
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${bms_mac_address}
-    set_action:
-      then:
-        - lambda: |-
-            id(bms_mac_address_config).publish_state(x);
-            ESP_LOGI("cfg", "BMS MAC config saved: %s (applies after rebuild/reflash)", x.c_str());
+# text:
+#   - platform: template
+#     name: "BMS MAC Address Config"
+#     id: bms_mac_address_config
+#     mode: text
+#     entity_category: config
+#     optimistic: true
+#     restore_value: true
+#     initial_value: ${bms_mac_address}
+#     set_action:
+#       then:
+#         - lambda: |-
+#             id(bms_mac_address_config).publish_state(x);
+#             ESP_LOGI("cfg", "BMS MAC config saved: %s (applies after rebuild/reflash)", x.c_str());
 
-  - platform: template
-    name: "MQTT Broker Config"
-    id: mqtt_broker_config
-    mode: text
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${mqtt_broker}
-    set_action:
-      then:
-        - lambda: |-
-            id(mqtt_broker_config).publish_state(x);
-            ESP_LOGI("cfg", "MQTT broker config saved: %s (applies after rebuild/reflash)", x.c_str());
+#   - platform: template
+#     name: "MQTT Broker Config"
+#     id: mqtt_broker_config
+#     mode: text
+#     entity_category: config
+#     optimistic: true
+#     restore_value: true
+#     initial_value: ${mqtt_broker}
+#     set_action:
+#       then:
+#         - lambda: |-
+#             id(mqtt_broker_config).publish_state(x);
+#             ESP_LOGI("cfg", "MQTT broker config saved: %s (applies after rebuild/reflash)", x.c_str());
 
-  - platform: template
-    name: "MQTT Username Config"
-    id: mqtt_username_config
-    mode: text
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${mqtt_username}
-    set_action:
-      then:
-        - lambda: |-
-            id(mqtt_username_config).publish_state(x);
-            ESP_LOGI("cfg", "MQTT username config saved (applies after rebuild/reflash)");
+#   - platform: template
+#     name: "MQTT Username Config"
+#     id: mqtt_username_config
+#     mode: text
+#     entity_category: config
+#     optimistic: true
+#     restore_value: true
+#     initial_value: ${mqtt_username}
+#     set_action:
+#       then:
+#         - lambda: |-
+#             id(mqtt_username_config).publish_state(x);
+#             ESP_LOGI("cfg", "MQTT username config saved (applies after rebuild/reflash)");
 
-  - platform: template
-    name: "MQTT Password Config"
-    id: mqtt_password_config
-    mode: password
-    entity_category: config
-    optimistic: true
-    restore_value: true
-    initial_value: ${mqtt_password}
-    set_action:
-      then:
-        - lambda: |-
-            id(mqtt_password_config).publish_state(x);
-            ESP_LOGI("cfg", "MQTT password config saved (applies after rebuild/reflash)");
+#   - platform: template
+#     name: "MQTT Password Config"
+#     id: mqtt_password_config
+#     mode: password
+#     entity_category: config
+#     optimistic: true
+#     restore_value: true
+#     initial_value: ${mqtt_password}
+#     set_action:
+#       then:
+#         - lambda: |-
+#             id(mqtt_password_config).publish_state(x);
+#             ESP_LOGI("cfg", "MQTT password config saved (applies after rebuild/reflash)");
       
 # Describe the LED as a simple output, so we don't create extra buttons in MQTT
 output:
@@ -790,6 +857,28 @@ text_sensor:
   - platform: debug
     reset_reason:
       name: BMS Reset Reason
+  # Component the main loop was running when the task watchdog fired, with the
+  # uptime at that moment. "n/a" when the last reset was not a task watchdog.
+  - platform: template
+    name: "BMS Last Watchdog"
+    id: wdt_last_report
+    entity_category: diagnostic
+    icon: "mdi:dog"
+  # Where the last panic happened: reason (Fault/Abort/Task wdt/Interrupt wdt), crashed
+  # core, PC, fault address and the id of the running ELF. "n/a" after a reset that was
+  # not a panic.
+  - platform: template
+    name: "BMS Last Panic"
+    id: panic_last_report
+    entity_category: diagnostic
+    icon: "mdi:bug"
+  # Code addresses of the last panic's call stack. Decode on a PC with
+  # tools/decode_panic.py against the firmware.elf that was flashed.
+  - platform: template
+    name: "BMS Last Panic Backtrace"
+    id: panic_last_backtrace
+    entity_category: diagnostic
+    icon: "mdi:format-list-numbered"
   # Exposes the name (SSID) of the WiFi network the device is connected to,
   # so you can confirm which network it joined without checking the router.
   - platform: wifi_info

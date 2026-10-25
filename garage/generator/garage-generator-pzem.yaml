@@ -1,0 +1,87 @@
+substitutions:
+  # PZEM-004T v3 is polled this often; the spike guards in garage_generator_pzem.h assume ~2 s.
+  pzem_update_interval: 2s
+
+  # Modbus client hub timings. ESPHome 2026.x moved the hub defaults to 2000ms / 600ms, so they
+  # are pinned here. The old "send_wait_time: 200ms" is now turnaround_time.
+  # Max wait for a PZEM reply (it answers in ~30 ms at 9600 baud); a miss is retried on the next poll.
+  pzem_response_timeout: 500ms
+  # Quiet time the hub keeps on the line before it sends the next request.
+  pzem_turnaround_time: 200ms
+
+# UART2 pins (gpio_uart_rx / gpio_uart_tx) are in garage-generator.yaml with the rest of the pin map.
+uart:
+  id: uart_pzem
+  rx_pin: ${gpio_uart_rx}
+  tx_pin: ${gpio_uart_tx}
+  baud_rate: 9600
+
+modbus:
+  - id: modbus_pzem
+    uart_id: uart_pzem
+    role: client
+    send_wait_time: ${pzem_response_timeout}
+    turnaround_time: ${pzem_turnaround_time}
+
+# Every value starts with the spike guard (drops garbage and single-sample jumps, and counts each
+# reply as "PZEM is alive"), then keeps the staggered publish throttle.
+sensor:
+  - platform: pzemac
+    modbus_id: modbus_pzem
+    address: 0x01
+    update_interval: ${pzem_update_interval}
+    voltage:
+      id: pzem_voltage
+      name: ${friendly_name} Voltage
+      filters:
+        - lambda: return garage::pzem_spike_filter(garage::pzem_voltage_guard, x);
+        - throttle: 2s
+    current:
+      id: pzem_current
+      name: ${friendly_name} Current
+      filters:
+        - lambda: return garage::pzem_spike_filter(garage::pzem_current_guard, x);
+        - throttle: 3s
+    power:
+      id: pzem_power
+      name: ${friendly_name} Power
+      filters:
+        - lambda: return garage::pzem_spike_filter(garage::pzem_power_guard, x);
+        - throttle: 5s
+    energy:
+      id: pzem_energy
+      name: ${friendly_name} Energy
+      filters:
+        - lambda: return garage::pzem_spike_filter(garage::pzem_energy_guard, x);
+        - throttle: 29s
+    frequency:
+      id: pzem_frequency
+      name: ${friendly_name} Frequency
+      filters:
+        - lambda: return garage::pzem_spike_filter(garage::pzem_frequency_guard, x);
+        - throttle: 11s
+    power_factor:
+      id: pzem_power_factor
+      name: ${friendly_name} Power Factor
+      filters:
+        - lambda: return garage::pzem_spike_filter(garage::pzem_power_factor_guard, x);
+        - throttle: 7s
+
+  # How many PZEM samples the spike guards dropped since boot. Rising fast = limits too tight or
+  # a noisy UART line; stays 0 = the guards never fired.
+  - platform: template
+    id: pzem_rejected_samples
+    name: ${friendly_name} PZEM Rejected Samples
+    icon: mdi:chart-line-variant
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: |-
+      return garage::pzem_rejected_count;
+
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          garage::zero_pzem_sensors_if_stale();

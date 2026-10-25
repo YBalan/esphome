@@ -170,9 +170,8 @@ button:
               id(servo_1_stop_deg));
       - script.execute: ensure_relays_for_enabled_servo_actions
       - script.wait: ensure_relays_for_enabled_servo_actions
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
       - script.execute: servo_release_both
 
   - platform: template
@@ -191,9 +190,8 @@ button:
               id(servo_2_stop_deg));
       - script.execute: ensure_relays_for_enabled_servo_actions
       - script.wait: ensure_relays_for_enabled_servo_actions
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - script.execute: servo_release_both
 
   - platform: template
@@ -362,15 +360,13 @@ script:
           then:
             - lambda: |-
                 garage::move_left_servo_to_angle(id(servo_1_stop_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_1
-                level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+            - lambda: |-
+                id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
           else:
             - lambda: |-
                 garage::move_left_servo_to_angle(id(servo_1_start_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_1
-                level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
+            - lambda: |-
+                id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
       - script.execute: servo_release_both
 
   - id: run_servo_2_manual
@@ -387,15 +383,13 @@ script:
           then:
             - lambda: |-
                 garage::move_right_servo_to_angle(id(servo_2_stop_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_2
-                level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+            - lambda: |-
+                id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
           else:
             - lambda: |-
                 garage::move_right_servo_to_angle(id(servo_2_start_deg), ${servo_max_angle_deg});
-            - servo.write:
-                id: servo_2
-                level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+            - lambda: |-
+                id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - script.execute: servo_release_both
 
   - id: run_servos_manual
@@ -416,12 +410,9 @@ script:
       - lambda: |-
           garage::move_left_servo_to_angle(id(servo_1_start_deg), ${servo_max_angle_deg});
           garage::move_right_servo_to_angle(id(servo_2_start_deg), ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - script.execute: servo_release_both
 
   - id: servo_move_to_end
@@ -430,12 +421,9 @@ script:
       - lambda: |-
           garage::move_left_servo_to_angle(id(servo_1_stop_deg), ${servo_max_angle_deg});
           garage::move_right_servo_to_angle(id(servo_2_stop_deg), ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - script.execute: servo_release_both
 
   - id: servo_move_to_min
@@ -448,84 +436,57 @@ script:
     then:
       - lambda: |-
           garage::step_servos_toward_stop(1.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(2.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(3.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(4.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(5.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(6.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(7.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(8.0f / 9.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - delay: !lambda "return static_cast<uint32_t>(id(servo_step_delay_ms));"
       - lambda: |-
           garage::step_servos_toward_stop(1.0f, ${servo_max_angle_deg});
-      - servo.write:
-          id: servo_1
-          level: !lambda "return garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg});"
-      - servo.write:
-          id: servo_2
-          level: !lambda "return garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg});"
+      - lambda: |-
+          id(servo_1).write(garage::angle_to_servo_level(id(servo_1_current_deg), ${servo_max_angle_deg}));
+          id(servo_2).write(garage::angle_to_servo_level(id(servo_2_current_deg), ${servo_max_angle_deg}));
       - lambda: |-
           id(servo_1_near_start) = garage::is_servo_near_start(id(servo_1_current_deg), id(servo_1_start_deg), id(servo_1_stop_deg));
           id(servo_2_near_start) = garage::is_servo_near_start(id(servo_2_current_deg), id(servo_2_start_deg), id(servo_2_stop_deg));
