@@ -27,6 +27,11 @@ substitutions:
   soc_low_limit_initial: "251"
   soc_high_limit_initial: "311"
 
+  # "BMS Charging Active" detection: turns on when current >= threshold, turns off
+  # only after current stays below the threshold for the whole off delay.
+  charging_current_threshold_a: "7.0"
+  charging_off_delay_ms: "60000"  # 1 minute
+
 esphome:
   name: ${device_name}
   includes:
@@ -227,7 +232,7 @@ sensor:
                 lambda: 'return !id(bms_boot_current_sampled);'
               then:
                 - lambda: |-
-                    id(bms_charging_was_active_at_boot) = x >= 5.0f;
+                    id(bms_charging_was_active_at_boot) = x >= ${charging_current_threshold_a}f;
                     id(bms_boot_current_sampled) = true;
                     ESP_LOGI("charging_duration", "Boot sample captured: current=%.2f A, active_at_boot=%s",
                              x, id(bms_charging_was_active_at_boot) ? "true" : "false");
@@ -488,17 +493,32 @@ binary_sensor:
     id: bms_charging_active
     device_class: battery_charging
     lambda: |-
-      // Add hysteresis so current noise near the threshold does not retrigger
-      // on_press/on_release and accidentally reset an active charging session.
+      // Turn on as soon as current reaches the threshold, but turn off only
+      // after it has stayed below the threshold for the whole off delay. Short
+      // dips must not retrigger on_press/on_release, which would reset an
+      // active charging session.
       static bool active = false;
+      static bool below = false;
+      static uint32_t below_since_ms = 0;
       if (!id(bms_a).has_state()) {
         return false;
       }
       const float current_a = id(bms_a).state;
-      if (!active && current_a >= 7.0f) {
+      if (std::isnan(current_a)) {
+        return active;
+      }
+      if (current_a >= ${charging_current_threshold_a}f) {
         active = true;
-      } else if (active && current_a <= 5.0f) {
-        active = false;
+        below = false;
+      } else if (active) {
+        const uint32_t now = millis();
+        if (!below) {
+          below = true;
+          below_since_ms = now;
+        } else if (now - below_since_ms >= (uint32_t) ${charging_off_delay_ms}) {
+          active = false;
+          below = false;
+        }
       }
       return active;
     on_press:
