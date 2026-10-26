@@ -1,0 +1,123 @@
+# Snippets for esphome-crash-diagnostics. Merge into the device YAML; do NOT include this
+# file as-is. `platform: debug` may appear only once per platform, so if the device already
+# has a debug sensor / text_sensor entry, add the keys below to that entry instead.
+# Uses ${friendly_name}; hardcode the prefix if the device does not define it.
+
+# --- Layer 1: telemetry (any ESP32) -----------------------------------------------------
+# No serial in production, so the last values in HA history before a reset are the only
+# evidence. Heap/stack trends separate out-of-memory from stack overflow from a stalled loop.
+debug:
+  update_interval: 30s   # already present via the common package; keep a single entry
+
+sensor:
+  - platform: debug
+    free:
+      name: "${friendly_name} Heap Free"
+    block:
+      name: "${friendly_name} Heap Largest Block"
+    min_free:
+      name: "${friendly_name} Heap Min Free"        # lowest free heap since boot
+    fragmentation:
+      name: "${friendly_name} Heap Fragmentation"
+    loop_time:
+      name: "${friendly_name} Loop Max Time"        # longest main-loop iteration per interval
+
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+    entity_category: diagnostic
+
+  # Unused stack of the main loop task. Low values (< ~500 B) point to a stack overflow;
+  # the lambda runs on that task, so it measures the right one.
+  - platform: template
+    name: "${friendly_name} Loop Stack Free"
+    entity_category: diagnostic
+    unit_of_measurement: "B"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: return (float) uxTaskGetStackHighWaterMark(nullptr);
+
+# --- Layer 2a: panic capture (Xtensa ESP32 + esp-idf) ------------------------------------
+# Covers CPU exceptions, abort()/assert and both watchdogs. Needs ESPHome 2026.3+: its
+# built-in crash handler stores the crash across the reboot; panic_capture.h replays it
+# through the logger at boot and publishes it on the sensors below. Verified to build on
+# ESPHome 2026.10.0 / ESP-IDF 5.5.6 (not yet with a real panic). Do NOT add
+# -Wl,--wrap=esp_panic_handler or define __wrap_esp_panic_handler: ESPHome already does
+# and a second definition fails at link time.
+# Layer 2b below can share the same esphome: block (merge the keys, do not repeat them).
+logger:
+  on_message:               # merge into the existing logger: block
+    level: ERROR
+    then:
+      - lambda: 'panic_capture::on_log(tag, message);'
+
+esphome:
+  includes:
+    - panic_capture.h       # copy of assets/panic_capture.h next to the device YAML
+    - wdt_forensics.h       # layer 2b (optional): copy of assets/wdt_forensics.h
+  on_boot:
+    priority: -100          # run last, when every entity exists
+    then:
+      - lambda: |-
+          panic_capture::load_previous();
+          id(panic_last_report).publish_state(panic_capture::summary());
+          id(panic_last_backtrace).publish_state(panic_capture::backtrace());
+          if (panic_capture::summary() != "n/a") {
+            ESP_LOGW("panic_capture", "Previous panic: %s", panic_capture::summary().c_str());
+            ESP_LOGW("panic_capture", "Backtrace: %s", panic_capture::backtrace().c_str());
+          }
+      # Layer 2b (optional):
+      - lambda: |-
+          id(wdt_last_report).publish_state(wdt_forensics::take_last_report());
+
+text_sensor:
+  # Reason (Fault / Abort / Task wdt / Interrupt wdt), crashed core, PC, fault address, ELF id.
+  # "n/a" after a reset that was not a panic. Capped at 250 chars (HA drops longer states).
+  - platform: template
+    name: "${friendly_name} Last Panic"
+    id: panic_last_report
+    entity_category: diagnostic
+    icon: "mdi:bug"
+  # Code addresses of the call stack; decode with decode_panic.py and the flashed ELF.
+  - platform: template
+    name: "${friendly_name} Last Panic Backtrace"
+    id: panic_last_backtrace
+    entity_category: diagnostic
+    icon: "mdi:format-list-numbered"
+  # Layer 2b (optional): "<component> (uptime Ns)" after a task-watchdog reset.
+  - platform: template
+    name: "${friendly_name} Last Watchdog"
+    id: wdt_last_report
+    entity_category: diagnostic
+    icon: "mdi:dog"
+
+# One-off check that the capture works: enable the entity in HA, press it, the device
+# crashes and reboots, and both Last Panic sensors must then be filled in. Disable it again.
+button:
+  - platform: template
+    name: "${friendly_name} Test Panic (abort)"
+    entity_category: diagnostic
+    disabled_by_default: true
+    on_press:
+      - lambda: "abort();"
+  - platform: template
+    name: "${friendly_name} Test Panic (fault)"
+    entity_category: diagnostic
+    disabled_by_default: true
+    on_press:
+      - lambda: "*(volatile int *) 0 = 1;"
+
+# --- Layer 3: Home Assistant history card -----------------------------------------------
+# Paste into a dashboard (Edit -> Add card -> Manual). Pick the real entity IDs with the
+# entity picker or from Developer Tools -> States; HA generates them from the names above.
+# History-graph draws one chart per unit, so bytes and seconds land in separate charts of
+# the same card.
+#
+# type: history-graph
+# title: Crash diagnostics
+# hours_to_show: 24
+# entities:
+#   - entity: sensor.<device>_heap_free
+#   - entity: sensor.<device>_heap_min_free
+#   - entity: sensor.<device>_heap_largest_block
+#   - entity: sensor.<device>_loop_stack_free
+#   - entity: sensor.<device>_uptime

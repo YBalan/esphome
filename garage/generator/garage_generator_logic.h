@@ -14,6 +14,8 @@
 #include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/helpers.h"
 
+#include "garage_generator_pzem.h"
+
 namespace garage {
 
 inline constexpr const char *kRfCodeNotAssigned = "Not assigned";
@@ -810,47 +812,14 @@ inline void reset_all_counters() {
   reset_motor_hours_counter();
 }
 
-inline void mark_pzem_rx_if_finite(const float &value) {
-  if (std::isfinite(value)) {
-    id(pzem_last_rx_ms) = now_ms();
-  }
-}
-
-inline bool is_pzem_data_fresh(const uint32_t max_age_ms = 5000U) {
-  if (id(pzem_last_rx_ms) == 0U) {
-    return false;
-  }
-  return static_cast<uint32_t>(now_ms() - id(pzem_last_rx_ms)) <= max_age_ms;
-}
-
 inline bool is_generator_running_with_pzem_freshness(
     const float &voltage,
     const float &threshold,
-    const uint32_t max_age_ms = 5000U) {
+    const uint32_t max_age_ms = kPzemMaxAgeMs) {
   if (!is_pzem_data_fresh(max_age_ms)) {
     return false;
   }
   return is_generator_running(voltage, threshold);
-}
-
-template <typename TSensor>
-inline void publish_sensor_zero_if_needed(const float &state, TSensor &sensor) {
-  if (!std::isfinite(state) || state != 0.0f) {
-    sensor.publish_state(0.0f);
-  }
-}
-
-inline void zero_pzem_sensors_if_stale(const uint32_t max_age_ms = 5000U) {
-  if (is_pzem_data_fresh(max_age_ms)) {
-    return;
-  }
-
-  publish_sensor_zero_if_needed(id(pzem_voltage).state, id(pzem_voltage));
-  publish_sensor_zero_if_needed(id(pzem_current).state, id(pzem_current));
-  publish_sensor_zero_if_needed(id(pzem_power).state, id(pzem_power));
-  publish_sensor_zero_if_needed(id(pzem_energy).state, id(pzem_energy));
-  publish_sensor_zero_if_needed(id(pzem_frequency).state, id(pzem_frequency));
-  publish_sensor_zero_if_needed(id(pzem_power_factor).state, id(pzem_power_factor));
 }
 
 inline void on_button_long_action(const uint8_t button) {

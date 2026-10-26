@@ -11,8 +11,10 @@ The device config is intentionally split into focused package files:
 - `garage-generator.yaml`: base device identity, Wi-Fi/API/logger, globals, relays, physical and HA action buttons, core sensors, and high-level action scripts.
 - `garage-generator-rf.yaml`: RF receiver/transmitter pins and tuning, persisted raw RF storage, learn/test/reset buttons, RF raw text sensors, and RF send/assign scripts.
 - `garage-generator-servos.yaml`: servo pins and PWM parameters, servo switches/buttons/numbers, persisted servo positions, and servo movement scripts.
+- `garage-generator-pzem.yaml`: PZEM-004T on UART2 through an explicit ESPHome `modbus` client hub (`modbus_pzem`), the `pzemac` sensors with spike guards and staggered throttles, the `PZEM Rejected Samples` diagnostic, and the stale-zero interval. The UART pins stay in `garage-generator.yaml` with the rest of the pin map.
 - `garage-generator-mqtt.yaml`: broker settings plus explicit `cmd`, `tele`, and `stat` topics.
 - `garage_generator_logic.h`: shared runtime helpers used by the YAML lambdas.
+- `garage_generator_pzem.h`: PZEM helpers (spike guards, freshness check, stale zeroing); included by `garage_generator_logic.h`.
 
 ## Video
 
@@ -32,7 +34,9 @@ The device config is intentionally split into focused package files:
 
 - PZEM telemetry is polled every 2 seconds and published with staggered per-sensor throttles by priority.
 - Running-state detection uses both voltage threshold and PZEM freshness checks.
-- Stale PZEM values are actively zeroed (voltage/current/power/frequency/power factor) instead of staying `unknown`.
+- Stale PZEM values are actively zeroed (voltage/current/power/energy/frequency/power factor) instead of staying `unknown`.
+- PZEM values pass a spike guard before the throttle: samples outside physical limits are dropped, and a jump larger than the per-poll limit is held back until the new level repeats on the next poll (or persists for 4 polls, so a real ramp is not lost). Every reply, including a dropped one, counts as "PZEM is alive". Limits live in `garage_generator_pzem.h`; the `PZEM Rejected Samples` counter and a `pzem_guard` warning in the log show what was dropped.
+- The `modbus` hub timings are pinned (`pzem_response_timeout: 500ms`, `pzem_turnaround_time: 200ms`) because ESPHome 2026.x changed the hub defaults to 2000ms / 600ms.
 - `Motor Hours` is accumulated only while running and supports `Motor Hours Offset`.
 - `Last Run Start`, `Last Run Stop`, `Last Run Duration`, and `Current Run Duration` are exposed as text sensors.
 - `Last Run Duration` and `Current Run Duration` are displayed as `HH:MM` (no seconds).
@@ -146,6 +150,7 @@ The device config is intentionally split into focused package files:
 - `Generator Servo Start Stop Values` (`Stop: Left/Right ; Start: Left/Right`)
 - RF raw text sensors for Stop/Eco/Start/Rollete
 - `Generator WiFi RSSI`
+- `Generator PZEM Rejected Samples` (diagnostic counter of samples dropped by the spike guards since boot)
 
 ## MQTT contract
 
@@ -196,7 +201,9 @@ The device uses manual MQTT topics only.
 - RF package: [garage-generator-rf.yaml](garage-generator-rf.yaml)
 - Servo package: [garage-generator-servos.yaml](garage-generator-servos.yaml)
 - MQTT package: [garage-generator-mqtt.yaml](garage-generator-mqtt.yaml)
+- PZEM package: [garage-generator-pzem.yaml](garage-generator-pzem.yaml)
 - Runtime helper logic: [garage_generator_logic.h](garage_generator_logic.h)
+- PZEM helper logic: [garage_generator_pzem.h](garage_generator_pzem.h)
 - Requirements/spec notes: [requirements.md](requirements.md)
 
 ## Wiring Images

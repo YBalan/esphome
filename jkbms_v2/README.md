@@ -40,6 +40,23 @@ ESPHome firmware for an ESP32-based JK-BMS BLE gateway with MQTT publishing, OLE
 
 Note: BLE MAC and MQTT connection parameters are compile-time in ESPHome. Changing text config entities stores values, but firmware must be rebuilt/reflashed to apply them.
 
+## Crash Diagnostics (no serial access)
+
+The unit has no COM access in production, so resets are diagnosed from Home Assistant.
+
+- `BMS Reset Reason`: why the last reset happened (`exception/panic`, `task watchdog`, ...).
+- `BMS Heap *`, `BMS Loop Stack Free`, `BMS Loop Max Time`, `BMS Uptime`: put them in one history graph to tell leaks, stack overflow and loop stalls apart.
+- `BMS Last Watchdog`: the ESPHome component the main loop was in when the task watchdog fired.
+- `BMS Last Panic` / `BMS Last Panic Backtrace`: reason (`Fault`, `Abort` for `abort()`/asserts/failed allocations, `Task wdt`, `Interrupt wdt`), crashed core, PC, fault address, the id of the running ELF, and the code addresses of the call stack (both cores). Since ESPHome 2026.3 the crash itself is stored by ESPHome's built-in crash handler; `panic_capture.h` only replays it at boot through the logger (`on_message` in the YAML) and publishes it on these sensors. It must not define `__wrap_esp_panic_handler` or add `--wrap=esp_panic_handler`: ESPHome already does, and the link fails. The task name and uptime of the old implementation are no longer recorded.
+
+To decode a panic, keep a copy of `firmware.elf` from every build you flash (`.esphome/build/jkbms-gateway-v2/build/firmware.elf`), then:
+
+```cmd
+python tools\decode_panic.py --elf saved\firmware-2026-10-25.elf "<text of BMS Last Panic Backtrace>"
+```
+
+To check the capture works, enable the disabled-by-default `BMS Test Panic (abort)` or `BMS Test Panic (fault)` entity in Home Assistant and press it. The device reboots and both panic sensors must fill in. Disable the entity again afterwards.
+
 ## Important Topics
 
 - Prefix: `jkbms`

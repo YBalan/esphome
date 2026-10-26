@@ -26,6 +26,11 @@ substitutions:
   soc_low_limit_initial: "160"
   soc_high_limit_initial: "195"
 
+  # "JBD Charging Active" detection: turns on when current >= threshold, turns off
+  # only after current stays below the threshold for the whole off delay.
+  charging_current_threshold_a: "5.0"
+  charging_off_delay_ms: "60000"  # 1 minute
+
 esphome:
   name: ${device_name}
   includes:
@@ -47,7 +52,14 @@ esp32:
   framework:
     type: esp-idf # Stable for BLE + WiFi coexistence
     advanced:
-        minimum_chip_revision: "3.1"
+        # This unit is an ESP32 rev3.0 (see "ESP32 Chip" in the boot log). Don't raise it:
+        # an image needing a newer chip is refused by OTA ("Finishing update failed").
+        minimum_chip_revision: "3.0"
+        # Both suggested by the device itself at boot (2026.10): flash vendor driver is
+        # GigaDevice, and the running bootloader already supports SRAM1 as IRAM (+40 KB).
+        # sram1_as_iram needs that bootloader: don't copy it to a unit that doesn't print the hint.
+        flash_chip: gd
+        sram1_as_iram: true
     sdkconfig_options:
       # Add headroom for occasional heavy loop iterations under RF/network bursts.
       CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
@@ -91,7 +103,7 @@ mqtt:
   topic_prefix: jbdbms # Changed prefix for JBD
   keepalive: 30s
   reboot_timeout: 0s
-  discovery: true
+  discovery: false
 
 # Enable logger
 logger:
@@ -191,7 +203,7 @@ sensor:
                 lambda: 'return !id(bms_boot_current_sampled);'
               then:
                 - lambda: |-
-                    id(bms_charging_was_active_at_boot) = x >= 5.0f;
+                    id(bms_charging_was_active_at_boot) = x >= ${charging_current_threshold_a}f;
                     id(bms_boot_current_sampled) = true;
                     ESP_LOGI("charging_duration", "Boot sample captured: current=%.2f A, active_at_boot=%s",
                              x, id(bms_charging_was_active_at_boot) ? "true" : "false");
@@ -414,17 +426,32 @@ binary_sensor:
     id: bms_charging_active
     device_class: battery_charging
     lambda: |-
-      // Add hysteresis so current noise near the threshold does not retrigger
-      // on_press/on_release and accidentally reset an active charging session.
+      // Turn on as soon as current reaches the threshold, but turn off only
+      // after it has stayed below the threshold for the whole off delay. Short
+      // dips must not retrigger on_press/on_release, which would reset an
+      // active charging session.
       static bool active = false;
+      static bool below = false;
+      static uint32_t below_since_ms = 0;
       if (!id(bms_a).has_state()) {
         return false;
       }
       const float current_a = id(bms_a).state;
-      if (!active && current_a >= 5.0f) {
+      if (std::isnan(current_a)) {
+        return active;
+      }
+      if (current_a >= ${charging_current_threshold_a}f) {
         active = true;
-      } else if (active && current_a <= 3.0f) {
-        active = false;
+        below = false;
+      } else if (active) {
+        const uint32_t now = millis();
+        if (!below) {
+          below = true;
+          below_since_ms = now;
+        } else if (now - below_since_ms >= (uint32_t) ${charging_off_delay_ms}) {
+          active = false;
+          below = false;
+        }
       }
       return active;
     on_press:
@@ -445,11 +472,11 @@ binary_sensor:
                    was_first_edge ? "true" : "false",
                    id(bms_charging_was_active_at_boot) ? "true" : "false",
                    resuming ? "true" : "false",
-                   id(bms_charging_duration_s));
+                   (unsigned) id(bms_charging_duration_s));
     on_release:
       - lambda: |-
           ESP_LOGI("charging_duration", "on_release fired (current=%.2f A), duration frozen at %u s",
-                   id(bms_a).state, id(bms_charging_duration_s));
+                   id(bms_a).state, (unsigned) id(bms_charging_duration_s));
       - component.update: bms_charging_duration_formatted
 
 # Accumulates the persisted charging-duration counter while charging is active.
@@ -460,6 +487,15 @@ interval:
           if (id(bms_charging_active).state) {
             id(bms_charging_duration_s) += 10;
           }
+
+  # Refresh the OLED once a second, but only while it is lit (see display block).
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(my_display).is_on();'
+          then:
+            - component.update: my_display
 
 button:
     # Factory reset: wipes all stored preferences and reboots.
@@ -721,8 +757,18 @@ display:
     id: my_display
     model: "SSD1306 128x64"
     address: 0x3C
-    setup_priority: -100 
+    setup_priority: -100
+    # No polling: SSD1306::update() flushes the whole 1 KB buffer over I2C
+    # (~0.2 s of blocked main loop at the default 50 kHz) even when the panel
+    # is off. Redraws are driven by a 1 s `interval:` (see above), only while
+    # the screen is on. Don't call component.update from the boot script: it
+    # could run before this display's setup() has allocated its buffer.
+    update_interval: never
     lambda: |-
+      // Screen is off: draw nothing.
+      if (!id(my_display).is_on()) {
+        return;
+      }
       it.printf(0, 0, id(font_small), "JBD-BMS");
       if (id(wifi_rssi).has_state()) {
         it.printf(127, 0, id(font_small), TextAlign::TOP_RIGHT, "%.0fdBm", id(wifi_rssi).state);

@@ -13,10 +13,12 @@ The configuration is intentionally split by responsibility and should stay that 
 - `garage-generator.yaml`: main device file for platform setup, network/API/logger, core globals, relays, physical buttons, shared HA buttons, core sensors, and action orchestration.
 - `garage-generator-rf.yaml`: RF-only configuration for persisted RF raw storage, receiver/transmitter setup, RF learn/test/reset entities, RF raw text sensors, and RF scripts.
 - `garage-generator-servos.yaml`: servo-only configuration for PWM outputs, servo entities, target angle inputs, persisted positions, and movement scripts.
+- `garage-generator-pzem.yaml`: PZEM-only configuration for the UART/`modbus` hub, the `pzemac` sensors with their spike guards and throttles, the rejected-samples diagnostic, and the stale-zero interval.
 - `garage-generator-mqtt.yaml`: MQTT broker config plus explicit custom command, telemetry, and retained state topics.
 - `garage_generator_logic.h`: shared C++ helper logic for both the main file and split packages.
+- `garage_generator_pzem.h`: PZEM helper logic (spike guards, freshness, stale zeroing), included by `garage_generator_logic.h`.
 
-Documentation and future changes should preserve this separation instead of moving RF, servo, or MQTT details back into the main YAML file.
+Documentation and future changes should preserve this separation instead of moving RF, servo, PZEM, or MQTT details back into the main YAML file.
 
 ## Current Implementation Status
 
@@ -78,7 +80,8 @@ The following items are implemented and considered baseline behavior:
 
 ## ESPHome Behavior
 
-- PZEM is configured over UART on GPIO16/17.
+- PZEM is configured over UART on GPIO16/17, through an explicit `modbus` client hub (`modbus_pzem`) with pinned timings (ESPHome 2026.x changed the hub defaults).
+- Every PZEM value passes a spike guard first: out-of-range samples are dropped, and a jump larger than the per-poll limit is held back until it repeats (or persists for 4 polls). Any PZEM reply, even a dropped one, refreshes the freshness clock. Stale zeroing bypasses the guards and resets them.
 - PZEM publish cadence is intentionally staggered to reduce API bursts:
 	- Voltage 2s
 	- Current 3s

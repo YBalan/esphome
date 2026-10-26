@@ -51,11 +51,13 @@ packages:
   mqtt_feature: !include garage-generator-mqtt.yaml
   rf_feature: !include garage-generator-rf.yaml
   servos_feature: !include garage-generator-servos.yaml
+  pzem_feature: !include garage-generator-pzem.yaml
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   includes:
+    - garage_generator_pzem.h
     - garage_generator_logic.h
   on_boot:
     priority: -100
@@ -73,7 +75,14 @@ esp32:
   framework:
     type: esp-idf # Stable for BLE + WiFi coexistence
     advanced:
-      minimum_chip_revision: "3.1"
+      # This unit is an ESP32 rev3.0 (see "ESP32 Chip" in the boot log). Don't raise it:
+      # an image needing a newer chip is refused by OTA ("Finishing update failed").
+      minimum_chip_revision: "3.0"
+      # Both suggested by the device itself at boot (2026.10): flash vendor driver is
+      # GigaDevice, and the running bootloader already supports SRAM1 as IRAM (+40 KB).
+      # sram1_as_iram needs that bootloader: don't copy it to a unit that doesn't print the hint.
+      flash_chip: generic
+      sram1_as_iram: true
     sdkconfig_options:
       # Add headroom for occasional heavy loop iterations under RF/network bursts.
       CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
@@ -191,10 +200,6 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: "0"
-  - id: pzem_last_rx_ms
-    type: uint32_t
-    restore_value: no
-    initial_value: "0"
   - id: lcd_line2_mode
     type: int
     restore_value: yes
@@ -204,17 +209,6 @@ i2c:
   sda: ${gpio_i2c_sda}
   scl: ${gpio_i2c_scl}
   scan: true
-
-uart:
-  id: uart_pzem
-  rx_pin: ${gpio_uart_rx}
-  tx_pin: ${gpio_uart_tx}
-  baud_rate: 9600
-
-# modbus:
-#   id: modbus_pzem
-#   uart_id: uart_pzem
-#   send_wait_time: 200ms
 
 switch:
   # Relay 1: stop pulse output for the generator stop action.
@@ -417,45 +411,6 @@ sensor:
     update_interval: 30s
     lambda: |-
       return wifi::global_wifi_component->get_wifi_channel();
-
-  - platform: pzemac
-    #modbus_id: modbus_pzem
-    #address: 0x01
-    update_interval: 2s
-    voltage:
-      id: pzem_voltage
-      name: ${friendly_name} Voltage
-      filters:
-        - throttle: 2s
-      on_value:
-        then:
-          - lambda: |-
-              garage::mark_pzem_rx_if_finite(x);
-    current:
-      id: pzem_current
-      name: ${friendly_name} Current
-      filters:
-        - throttle: 3s
-    power:
-      id: pzem_power
-      name: ${friendly_name} Power
-      filters:
-        - throttle: 5s
-    energy:
-      id: pzem_energy
-      name: ${friendly_name} Energy
-      filters:
-        - throttle: 29s
-    frequency:
-      id: pzem_frequency
-      name: ${friendly_name} Frequency
-      filters:
-        - throttle: 11s
-    power_factor:
-      id: pzem_power_factor
-      name: ${friendly_name} Power Factor
-      filters:
-        - throttle: 7s
 
   - platform: dht
     pin: ${gpio_dht}
@@ -785,7 +740,6 @@ interval:
   - interval: 1s
     then:
       - lambda: |-
-          garage::zero_pzem_sensors_if_stale();
           garage::accumulate_runtime_tick(id(generator_running).state);
 
 script:
