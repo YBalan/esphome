@@ -106,6 +106,17 @@ button:
     on_press:
       - lambda: "*(volatile int *) 0 = 1;"
 
+# --- ELF archive hook (native ESP-IDF builds, ESPHome 2026.7+) ----------------------------
+# After every link, copies the firmware ELF to <config folder>/elf-archive/ so a panic from
+# an earlier build can still be decoded. Copy assets/elf_archive/ next to the device YAML
+# and merge this into the existing esp32: framework: block (see SKILL.md step 8). The path
+# is relative to .esphome/build/<name>/src, so four levels up is the config folder.
+esp32:
+  framework:
+    components:
+      - name: elf_archive
+        path: ../../../../elf_archive
+
 # --- Layer 3: Home Assistant history card -----------------------------------------------
 # Paste into a dashboard (Edit -> Add card -> Manual). Pick the real entity IDs with the
 # entity picker or from Developer Tools -> States; HA generates them from the names above.

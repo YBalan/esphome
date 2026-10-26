@@ -66,6 +66,70 @@ inline float get_power_out() {
   }
 }
 
+// "BMS Charging Active" detection. The BMS's own "charging" flag reflects the charge
+// MOSFET/switch enable bit, which can stay true with near-zero current (charger
+// disconnected, battery topped off, CV tail end). Duration tracking needs actual
+// current flow, so gate it on current instead.
+// Turns on as soon as current reaches the threshold, but turns off only after it has
+// stayed below the threshold for the whole off delay. Short dips must not retrigger
+// on_press/on_release, which would reset an active charging session.
+inline bool is_charging_active(float threshold_a, uint32_t off_delay_ms) {
+  static bool active = false;
+  static bool below = false;
+  static uint32_t below_since_ms = 0;
+  if (!id(bms_a).has_state()) {
+    return false;
+  }
+  const float current_a = id(bms_a).state;
+  if (std::isnan(current_a)) {
+    return active;
+  }
+  if (current_a >= threshold_a) {
+    active = true;
+    below = false;
+  } else if (active) {
+    const uint32_t now = esphome::millis();
+    if (!below) {
+      below = true;
+      below_since_ms = now;
+    } else if (now - below_since_ms >= off_delay_ms) {
+      active = false;
+      below = false;
+    }
+  }
+  return active;
+}
+
+// "BMS Charging Active" turned on.
+inline void on_charging_started() {
+  // 'first_edge' is a RAM-only static, not an ESPHome global, so it
+  // is always true again after a real reboot - unlike a persisted
+  // flag it can never get stuck true from an earlier session.
+  // First edge after boot:
+  // - if charging was already active at boot -> resume (do not reset)
+  // - otherwise -> this is a new session (reset to 0)
+  // Later edges are always new sessions and must reset.
+  static bool first_edge = true;
+  const bool was_first_edge = first_edge;
+  const bool resuming = was_first_edge && id(bms_charging_was_active_at_boot);
+  if (!resuming) {
+    id(bms_charging_duration_s) = 0;
+  }
+  first_edge = false;
+  ESP_LOGI("charging_duration", "on_press fired (current=%.2f A), first_edge=%s, active_at_boot=%s, resuming=%s, duration=%u s",
+           id(bms_a).state,
+           was_first_edge ? "true" : "false",
+           id(bms_charging_was_active_at_boot) ? "true" : "false",
+           resuming ? "true" : "false",
+           (unsigned) id(bms_charging_duration_s));
+}
+
+// "BMS Charging Active" turned off: the duration counter stays frozen at its last value.
+inline void on_charging_stopped() {
+  ESP_LOGI("charging_duration", "on_release fired (current=%.2f A), duration frozen at %u s",
+           id(bms_a).state, (unsigned) id(bms_charging_duration_s));
+}
+
 // Initialize SOC limits based on actual BMS total capacity
 // Only initializes if the current values match the initial_value (user hasn't changed them)
 inline void init_soc_limits(float low_initial, float high_initial, 

@@ -421,62 +421,19 @@ binary_sensor:
 
   # The BMS's own "charging" flag reflects MOSFET enable and can remain true
   # near idle current. Duration tracking is based on actual current instead.
+  # Logic lives in jbdbms_v2.h.
   - platform: template
     name: "JBD Charging Active"
     id: bms_charging_active
     device_class: battery_charging
     lambda: |-
-      // Turn on as soon as current reaches the threshold, but turn off only
-      // after it has stayed below the threshold for the whole off delay. Short
-      // dips must not retrigger on_press/on_release, which would reset an
-      // active charging session.
-      static bool active = false;
-      static bool below = false;
-      static uint32_t below_since_ms = 0;
-      if (!id(bms_a).has_state()) {
-        return false;
-      }
-      const float current_a = id(bms_a).state;
-      if (std::isnan(current_a)) {
-        return active;
-      }
-      if (current_a >= ${charging_current_threshold_a}f) {
-        active = true;
-        below = false;
-      } else if (active) {
-        const uint32_t now = millis();
-        if (!below) {
-          below = true;
-          below_since_ms = now;
-        } else if (now - below_since_ms >= (uint32_t) ${charging_off_delay_ms}) {
-          active = false;
-          below = false;
-        }
-      }
-      return active;
+      return jbdbms_lambdas::is_charging_active(${charging_current_threshold_a}f, ${charging_off_delay_ms});
     on_press:
       - lambda: |-
-          // First edge after boot:
-          // - if charging was already active at boot -> resume (do not reset)
-          // - otherwise -> this is a new session (reset to 0)
-          // Later edges are always new sessions and must reset.
-          static bool first_edge = true;
-          const bool was_first_edge = first_edge;
-          const bool resuming = was_first_edge && id(bms_charging_was_active_at_boot);
-          if (!resuming) {
-            id(bms_charging_duration_s) = 0;
-          }
-          first_edge = false;
-          ESP_LOGI("charging_duration", "on_press fired (current=%.2f A), first_edge=%s, active_at_boot=%s, resuming=%s, duration=%u s",
-                   id(bms_a).state,
-                   was_first_edge ? "true" : "false",
-                   id(bms_charging_was_active_at_boot) ? "true" : "false",
-                   resuming ? "true" : "false",
-                   (unsigned) id(bms_charging_duration_s));
+          jbdbms_lambdas::on_charging_started();
     on_release:
       - lambda: |-
-          ESP_LOGI("charging_duration", "on_release fired (current=%.2f A), duration frozen at %u s",
-                   id(bms_a).state, (unsigned) id(bms_charging_duration_s));
+          jbdbms_lambdas::on_charging_stopped();
       - component.update: bms_charging_duration_formatted
 
 # Accumulates the persisted charging-duration counter while charging is active.

@@ -1,6 +1,7 @@
 #pragma once
 
 #ifdef USE_ESP32
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <esp_app_desc.h>
@@ -44,13 +45,47 @@ inline std::string g_report;
 inline std::string g_bt_crashed;
 inline std::string g_bt_other;
 
+// Crash-handler lines seen while replaying, and the first one as received (for the
+// "not readable" fallback: n=0 means the logger never called on_log(), n>0 means the
+// text did not match what the parser expects).
+inline int g_lines = 0;
+inline std::string g_first_line;
+
 inline bool starts_with(const char *s, const char *prefix) { return strncmp(s, prefix, strlen(prefix)) == 0; }
 
+// Stops at a trailing color reset ("\033[0m") if the line has one.
 inline void append_part(std::string &dst, const char *text, const char *sep) {
   if (!dst.empty()) {
     dst += sep;
   }
-  dst += text;
+  const char *end = strchr(text, '\033');
+  if (end != nullptr) {
+    dst.append(text, end - text);
+  } else {
+    dst += text;
+  }
+}
+
+// ESPHome 2026.10 passes logger listeners the whole console line, e.g.
+// "\033[1;31m[E][esp32.crash:441]:   Reason: Abort\033[0m"; earlier releases passed
+// only the text after "]: ". Return the text without color codes and header.
+inline const char *log_body(const char *message) {
+  const char *p = message;
+  while (*p == '\033') {
+    while (*p != '\0' && *p != 'm') {
+      p++;
+    }
+    if (*p == 'm') {
+      p++;
+    }
+  }
+  if (*p == '[') {
+    const char *end = strstr(p, "]: ");
+    if (end != nullptr) {
+      p = end + 3;
+    }
+  }
+  return p;
 }
 
 // Feed every log line here (logger: on_message). Only the crash handler's
@@ -59,6 +94,13 @@ inline void on_log(const char *tag, const char *message) {
   if (!g_collecting || tag == nullptr || message == nullptr || strcmp(tag, CRASH_TAG) != 0) {
     return;
   }
+  g_lines++;
+  if (g_first_line.empty()) {
+    for (const char *c = message; *c != '\0' && g_first_line.size() < 60; c++) {
+      g_first_line += (*c >= 32 && *c < 127) ? *c : '~';
+    }
+  }
+  message = log_body(message);
   while (*message == ' ') {
     message++;
   }
@@ -97,6 +139,8 @@ inline void load_previous() {
   g_bt_crashed.clear();
   g_bt_other.clear();
   g_other_core = false;
+  g_lines = 0;
+  g_first_line.clear();
 #ifdef USE_ESP32_CRASH_HANDLER
   if (!esphome::esp32::crash_handler_has_data()) {
     return;
@@ -109,7 +153,9 @@ inline void load_previous() {
 #endif
 
   if (g_report.empty() && g_bt_crashed.empty()) {
-    g_report = "crash data present but not readable";
+    char diag[128];
+    snprintf(diag, sizeof(diag), "crash data present but not readable (n=%d first=%s)", g_lines, g_first_line.c_str());
+    g_report = diag;
   }
   // The ELF id of the running build: it must match the ELF you decode with.
   char elf[9] = "";

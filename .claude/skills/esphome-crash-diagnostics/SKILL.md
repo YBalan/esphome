@@ -56,6 +56,11 @@ RTC-memory hook and C++ to the firmware, which a healthy device does not need.
    from `assets/diagnostics.yaml`. ESPHome's own crash handler stores the exception, crashed
    core, PC, fault address and both cores' backtraces across the reboot; `panic_capture.h`
    replays that at boot through the logger and publishes it, so it also sits in HA history.
+   Since 2026.10 a `logger: on_message` lambda receives the *whole console line* (ANSI color
+   codes plus the `[E][tag:line]: ` header), not just the text; `panic_capture.h` strips both.
+   If a panic ever reads `crash data present but not readable (n=… first=…)`: `n=0` means
+   `on_log()` was never called (check the `on_message` hook, level `ERROR`), `n>0` means the
+   line format changed again and `first=` shows what arrived.
    **Never** add `-Wl,--wrap=esp_panic_handler` or define `__wrap_esp_panic_handler`:
    ESPHome already does, and the link fails with "multiple definition". The task name and
    uptime of the old wrapper are not available. Copy `assets/decode_panic.py` as the
@@ -77,10 +82,24 @@ RTC-memory hook and C++ to the firmware, which a healthy device does not need.
    still present. Say plainly what was
    verified (config, compile, decode of a known address) and what was not (a real panic on
    the device). Flashing is the user's.
-8. **Tell the user to keep the ELF.** `firmware.elf` sits in
+8. **Keep the ELF of every build.** `firmware.elf` sits in
    `.esphome/build/<name>/build/` (native ESP-IDF builds, ESPHome 2026.7+; older PlatformIO
-   builds used `.pioenvs/<name>/`) and a rebuild overwrites it, so each flashed
-   build's ELF must be copied aside (with a date) or its panics cannot be decoded.
+   builds used `.pioenvs/<name>/`) and a rebuild overwrites it, so a panic from an earlier
+   build cannot be decoded. Do not rely on the user remembering to copy it: add the post-build
+   hook in `assets/elf_archive/` (native ESP-IDF builds only). Copy that folder next to the
+   device YAML, add under `esp32: framework:`
+   `components: [{name: elf_archive, path: ../../../../elf_archive}]` (the path is relative to
+   `.esphome/build/<name>/src`, i.e. four levels up is the config folder), and add
+   `/elf-archive/` to `.gitignore`. After every link it copies the ELF to
+   `<config folder>/elf-archive/firmware-<date>_<time>-<id>.elf` (newest 20 kept), `<id>` being
+   the first 8 hex digits of its SHA-256, which is the `elf=` value in `Last Panic`, and
+   `assets/decode_panic.py` then picks the right file by that id and refuses a mismatch. It is
+   a local IDF component because ESPHome ignores PlatformIO `extra_scripts` in native builds;
+   IDF's `EXECUTABLE` property is not set yet when `project_include.cmake` runs, so the target
+   is named `<project>.elf` directly. A build already running when the hook is first added
+   does not pick it up; archive that one by hand with
+   `cmake -DELF=<path to .elf> -DDEST_DIR=<config folder>/elf-archive -DKEEP=20 -P elf_archive/archive_elf.cmake`
+   (ESPHome's cached cmake is under `%LOCALAPPDATA%\esphome\Cache\idf\tools\cmake`).
 9. **Read the evidence** after the next reset(s) with `references/reading-the-evidence.md`:
    it maps reset reason + graph shape + `Last Panic` / `Last Watchdog` to likely causes and
    fixes. One reset is a hint, two or three with the same signature is a pattern.
