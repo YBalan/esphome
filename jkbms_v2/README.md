@@ -49,11 +49,13 @@ The unit has no COM access in production, so resets are diagnosed from Home Assi
 - `BMS Last Watchdog`: the ESPHome component the main loop was in when the task watchdog fired.
 - `BMS Last Panic` / `BMS Last Panic Backtrace`: reason (`Fault`, `Abort` for `abort()`/asserts/failed allocations, `Task wdt`, `Interrupt wdt`), crashed core, PC, fault address, the id of the running ELF, and the code addresses of the call stack (both cores). Since ESPHome 2026.3 the crash itself is stored by ESPHome's built-in crash handler; `panic_capture.h` only replays it at boot through the logger (`on_message` in the YAML) and publishes it on these sensors. It must not define `__wrap_esp_panic_handler` or add `--wrap=esp_panic_handler`: ESPHome already does, and the link fails. The task name and uptime of the old implementation are no longer recorded.
 
-To decode a panic, keep a copy of `firmware.elf` from every build you flash (`.esphome/build/jkbms-gateway-v2/build/firmware.elf`), then:
+A panic can only be decoded with the ELF of the exact build that was running, and every build overwrites `build/firmware.elf`. So each build archives its own ELF: the `elf_archive/` folder is a small local ESP-IDF component (`esp32: framework: components:` in the YAML) whose `project_include.cmake` adds a target that runs after the link and copies the ELF to **`elf-archive/`** in this folder (git-ignored, newest 20 kept) as `firmware-<date>_<time>-<id>.elf`. `<id>` is the first 8 hex digits of the ELF's SHA-256, the same value the device shows as `elf=` in `BMS Last Panic`. To decode a crash, paste the text of both panic sensors; the matching ELF is picked by that id and its hash is checked:
 
 ```cmd
-python tools\decode_panic.py --elf saved\firmware-2026-10-25.elf "<text of BMS Last Panic Backtrace>"
+python tools\decode_panic.py "<text of BMS Last Panic> <text of BMS Last Panic Backtrace>"
 ```
+
+(`--elf <file>` overrides the choice.) A missing ELF or a failed copy only prints a warning during the build.
 
 To check the capture works, enable the disabled-by-default `BMS Test Panic (abort)` or `BMS Test Panic (fault)` entity in Home Assistant and press it. The device reboots and both panic sensors must fill in. Disable the entity again afterwards.
 

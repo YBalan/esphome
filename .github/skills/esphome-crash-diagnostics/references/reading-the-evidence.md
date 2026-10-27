@@ -58,6 +58,11 @@ or `Reason: Fault - LoadProhibited (cause 28) | Crashed core: 0 | PC: ... | EXCV
   (`task watchdog`) still helps to cross-check. `other-build` in the text means the crash was
   recorded by a previous firmware (it survives the OTA reboot): its addresses belong to that
   build's ELF, not the running one.
+- **`crash data present but not readable (n=N first=…)`** means the crash record exists
+  (reset reason `exception/panic`) but the parser got nothing usable: `n=0` the logger hook
+  never fired; `n>0` the lines arrived in a format `on_log()` does not know, and `first=`
+  shows the first one (`~` replaces control characters). The data is not lost until an API
+  client that subscribes to logs consumes it; the ELF of the crashed build is needed to decode.
 - **A failed allocation** is an abort too: ESPHome has no exceptions, so `operator new`
   failing ends in `__wrap___cxa_allocate_exception` → `abort`. The frames below it name the
   code that wanted the memory; that is the *victim*, not necessarily the culprit. Compare

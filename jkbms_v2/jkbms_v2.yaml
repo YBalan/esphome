@@ -84,6 +84,13 @@ esp32:
         # sram1_as_iram needs that bootloader: don't copy it to a unit that doesn't print the hint.
         flash_chip: gd
         sram1_as_iram: true
+    # Post-build hook: after every link the firmware ELF is copied to elf-archive/ as
+    # firmware-<date>-<id>.elf, <id> being the "elf=" value of "BMS Last Panic". A panic can
+    # only be decoded with the ELF of the build that was running; see elf_archive/.
+    # Path is relative to .esphome/build/<device>/src (4 levels up = this folder).
+    components:
+      - name: elf_archive
+        path: ../../../../elf_archive
     sdkconfig_options:
         # Add headroom for occasional heavy loop iterations under RF/network bursts.
         CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"        
@@ -102,6 +109,11 @@ wifi:
     
   # Allow saving new credentials to flash memory
   fast_connect: true
+  power_save_mode: NONE
+  reboot_timeout: 0s
+  # Roam scans compete with BLE for the shared 2.4GHz radio and have been
+  # observed to cause multi-second esp32_ble stalls leading to task watchdog resets.
+  post_connect_roaming: false
 
 # Enables the web interface when in AP mode
 captive_portal:
@@ -134,10 +146,10 @@ mqtt:
   # ("mqtt") and the BLE tracker's scan timeout ("Reboot request from
   # esp32_ble_tracker"). Async hands publishes to a separate task via a
   # queue; when the broker is unreachable messages are dropped, not waited on.
-  idf_send_async: true
+  #idf_send_async: true
   # Don't mirror every log line to MQTT: it is one more publish per line.
   #log_topic:
-  #keepalive: 60s
+  keepalive: 30s
   # If you use HiveMQ Cloud (port 8883), add: certificate_authority: ...
 
 # Enable logger
@@ -153,6 +165,9 @@ logger:
 esp32_ble_tracker:
   scan_parameters:
     active: true
+  # ESPHome's own WiFi/BLE time-sharing coordination has been a suspect in
+  # multi-second esp32_ble stalls (buffer overflow -> MQTT/API disconnects).
+  software_coexistence: false
 
 ble_client:
   - mac_address: ${bms_mac_address}
@@ -487,66 +502,19 @@ binary_sensor:
   # The BMS's own "charging" flag reflects the charge MOSFET/switch enable
   # bit, which can stay true with near-zero current (charger disconnected,
   # battery topped off, CV tail end). Duration tracking needs actual current
-  # flow, so gate it on current instead.
+  # flow, so gate it on current instead. Logic lives in jkbms_v2.h.
   - platform: template
     name: "BMS Charging Active"
     id: bms_charging_active
     device_class: battery_charging
     lambda: |-
-      // Turn on as soon as current reaches the threshold, but turn off only
-      // after it has stayed below the threshold for the whole off delay. Short
-      // dips must not retrigger on_press/on_release, which would reset an
-      // active charging session.
-      static bool active = false;
-      static bool below = false;
-      static uint32_t below_since_ms = 0;
-      if (!id(bms_a).has_state()) {
-        return false;
-      }
-      const float current_a = id(bms_a).state;
-      if (std::isnan(current_a)) {
-        return active;
-      }
-      if (current_a >= ${charging_current_threshold_a}f) {
-        active = true;
-        below = false;
-      } else if (active) {
-        const uint32_t now = millis();
-        if (!below) {
-          below = true;
-          below_since_ms = now;
-        } else if (now - below_since_ms >= (uint32_t) ${charging_off_delay_ms}) {
-          active = false;
-          below = false;
-        }
-      }
-      return active;
+      return jkbms_lambdas::is_charging_active(${charging_current_threshold_a}f, ${charging_off_delay_ms});
     on_press:
       - lambda: |-
-          // 'first_edge' is a RAM-only static, not an ESPHome global, so it
-          // is always true again after a real reboot - unlike a persisted
-          // flag it can never get stuck true from an earlier session.
-          // First edge after boot:
-          // - if charging was already active at boot -> resume (do not reset)
-          // - otherwise -> this is a new session (reset to 0)
-          // Later edges are always new sessions and must reset.
-          static bool first_edge = true;
-          const bool was_first_edge = first_edge;
-          const bool resuming = was_first_edge && id(bms_charging_was_active_at_boot);
-          if (!resuming) {
-            id(bms_charging_duration_s) = 0;
-          }
-          first_edge = false;
-          ESP_LOGI("charging_duration", "on_press fired (current=%.2f A), first_edge=%s, active_at_boot=%s, resuming=%s, duration=%u s",
-                   id(bms_a).state,
-                   was_first_edge ? "true" : "false",
-                   id(bms_charging_was_active_at_boot) ? "true" : "false",
-                   resuming ? "true" : "false",
-                   (unsigned) id(bms_charging_duration_s));
+          jkbms_lambdas::on_charging_started();
     on_release:
       - lambda: |-
-          ESP_LOGI("charging_duration", "on_release fired (current=%.2f A), duration frozen at %u s",
-                   id(bms_a).state, (unsigned) id(bms_charging_duration_s));
+          jkbms_lambdas::on_charging_stopped();
       - component.update: bms_charging_duration_formatted
 
   # Raw signal from the isolated AC/grid presence detector module (opto-
