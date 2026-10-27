@@ -109,6 +109,11 @@ wifi:
     
   # Allow saving new credentials to flash memory
   fast_connect: true
+  power_save_mode: NONE
+  reboot_timeout: 0s
+  # Roam scans compete with BLE for the shared 2.4GHz radio and have been
+  # observed to cause multi-second esp32_ble stalls leading to task watchdog resets.
+  post_connect_roaming: false
 
 # Enables the web interface when in AP mode
 captive_portal:
@@ -141,10 +146,10 @@ mqtt:
   # ("mqtt") and the BLE tracker's scan timeout ("Reboot request from
   # esp32_ble_tracker"). Async hands publishes to a separate task via a
   # queue; when the broker is unreachable messages are dropped, not waited on.
-  idf_send_async: true
+  #idf_send_async: true
   # Don't mirror every log line to MQTT: it is one more publish per line.
   #log_topic:
-  #keepalive: 60s
+  keepalive: 30s
   # If you use HiveMQ Cloud (port 8883), add: certificate_authority: ...
 
 # Enable logger
@@ -160,6 +165,9 @@ logger:
 esp32_ble_tracker:
   scan_parameters:
     active: true
+  # ESPHome's own WiFi/BLE time-sharing coordination has been a suspect in
+  # multi-second esp32_ble stalls (buffer overflow -> MQTT/API disconnects).
+  software_coexistence: false
 
 ble_client:
   - mac_address: ${bms_mac_address}
