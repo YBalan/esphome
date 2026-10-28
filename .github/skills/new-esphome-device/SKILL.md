@@ -37,7 +37,7 @@ The base package **must** be named `<device-name>-common.yaml`.
 - `ota` (esphome platform)
 - `time` (sntp, id `ha_time`, `timezone: ${time_zone}`)
 - `wifi` with fallback `ap` (`${ap_ssid}` / `${ap_password}`), `fast_connect`, `captive_portal`
-- `button`: **Restart Device** (native ESPHome restart button)
+- `button`: **Restart Device** (native ESPHome `restart` button, `entity_category: config`)
 - `button`: **WiFi Forget** (clears stored credentials, reboots into setup AP)
 - `web_server` (port 80) and `http_request` (with watchdog-safe timeouts)
 

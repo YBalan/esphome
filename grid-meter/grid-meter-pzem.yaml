@@ -53,7 +53,7 @@ sensor:
       filters:
         #- delta: 1
         - lambda: |-
-            if (x > 100000 || x < 0) { return 0.0; } else { return x; }
+            if (x > 10000000 || x < 0) { return 0.0; } else { return x; }
         - throttle: 29s
     frequency:
       id: pzem_frequency

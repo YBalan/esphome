@@ -43,7 +43,7 @@ Pins and timing are substitutions at the top of [`grid-meter-pzem.yaml`](grid-me
 | File | Purpose |
 |---|---|
 | [`grid-meter-device.yaml`](grid-meter-device.yaml) | Entry file: identity substitutions, board, composes the packages |
-| [`grid-meter-common.yaml`](grid-meter-common.yaml) | Shared base: logger, debug, OTA, time, WiFi/AP, captive portal, WiFi Forget button, web server, `http_request`, WiFi RSSI / Channel / Name and Reset Reason diagnostics |
+| [`grid-meter-common.yaml`](grid-meter-common.yaml) | Shared base: logger, debug, OTA, time, WiFi/AP, captive portal, Restart Device and WiFi Forget buttons, web server, `http_request`, WiFi RSSI / Channel / Name and Reset Reason diagnostics |
 | [`grid-meter-pzem.yaml`](grid-meter-pzem.yaml) | UART, PZEM-004T sensors (staggered publish throttles), 1 s stale-check interval |
 | [`grid-meter-pzem.h`](grid-meter-pzem.h) | C++ helpers: last-reply tracking, freshness check, zeroing |
 | `secrets.yaml` | Not used; WiFi is set through the captive portal |
