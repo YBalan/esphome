@@ -15,7 +15,7 @@ Never re-declare in a device entry file what the common package already provides
 - `wifi` + fallback `ap` + `captive_portal`
 - `ota`, `web_server`, `http_request`
 - `time` (sntp `ha_time`), `logger`, `debug`
-- WiFi Forget `button`
+- Restart Device and WiFi Forget `button`s
 - diagnostic sensors: WiFi RSSI, WiFi Name (SSID), Reset Reason
 
 If a capability belongs to all devices, add it to `<device-name>-common.yaml`.

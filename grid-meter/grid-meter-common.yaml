@@ -35,12 +35,18 @@ wifi:
 
 captive_portal:
 
-# Forget the stored WiFi credentials and reboot. On restart the device can't
-# connect, so after `ap_timeout` (~1 min) it falls back to its own AP +
-# captive portal (${ap_ssid}) where you enter a new network. Only the WiFi
-# credentials are cleared - all other preferences are kept, so this is NOT a
-# factory reset.
 button:
+  # Plain reboot; nothing stored (WiFi, preferences) is touched.
+  - platform: restart
+    name: ${friendly_name} Restart Device
+    entity_category: config
+    icon: mdi:restart
+
+  # Forget the stored WiFi credentials and reboot. On restart the device can't
+  # connect, so after `ap_timeout` (~1 min) it falls back to its own AP +
+  # captive portal (${ap_ssid}) where you enter a new network. Only the WiFi
+  # credentials are cleared - all other preferences are kept, so this is NOT a
+  # factory reset.
   - platform: template
     name: ${friendly_name} WiFi Forget
     entity_category: config
