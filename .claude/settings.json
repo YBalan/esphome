@@ -6,28 +6,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
-              "-Mode",
-              "reasoning"
-            ],
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode reasoning; exit 0'",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-usage-sync.ps1"
-            ],
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-usage-sync.ps1); exit 0'",
             "timeout": 10
           }
         ]
@@ -35,60 +19,22 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "AskUserQuestion|ExitPlanMode",
+        "matcher": "AskUserQuestion|ExitPlanMode|ask_user|exit_plan_mode",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
-              "-Mode",
-              "need_user_action"
-            ],
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode need_user_action; exit 0'",
             "timeout": 10
           }
         ]
       }
     ],
-    "PostToolUse": [      
+    "PostToolUse": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
-              "-Mode",
-              "reasoning"
-            ],
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
-              "-Mode",
-              "allow_action"
-            ],
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode reasoning; exit 0'",
             "timeout": 10
           }
         ]
@@ -96,20 +42,21 @@
     ],
     "Notification": [
       {
-        "matcher": "Task completed|Done",
+        "matcher": "permission_prompt",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
-              "-Mode",
-              "done"
-            ],
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode allow_action; exit 0'",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode need_user_action; exit 0'",
             "timeout": 10
           }
         ]
@@ -120,28 +67,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-status-sync.ps1",
-              "-Mode",
-              "classify-stop"
-            ],
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode classify-stop; exit 0'",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/.github/hooks/ai-helper-usage-sync.ps1"
-            ],
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-usage-sync.ps1); exit 0'",
             "timeout": 10
           }
         ]
