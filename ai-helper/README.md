@@ -116,7 +116,7 @@ Alongside it, a **`Usage Source`** text entity records which tool is currently d
 POST http://<device-ip>/text/AI%20Helper%20Usage%20Source/set?value=Claude%20Code
 ```
 
-- **Claude Code** reports the real **plan usage** automatically via [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1), updating **both** `Usage Remaining` and `Usage Source` at the start and end of every turn.
+- **Claude Code** reports the real **plan usage** automatically via [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1), updating **both** `Usage Remaining` and `Usage Source` at the **start of reasoning** (`UserPromptSubmit`) and again at **`Stop`**. The live "N% used, resets in ..." figure is not exposed to hooks, persisted to disk, or available via any CLI — it lives only in Anthropic's `anthropic-ratelimit-unified-*` response headers. So the hook reproduces what the Claude Code UI does: it makes one minimal authenticated request using the OAuth token in `~/.claude/.credentials.json`, reads `anthropic-ratelimit-unified-5h-utilization`, and posts `100 * (1 - utilization)` (plus the source tag). `-Window 5h` (default) mirrors the UI's "Current session" bar; `-Window 7d` is the weekly window. `-Mode source` is a lightweight variant that skips the API ping and only tags the source (not wired to any hook at the moment). Use `-Override <percent>` to post a fixed value instead. On any failure (offline, expired token) the gauge keeps its previous value rather than showing a wrong one.
 
   > Note: this uses your stored Claude credentials to make one tiny extra request per turn, and relies on undocumented rate-limit headers that Anthropic could change.
 
@@ -132,13 +132,13 @@ Claude Code hooks are configured in [`.claude/settings.json`](../.claude/setting
    | Claude Code hook | `-Mode` | Resulting status |
    |---|---|---|
    | `UserPromptSubmit`, `PostToolUse` | `reasoning` | `Reasoning` |
-   | `PreToolUse` (matcher: `AskUserQuestion\|ExitPlanMode`) | `need_user_action` | `Need User Action` |
-   | `PermissionRequest` | `allow_action` | `Allow Action` |
-   | `Notification` (matcher: `Task completed\|Done`) | `done` | `Done` |
+   | `PreToolUse` (matcher: `AskUserQuestion\|ExitPlanMode\|ask_user\|exit_plan_mode`) | `need_user_action` | `Need User Action` |
+   | `Notification` (matcher: `permission_prompt`) | `allow_action` | `Allow Action` |
+   | `Notification` (matcher: `elicitation_dialog`) | `need_user_action` | `Need User Action` |
    | `Stop` | `classify-stop` | inferred from the final assistant message (see below) |
 
-3. `classify-stop` mode reads the hook JSON payload from stdin, extracts the last assistant message, and pattern-matches it: mentions of asking permission → `Allow Action`, mentions of a manual step → `Need User Action`, otherwise → `Done`.
-4. The script is defensive by design — any HTTP failure is swallowed so a semaphore outage never blocks an agent turn.
+3. `classify-stop` mode reads the hook JSON payload from stdin, extracts the last assistant message, and pattern-matches it: mentions of asking permission → `Allow Action`, mentions of a manual step needed from the user → `Need User Action`, otherwise → `Done`.
+4. The script is defensive by design — any HTTP failure is swallowed and it always exits 0, so a semaphore outage never blocks an agent turn. Each run appends one line to `%TEMP%\ai-helper-status-hooks\hook.log`. The hook commands have a few hard rules (single-quoted `-Command`, no `PermissionRequest`, `; exit 0`); see [`.github/hooks/README.md`](../.github/hooks/README.md) before editing them.
 
 In addition to the status wiring above, `.claude/settings.json` also runs [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) on two events (see [Remaining-usage gauge](#remaining-usage-gauge)):
 
@@ -149,7 +149,7 @@ In addition to the status wiring above, `.claude/settings.json` also runs [`ai-h
 
 ### GitHub Copilot
 
-The equivalent hook wiring lives in [`.github/hooks/status-sync.json`](../.github/hooks/status-sync.json) (`UserPromptSubmit` → `reasoning`, `PreToolUse` → `need_user_action`, `AllowAction` → `allow_action`, `Done` → `done`) and drives the same webhook endpoints directly via `curl.exe`:
+Copilot CLI reads the same [`.claude/settings.json`](../.claude/settings.json) hooks as "repo settings", so there is no separate Copilot hook file (a second one would run every hook twice). The status hooks therefore fire for Copilot too, through the same `ai-helper-status-sync.ps1`. [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) additionally instructs Copilot to call the webhooks directly via `curl.exe` as part of its normal workflow:
 
 ```cmd
 curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_reasoning/press"
@@ -159,7 +159,7 @@ curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_done/press"
 curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_idle/press"
 ```
 
-[`status-sync.json`](../.github/hooks/status-sync.json) wires Copilot `UserPromptSubmit` and `Done` to [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) with `-Source "GitHub Copilot"` so the gauge is tagged correctly.
+[`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) reports the **Claude** plan, so it deliberately does nothing in a Copilot session (it exits unless `CLAUDE_PROJECT_DIR`/`CLAUDECODE` is set, or `-Override` is given). Copilot's gauge comes only from the `curl.exe` protocol above.
 
 To point either integration at your own device, replace `172.16.1.15` everywhere it appears (`ai-helper-status-sync.ps1`, `ai-helper-usage-sync.ps1`, and `copilot-instructions.md`) with your semaphore's IP address.
 

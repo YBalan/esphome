@@ -18,6 +18,10 @@
 # the gauge is simply left at its previous value rather than showing a wrong one.
 #
 # `-Override <percent>` skips the ping and posts a fixed value (manual/testing).
+#
+# Claude Code only. Copilot CLI also runs the shared .claude/settings.json hooks, but this
+# figure is the Claude plan's, so outside a Claude Code session (no CLAUDE_PROJECT_DIR /
+# CLAUDECODE in the environment) the script does nothing, unless `-Override` is given.
 
 param(
   [string]$DeviceIp = "172.16.1.15",
@@ -36,6 +40,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($Override -lt 0 -and -not $env:CLAUDE_PROJECT_DIR -and -not $env:CLAUDECODE) { return }
 # Windows PowerShell 5.1 defaults can negotiate < TLS 1.2; api.anthropic.com needs 1.2+.
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 

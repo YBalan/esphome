@@ -29,6 +29,19 @@ function Get-StateFile {
   return Join-Path $stateDir "esphome-ai-helper-status.txt"
 }
 
+function Write-HookLog($message) {
+  # Small log so a misbehaving hook can be diagnosed from either agent (Claude Code or Copilot).
+  try {
+    $log = Join-Path $env:TEMP "ai-helper-status-hooks\hook.log"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $log) -Force | Out-Null
+    if ((Test-Path $log) -and (Get-Item $log).Length -gt 100KB) { Set-Content -Path $log -Value "" }
+    $agent = if ($env:CLAUDE_PROJECT_DIR -or $env:CLAUDECODE) { "claude" } else { "other" }
+    Add-Content -Path $log -Value ("{0:s} [{1}] {2}" -f (Get-Date), $agent, $message)
+  } catch {
+    # Logging is best effort.
+  }
+}
+
 function Get-TextFromPayload($payload) {
   if ($null -eq $payload) {
     return ""
@@ -86,25 +99,37 @@ function Invoke-StatusWebhook($status) {
   }
 
   if (-not $endpointMap.ContainsKey($status)) {
-    return
+    return "ignored"
   }
 
   $stateFile = Get-StateFile
-  if ((Test-Path $stateFile) -and ((Get-Content $stateFile -Raw).Trim() -eq $status)) {
-    return
+  # An empty state file (e.g. caught mid-write by a parallel hook) reads as $null.
+  $previous = if (Test-Path $stateFile) { Get-Content $stateFile -Raw } else { $null }
+  if ($previous -and $previous.Trim() -eq $status) {
+    return "unchanged"
   }
 
   $uri = "http://172.16.1.15/button/{0}/press" -f $endpointMap[$status]
 
   try {
-    Invoke-WebRequest -Uri $uri -Method Post -Body "" -TimeoutSec 5 | Out-Null
+    Invoke-WebRequest -Uri $uri -Method Post -Body "" -TimeoutSec 5 -UseBasicParsing | Out-Null
     Set-Content -Path $stateFile -Value $status -NoNewline
+    return "sent"
   } catch {
     # Status sync must never block the agent.
+    return "device unreachable"
   }
 }
 
-$null = Get-WorkspaceRoot
-$payload = Read-HookPayload
-$status = Resolve-Status -mode $Mode -payload $payload
-Invoke-StatusWebhook -status $status
+# Claude Code and Copilot CLI both run this from the shared .claude/settings.json. Copilot CLI
+# turns a failing permission-related hook into a denial, so nothing may escape: always exit 0.
+try {
+  $null = Get-WorkspaceRoot
+  $payload = Read-HookPayload
+  $status = Resolve-Status -mode $Mode -payload $payload
+  $result = Invoke-StatusWebhook -status $status
+  Write-HookLog "mode=$Mode status=$status result=$result"
+} catch {
+  Write-HookLog "mode=$Mode error=$($_.Exception.Message)"
+}
+exit 0

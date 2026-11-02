@@ -7,6 +7,14 @@ substitutions:
   # No PZEM reply for this long -> all values are published as 0
   pzem_stale_timeout_ms: "30000"
 
+  # Sanity-check thresholds: readings above these maximums are published as 0
+  pzem_voltage_max: "400.0"
+  pzem_current_max: "100.0"
+  pzem_power_max: "23000"
+  pzem_energy_max: "10000000"
+  pzem_frequency_max: "100"
+  pzem_power_factor_max: "1"
+
 globals:
   - id: pzem_last_rx_ms
     type: uint32_t
@@ -28,7 +36,7 @@ sensor:
       filters:
         - delta: 2
         - lambda: |-
-            if (x > 400.0 || x < 0) { return 0.0; } else { return x; } 
+            if (x > ${pzem_voltage_max} || x < 0) { return 0.0; } else { return x; } 
         - throttle: 10s      
     current:
       id: pzem_current
@@ -37,7 +45,7 @@ sensor:
       filters:
         - delta: 1   
         - lambda: |-
-            if (x > 100.0 || x < 0) { return 0.0; } else { return x; }     
+            if (x > ${pzem_current_max} || x < 0) { return 0.0; } else { return x; }     
         #- throttle: 3s
     power:
       id: pzem_power
@@ -45,7 +53,7 @@ sensor:
       filters:
         - delta: 5
         - lambda: |-
-            if (x > 23000 || x < 0) { return 0.0; } else { return x; }
+            if (x > ${pzem_power_max} || x < 0) { return 0.0; } else { return x; }
         #- throttle: 5s
     energy:
       id: pzem_energy
@@ -53,7 +61,7 @@ sensor:
       filters:
         #- delta: 1
         - lambda: |-
-            if (x > 10000000 || x < 0) { return 0.0; } else { return x; }
+            if (x > ${pzem_energy_max} || x < 0) { return 0.0; } else { return x; }
         - throttle: 29s
     frequency:
       id: pzem_frequency
@@ -61,7 +69,7 @@ sensor:
       filters:
         - delta: 0.1
         - lambda: |-
-            if (x > 100 || x < 0) { return 0.0; } else { return x; }
+            if (x > ${pzem_frequency_max} || x < 0) { return 0.0; } else { return x; }
         #- throttle: 11s
     power_factor:
       id: pzem_power_factor
@@ -69,7 +77,7 @@ sensor:
       filters:
         - delta: 0.1
         - lambda: |-
-            if (x > 1 || x < 0) { return 0.0; } else { return x; }
+            if (x > ${pzem_power_factor_max} || x < 0) { return 0.0; } else { return x; }
         #- throttle: 7s
 
 # interval:
