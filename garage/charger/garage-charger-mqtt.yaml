@@ -10,4 +10,4 @@ mqtt:
   # reboot_timeout being disabled.
   reboot_timeout: 0s
   topic_prefix: ${device_name}
-  discovery: true
+  discovery: false
