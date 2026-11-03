@@ -1,8 +1,12 @@
 # AI Helper
 
-ESP32 firmware that gives coding agents (Claude Code, GitHub Copilot, ...) a physical presence on the desk: an RGB **status semaphore** (LED + buzzer) that shows what the agent is currently doing, plus an optional **mouse mover** module to keep the workstation awake during long agent sessions.
+ESP32 firmware that gives coding agents (Claude Code, GitHub Copilot, ...) a physical presence on the desk: an RGB **status semaphore** (LED + buzzer) that shows what the agent is currently doing, plus an optional **mouse mover** (servo + LCD) that keeps the workstation awake during long runs.
 
 Both modules share one ESPHome codebase and can be flashed together on one board or as two independent devices.
+
+## Video
+
+[![AI Helper demo video](https://img.youtube.com/vi/Ve-P4YmRdPM/0.jpg)](https://youtu.be/Ve-P4YmRdPM)
 
 ---
 
@@ -37,7 +41,7 @@ Common electronics for both modules:
 | [`ai-helper-mouse-mover-defaults.yaml`](ai-helper-mouse-mover-defaults.yaml) | Mouse mover substitutions: pins, angle/step/delay ranges, timing |
 | `secrets.yaml` | WiFi/MQTT credentials (not committed) |
 
-Both device modules are compiled behind `platformio_options.build_flags` (`AI_HELPER_SEMAPHORE_BUILD_ENABLED`, `AI_HELPER_MOUSE_MOVER_BUILD_ENABLED`), so the combined `ai-helper.yaml` build includes both, while the two standalone `*-device.yaml` files enable only one flag and `!include` only the matching package.
+Both device modules are compiled behind `platformio_options.build_flags` (`AI_HELPER_SEMAPHORE_BUILD_ENABLED`, `AI_HELPER_MOUSE_MOVER_BUILD_ENABLED`), so the combined `ai-helper.yaml` build includes both; the standalone YAMLs each enable only one.
 
 ---
 
@@ -45,7 +49,7 @@ Both device modules are compiled behind `platformio_options.build_flags` (`AI_HE
 
 Shows the AI agent's current phase via an RGB LED (one of 3 physical positions: Red/Yellow/Green segment) and an optional buzzer beep.
 
-Status states: `Idle`, `Reasoning`, `Done`, `Need User Action`, `Allow Action`, `Custom1`, `Custom2`. Each status has independently configurable LED color, LED position, brightness, and buzzer (enabled/frequency/volume/repeat) — all exposed as Home Assistant `number`/`select`/`switch` config entities.
+Status states: `Idle`, `Reasoning`, `Done`, `Need User Action`, `Allow Action`, `Custom1`, `Custom2`. Each status has independently configurable LED color, LED position, brightness, and buzzer (enable/frequency/duration).
 
 Status can be changed:
 
@@ -72,7 +76,7 @@ Sweeps a servo horn back and forth on a timer to simulate mouse activity, with a
 
 ## Webhook setup for Claude Code and Copilot
 
-The semaphore exposes one HTTP endpoint per status via ESPHome's built-in web server (`web_server: port: 80`, enabled in [`ai-helper-common.yaml`](ai-helper-common.yaml)). No Home Assistant is required for this — coding-agent hooks call the device directly over HTTP on the LAN:
+The semaphore exposes one HTTP endpoint per status via ESPHome's built-in web server (`web_server: port: 80`, enabled in [`ai-helper-common.yaml`](ai-helper-common.yaml)). No Home Assistant is required.
 
 ```
 POST http://<device-ip>/button/webhook_<status>/press
@@ -98,15 +102,15 @@ Both agent integrations below just decide *when* to hit which of these endpoints
 
 ### Remaining-usage gauge
 
-Besides the status semaphore, the device exposes a **`Usage Remaining`** percentage (0-100 %) number entity. Agents push it over the same web-server REST API, addressing the entity by its URL-encoded display name (object-id URLs are deprecated and removed in ESPHome 2026.7.0):
+Besides the status semaphore, the device exposes a **`Usage Remaining`** percentage (0-100 %) number entity. Agents push it over the same web-server REST API, addressing the entity by its URL-encoded name:
 
 ```
 POST http://<device-ip>/number/AI%20Helper%20Usage%20Remaining/set?value=<0-100>
 ```
 
-It's a `number` (not a `sensor`) because ESPHome's web server can only *set* controllable entities over HTTP — `sensor` entities are read-only — but it still displays as a percentage readout in the web UI / Home Assistant.
+It's a `number` (not a `sensor`) because ESPHome's web server can only *set* controllable entities over HTTP — `sensor` entities are read-only — but it still displays as a percentage readout in the Home Assistant UI and on the device's own web page.
 
-Alongside it, a **`Usage Source`** text entity records which tool is currently driving the gauge. Agents should update **both** `Usage Source` and `Usage Remaining` at the **start of reasoning** and again on **`Stop`/`Done`** so the gauge reflects both in-progress and final state. The source value persists across reboots (`restore_value`):
+Alongside it, a **`Usage Source`** text entity records which tool is currently driving the gauge. Agents should update **both** `Usage Source` and `Usage Remaining` at the **start of reasoning** and again at **done**:
 
 ```
 POST http://<device-ip>/text/AI%20Helper%20Usage%20Source/set?value=Claude%20Code
@@ -116,11 +120,11 @@ POST http://<device-ip>/text/AI%20Helper%20Usage%20Source/set?value=Claude%20Cod
 
   > Note: this uses your stored Claude credentials to make one tiny extra request per turn, and relies on undocumented rate-limit headers that Anthropic could change.
 
-- **GitHub Copilot** has its own separate quota (not Claude's) with no equivalent hook-accessible usage feed, so its **percentage is best-effort** — it posts a value it estimates at reasoning start and again at done/stop (see [`copilot-instructions.md`](../.github/copilot-instructions.md)). It also sets **`Usage Source = GitHub Copilot`** at both points.
+- **GitHub Copilot** has its own separate quota (not Claude's) with no equivalent hook-accessible usage feed, so its **percentage is best-effort** — it posts a value it estimates at reasoning start and done, tagged with `Usage Source = GitHub Copilot`.
 
 ### Claude Code
 
-Claude Code hooks are configured in [`.claude/settings.json`](../.claude/settings.json) and shell out to [`.github/hooks/ai-helper-status-sync.ps1`](../.github/hooks/ai-helper-status-sync.ps1), which POSTs to the semaphore and de-dupes repeated calls to the same status via a temp state file.
+Claude Code hooks are configured in [`.claude/settings.json`](../.claude/settings.json) and shell out to [`.github/hooks/ai-helper-status-sync.ps1`](../.github/hooks/ai-helper-status-sync.ps1), which translates hook events into webhook calls.
 
 1. Confirm the semaphore IP in `.github/hooks/ai-helper-status-sync.ps1` (`$uri` line) matches your device.
 2. Wire hook events to a `-Mode` in `.claude/settings.json`:
@@ -157,7 +161,7 @@ curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_idle/press"
 
 [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) reports the **Claude** plan, so it deliberately does nothing in a Copilot session (it exits unless `CLAUDE_PROJECT_DIR`/`CLAUDECODE` is set, or `-Override` is given). Copilot's gauge comes only from the `curl.exe` protocol above.
 
-To point either integration at your own device, replace `172.16.1.15` everywhere it appears (`ai-helper-status-sync.ps1`, `ai-helper-usage-sync.ps1`, and `copilot-instructions.md`) with your semaphore's actual IP address.
+To point either integration at your own device, replace `172.16.1.15` everywhere it appears (`ai-helper-status-sync.ps1`, `ai-helper-usage-sync.ps1`, and `copilot-instructions.md`) with your semaphore's IP address.
 
 ---
 
@@ -213,7 +217,3 @@ wifi_password: "Your_WiFi_Password"
 ![Assembled device](photo/IMG_20240731_201218.jpg)
 
 Mouse mover in action: [`VID_20240801_203023.mp4`](photo/VID_20240801_203023.mp4), [`VID_20240801_203426.mp4`](photo/VID_20240801_203426.mp4)
-
-## Video
-
-[![AI Helper demo video](https://img.youtube.com/vi/Ve-P4YmRdPM/0.jpg)](https://youtu.be/Ve-P4YmRdPM)
