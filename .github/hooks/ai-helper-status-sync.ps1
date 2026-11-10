@@ -1,18 +1,28 @@
 param(
   [ValidateSet("reasoning", "need_user_action", "allow_action", "done", "idle", "classify-stop")]
-  [string]$Mode = "reasoning"
+  [string]$Mode = "reasoning",
+
+  [ValidateSet("None", "InteractiveTool", "PermissionPrompt", "ElicitationDialog")]
+  [string]$PayloadFilter = "None",
+
+  [string]$PayloadJson,
+
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
 
-function Read-HookPayload {
-  $raw = [Console]::In.ReadToEnd()
+function Read-HookPayload([string]$raw) {
+  if ([string]::IsNullOrWhiteSpace($raw)) {
+    $raw = [Console]::In.ReadToEnd()
+  }
+
   if ([string]::IsNullOrWhiteSpace($raw)) {
     return $null
   }
 
   try {
-    return $raw | ConvertFrom-Json -Depth 32
+    return $raw | ConvertFrom-Json
   } catch {
     return $null
   }
@@ -59,6 +69,69 @@ function Get-TextFromPayload($payload) {
   return ($candidates -join "`n")
 }
 
+function Get-PayloadValue($payload, [string[]]$names) {
+  if ($null -eq $payload) {
+    return $null
+  }
+
+  foreach ($name in $names) {
+    $property = $payload.PSObject.Properties[$name]
+    if ($null -ne $property -and -not [string]::IsNullOrWhiteSpace([string]$property.Value)) {
+      return [string]$property.Value
+    }
+  }
+
+  return $null
+}
+
+function Normalize-ToolName([string]$toolName) {
+  switch ($toolName) {
+    { $_ -in @("AskUserQuestion", "ask_user") } { return "ask_user" }
+    { $_ -in @("ExitPlanMode", "exit_plan_mode") } { return "exit_plan_mode" }
+    default { return $toolName.ToLowerInvariant() }
+  }
+}
+
+function Test-PayloadFilter($payload, [string]$filter) {
+  switch ($filter) {
+    "None" { return $true }
+    "InteractiveTool" {
+      $toolName = Get-PayloadValue -payload $payload -names @("tool_name", "toolName")
+      if ([string]::IsNullOrWhiteSpace($toolName)) {
+        return $false
+      }
+
+      return (Normalize-ToolName $toolName) -in @("ask_user", "exit_plan_mode")
+    }
+    "PermissionPrompt" {
+      $notificationType = Get-PayloadValue -payload $payload -names @("notification_type", "notificationType")
+      return $notificationType -eq "permission_prompt"
+    }
+    "ElicitationDialog" {
+      $notificationType = Get-PayloadValue -payload $payload -names @("notification_type", "notificationType")
+      return $notificationType -eq "elicitation_dialog"
+    }
+  }
+
+  return $false
+}
+
+# A message that really waits for the user ends with the question or request, so only the closing
+# paragraph is classified. Keywords earlier on ("permission", a quoted "should I", ...) are just
+# prose; matching them lit the red LED for a message that merely described this classifier.
+function Get-LastParagraph([string]$text) {
+  if ([string]::IsNullOrWhiteSpace($text)) {
+    return ""
+  }
+
+  $paragraphs = @($text.Trim() -split "\r?\n[ \t]*\r?\n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  if ($paragraphs.Count -eq 0) {
+    return ""
+  }
+
+  return [string]$paragraphs[$paragraphs.Count - 1]
+}
+
 function Resolve-Status($mode, $payload) {
   switch ($mode) {
     "reasoning" { return "reasoning" }
@@ -67,7 +140,7 @@ function Resolve-Status($mode, $payload) {
     "done" { return "done" }
     "idle" { return "idle" }
     "classify-stop" {
-      $text = (Get-TextFromPayload $payload).ToLowerInvariant()
+      $text = (Get-LastParagraph (Get-TextFromPayload $payload)).ToLowerInvariant()
       if ([string]::IsNullOrWhiteSpace($text)) {
         return "done"
       }
@@ -125,11 +198,18 @@ function Invoke-StatusWebhook($status) {
 # turns a failing permission-related hook into a denial, so nothing may escape: always exit 0.
 try {
   $null = Get-WorkspaceRoot
-  $payload = Read-HookPayload
+  $payload = Read-HookPayload -raw $PayloadJson
+  if (-not (Test-PayloadFilter -payload $payload -filter $PayloadFilter)) {
+    $toolName = Get-PayloadValue -payload $payload -names @("tool_name", "toolName")
+    $notificationType = Get-PayloadValue -payload $payload -names @("notification_type", "notificationType")
+    Write-HookLog "mode=$Mode filter=$PayloadFilter payloadLength=$($PayloadJson.Length) tool=$toolName notification=$notificationType result=ignored"
+    exit 0
+  }
+
   $status = Resolve-Status -mode $Mode -payload $payload
-  $result = Invoke-StatusWebhook -status $status
-  Write-HookLog "mode=$Mode status=$status result=$result"
+  $result = if ($DryRun) { "dry-run" } else { Invoke-StatusWebhook -status $status }
+  Write-HookLog "mode=$Mode filter=$PayloadFilter status=$status result=$result"
 } catch {
-  Write-HookLog "mode=$Mode error=$($_.Exception.Message)"
+  Write-HookLog "mode=$Mode filter=$PayloadFilter error=$($_.Exception.Message)"
 }
 exit 0
