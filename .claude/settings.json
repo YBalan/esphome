@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode reasoning; exit 0'",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$payload=[Console]::In.ReadToEnd(); & (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode reasoning -PayloadJson $payload; exit 0'",
             "timeout": 10
           },
           {
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode need_user_action; exit 0'",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$payload=[Console]::In.ReadToEnd(); & (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode need_user_action -PayloadFilter InteractiveTool -PayloadJson $payload; exit 0'",
             "timeout": 10
           }
         ]
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode reasoning; exit 0'",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$payload=[Console]::In.ReadToEnd(); & (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode reasoning -PayloadJson $payload; exit 0'",
             "timeout": 10
           }
         ]
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode allow_action; exit 0'",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$payload=[Console]::In.ReadToEnd(); & (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode allow_action -PayloadFilter PermissionPrompt -PayloadJson $payload; exit 0'",
             "timeout": 10
           }
         ]
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode need_user_action; exit 0'",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$payload=[Console]::In.ReadToEnd(); & (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode need_user_action -PayloadFilter ElicitationDialog -PayloadJson $payload; exit 0'",
             "timeout": 10
           }
         ]
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '& (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode classify-stop; exit 0'",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command '$payload=[Console]::In.ReadToEnd(); & (Join-Path $(if($env:CLAUDE_PROJECT_DIR){$env:CLAUDE_PROJECT_DIR}else{$PWD.Path}) .github/hooks/ai-helper-status-sync.ps1) -Mode classify-stop -PayloadJson $payload; exit 0'",
             "timeout": 10
           },
           {
