@@ -45,10 +45,16 @@ esphome:
   on_boot:
     priority: -100 # Run last, when everything has already finished loading
     then:
-      # Report which component the main loop was stuck in if the last reset was
-      # a task watchdog (see esp_task_wdt_isr_user_handler in jkbms_v2.h).
+      # Report which component the main loop was stuck in, and the saved stacks of
+      # loopTask and the Bluetooth tasks, if the last reset was a task watchdog
+      # (see esp_task_wdt_isr_user_handler in jkbms_v2.h).
       - lambda: |-
-          id(wdt_last_report).publish_state(jkbms_wdt::take_last_report());
+          jkbms_wdt::load_previous();
+          jkbms_wdt::refresh_tasks();
+          id(wdt_last_report).publish_state(jkbms_wdt::last_report());
+          id(wdt_loop_trace).publish_state(jkbms_wdt::loop_trace());
+          id(wdt_bt_host).publish_state(jkbms_wdt::task_traces(1, 2));
+          id(wdt_bt_hci).publish_state(jkbms_wdt::task_traces(3, 4));
       # Report where the last panic happened (exception/abort/any watchdog): reason,
       # crashed core, PC, backtrace addresses. See panic_capture.h for how to decode.
       - lambda: |-
@@ -556,6 +562,13 @@ interval:
             id(bms_charging_duration_s) += 10;
           }
 
+  # Re-resolve the task handles the task-watchdog hook reads (the Bluetooth tasks only
+  # exist once Bluetooth is up, which can be a while after boot). Must run in task
+  # context, not in the interrupt. Cheap: five name lookups.
+  - interval: 10s
+    then:
+      - lambda: 'jkbms_wdt::refresh_tasks();'
+
   # Refresh the OLED once a second, but only while it is lit (see display block).
   - interval: 1s
     then:
@@ -613,6 +626,21 @@ button:
     icon: "mdi:bug-outline"
     on_press:
       - lambda: "*(volatile int *) 0 = 1;"
+
+    # Blocks the main loop for 40 s (the task watchdog fires after 30 s) to check the
+    # watchdog stack capture: after the reset "BMS Last Watchdog Backtrace" must show
+    # vTaskDelay / delay on top of a call chain from this button. The relay and the BMS
+    # polling are not serviced during the test; the device resets by itself.
+  - platform: template
+    name: "BMS Test Watchdog (block loop)"
+    id: test_wdt_block_btn
+    entity_category: diagnostic
+    disabled_by_default: true
+    icon: "mdi:bug-outline"
+    on_press:
+      - lambda: |-
+          jkbms_wdt::refresh_tasks();
+          esphome::delay(40000);
 
 # 6. CONTROL (Switches)
 # Allow turning charge/discharge on/off via MQTT
@@ -852,6 +880,28 @@ text_sensor:
     id: wdt_last_report
     entity_category: diagnostic
     icon: "mdi:dog"
+  # Saved call stack of loopTask when the task watchdog fired: "elf=<id> stack: 0x...", top
+  # frame first. The panic backtrace shows the idle task; this shows where the main loop
+  # was waiting. Decode with tools/decode_panic.py (paste this text; the ELF is picked by
+  # the id). Checked on the device with "BMS Test Watchdog (block loop)".
+  - platform: template
+    name: "BMS Last Watchdog Backtrace"
+    id: wdt_loop_trace
+    entity_category: diagnostic
+    icon: "mdi:format-list-numbered"
+  # Same for the Bluetooth tasks, "BTC_TASK: 0x... | BTU_TASK: 0x...". Healthy tasks wait on
+  # their own queue/semaphore (osi_sem_take, xQueueReceive); one waiting on something else
+  # is the one that stopped draining. Two sensors: the host tasks, then HCI + controller.
+  - platform: template
+    name: "BMS Last Watchdog BT Host Tasks"
+    id: wdt_bt_host
+    entity_category: diagnostic
+    icon: "mdi:bluetooth"
+  - platform: template
+    name: "BMS Last Watchdog BT HCI Tasks"
+    id: wdt_bt_hci
+    entity_category: diagnostic
+    icon: "mdi:bluetooth"
   # Where the last panic happened: reason (Fault/Abort/Task wdt/Interrupt wdt), crashed
   # core, PC, fault address and the id of the running ELF. "n/a" after a reset that was
   # not a panic.

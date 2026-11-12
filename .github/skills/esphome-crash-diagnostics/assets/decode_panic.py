@@ -72,6 +72,18 @@ def find_addr2line(chip: str) -> pathlib.Path:
     sys.exit(f"addr2line for {chip} not found in the ESPHome toolchain cache; pass --addr2line")
 
 
+ADDRESS = re.compile(r"0x[0-9a-fA-F]{8}")
+# "BTC_TASK[b]: 0x... 0x...", "blocked: 0x... 0x...", "PC: 0x...": a label followed by addresses.
+LABELLED = re.compile(r"([A-Za-z_]\w*(?:\[[bi]\])?):((?:\s*0x[0-9a-fA-F]{8})+)")
+
+
+def address_groups(text: str) -> list[tuple[str, list[str]]]:
+    """Split the pasted text into (label, addresses); plain addresses come first, unlabelled."""
+    groups = [(m.group(1), ADDRESS.findall(m.group(2))) for m in LABELLED.finditer(text)]
+    plain = ADDRESS.findall(LABELLED.sub(" ", text))
+    return ([("", plain)] if plain else []) + groups
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("text", nargs="+", help="backtrace text or addresses (0x40xxxxxx ...)")
@@ -81,8 +93,8 @@ def main() -> None:
     args = parser.parse_args()
 
     text = " ".join(args.text)
-    addresses = re.findall(r"0x[0-9a-fA-F]{8}", text)
-    if not addresses:
+    groups = address_groups(text)
+    if not groups:
         sys.exit("no 0x........ addresses found in the input")
     match = re.search(r"elf=([0-9a-fA-F]{8})", text)
     wanted_id = match.group(1).lower() if match else None
@@ -102,16 +114,19 @@ def main() -> None:
         print(f"Matches the build the device ran (elf={wanted_id}).\n")
 
     addr2line = args.addr2line or find_addr2line(args.chip)
-    result = subprocess.run(
-        [str(addr2line), "-pfiaC", "-e", str(elf), *addresses],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    print(result.stdout.rstrip())
-    if result.returncode != 0:
-        print(result.stderr.rstrip(), file=sys.stderr)
-        sys.exit(result.returncode)
+    for label, addresses in groups:
+        result = subprocess.run(
+            [str(addr2line), "-pfiaC", "-e", str(elf), *addresses],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if label:
+            print(f"== {label}")
+        print(result.stdout.rstrip())
+        if result.returncode != 0:
+            print(result.stderr.rstrip(), file=sys.stderr)
+            sys.exit(result.returncode)
 
 
 if __name__ == "__main__":

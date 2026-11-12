@@ -55,7 +55,39 @@ or `Reason: Fault - LoadProhibited (cause 28) | Crashed core: 0 | PC: ... | EXCV
   = the interrupt watchdog, with the stack of whatever the CPU was doing at that moment;
   `Task wdt` = the task watchdog. The handler reclassifies `abort()` itself, so unlike the old
   custom wrapper an `abort()` is not reported as `IllegalInstruction`. The Reset Reason entity
-  (`task watchdog`) still helps to cross-check. `other-build` in the text means the crash was
+  (`task watchdog`) still helps to cross-check.
+- **`Task wdt` and the PC.** The recorded PC and backtrace belong to whatever was running on
+  the crashed core when the watchdog fired, *not* to the task that stopped feeding it. ESPHome
+  pins `loopTask` to core 1 and watches only that task (the idle tasks are not watched). If
+  the PC decodes to `esp_cpu_wait_for_intr` (the idle task's wait-for-interrupt), core 1 was
+  idle: `loopTask` was **blocked** (a lock, queue, semaphore or a call that waits for another
+  task such as BLE/MQTT/flash), not busy, and the backtrace says nothing about where. Use
+  `Last Watchdog` (the component the loop was in), `Last Watchdog Backtrace` (the saved stack
+  of `loopTask` itself, see below), the `other core` backtrace if present, and `Loop Max Time` /
+  heap graphs before the reset. If the PC is inside application or driver code instead, the
+  loop was busy there (a long loop or a blocking read with interrupts off).
+- **`Last Watchdog Backtrace` and the `BT Host Tasks` / `BT HCI Tasks` sensors** (hook in
+  `wdt_forensics.h`). The first is `elf=<id> stack: 0x... 0x...`, up to 16 frames, top frame
+  first: where `loopTask` last gave up the CPU. Decode it: the top frames are the kernel wait
+  (`vTaskDelay`, `xQueueReceive`, `xQueueSemaphoreTake`, `osi_sem_take`), and the first
+  application or driver frame below them is the call that never returned (e.g.
+  `esp_ble_gap_start_scanning` -> `btc_transfer_context` -> `osi_thread_post`: waiting for the
+  Bluetooth task). Verified on a device with the block-loop test button: the chain came back
+  complete from `vTaskDelay` through the YAML lambda, `Button::press`,
+  `APIConnection::on_button_command_request` and `Application::loop` to `loop_task`. The other
+  two sensors hold the Bluetooth tasks (`BTC_TASK`, `BTU_TASK` | `hciT`, `btController`),
+  6 frames each. A healthy Bluetooth task waits on its own queue or semaphore
+  (`xQueueSemaphoreTake` <- `osi_sem_take`, `xQueueReceive` <- `queue_recv_hlevel_wrapper`);
+  one waiting on a mutex, an HCI response or another task's queue is the one that stopped
+  draining. Caveat: the stack is where the task last gave up the CPU. It is exact for a task
+  that is waiting, but only as old as its last context switch if it was running on the other
+  core when the interrupt fired; read the top frames. The frame type (solicited or interrupt)
+  does not tell waiting from running: a task blocked in `vTaskDelay` is saved as an
+  interrupt-style frame. `unknown (no record)` after a task watchdog means the RTC record
+  did not survive. A task listed as `none (<reason>)` has no stack: `task not found` = it did
+  not exist when the handles were last resolved (every 10 s; e.g. Bluetooth not up yet in the
+  first seconds after boot), `TCB unreadable` / `bad stack pointer` = the capture failed.
+  Do not read `task not found` as "Bluetooth was healthy".- `other-build` in the text means the crash was
   recorded by a previous firmware (it survives the OTA reboot): its addresses belong to that
   build's ELF, not the running one.
 - **`crash data present but not readable (n=N first=…)`** means the crash record exists
@@ -105,9 +137,16 @@ or `Reason: Fault - LoadProhibited (cause 28) | Crashed core: 0 | PC: ... | EXCV
 - **`reboot_timeout` on `api`, `wifi`, `mqtt`** (default 15 min each): reboots when HA, WiFi
   or the broker is unreachable that long. Shows as `Reboot request from api|wifi|mqtt`.
   Only the symptom of a connectivity problem; set it deliberately.
-- **BLE client stacks** (`ble_client`, BMS drivers): `esp_ble_*` calls from the main loop can
-  wait on the BLE task. Pin external components to a commit so a rebuild does not change the
-  driver silently.
+- **BLE client stacks** (`ble_client`, BMS drivers, `esp32_ble_tracker`): every Bluedroid API
+  call from the main loop (`esp_ble_gap_*`, `esp_ble_gattc_*`) goes through
+  `btc_transfer_context()` -> `btc_task_post(..., OSI_THREAD_MAX_TIMEOUT)`, an unbounded wait
+  for room in the BTC task's queue (ESP-IDF 5.5.6 `btc_task.c`). If the Bluetooth host stops
+  draining that queue the main loop blocks until the 30 s task watchdog resets the device:
+  `task watchdog`, `Last Watchdog` = `ble_tracker` (or the BLE client), `Last Panic` PC in the
+  idle loop. `Last Watchdog Backtrace` / `BT Host Tasks` / `BT HCI Tasks` show which call it is and what the
+  Bluetooth tasks were waiting for. Not a fix, but a cause that no ESPHome option removes;
+  reducing Bluetooth load (passive scan, longer intervals) lowers the odds. Pin external
+  components to a commit so a rebuild does not change the driver silently.
 
 ## 5. Interrupt watchdog notes
 `Last Watchdog` cannot see it, but panic capture can: the `Last Panic` reason is
