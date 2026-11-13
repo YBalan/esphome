@@ -9,10 +9,9 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  platformio_options:
-    build_flags:
-      - -DAI_HELPER_MOUSE_MOVER_BUILD_ENABLED=1
-      - -DAI_HELPER_SEMAPHORE_BUILD_ENABLED=1
+  build_flags:
+    - -DAI_HELPER_MOUSE_MOVER_BUILD_ENABLED=1
+    - -DAI_HELPER_SEMAPHORE_BUILD_ENABLED=1
   includes:
     - ai-helper-semaphore.h
     - ai-helper-mouse-mover.h
@@ -25,6 +24,16 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
+    advanced:
+      # Applied from the boot-log hints ("under esp32 > framework > advanced").
+      # Drop the unused flash vendor drivers (this board's flash uses the generic one).
+      flash_chip: generic
+      # Boot log reports "ESP32 Chip: ... rev3.1". Firmware built with this minimum
+      # will NOT boot on a chip older than rev 3.1 - revert if this image is ever
+      # flashed to a different/older ESP32 board.
+      minimum_chip_revision: "3.1"
+      # Needs the ESP-IDF >= 5.1 bootloader; the boot log confirmed this device has it.
+      sram1_as_iram: true
     sdkconfig_options:
       # Baseline task-watchdog window (default 5s). http_request temporarily
       # raises this to its watchdog_timeout during a request; this covers the

@@ -163,7 +163,7 @@ light:
     chipset: WS2812
     pin: ${sem_led_data_pin}
     num_leds: 4
-    rgb_order: GRB
+    channel_colors: GRB
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s
     flash_transition_length: 0s
