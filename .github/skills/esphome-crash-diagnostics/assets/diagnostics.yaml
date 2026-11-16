@@ -65,9 +65,23 @@ esphome:
             ESP_LOGW("panic_capture", "Previous panic: %s", panic_capture::summary().c_str());
             ESP_LOGW("panic_capture", "Backtrace: %s", panic_capture::backtrace().c_str());
           }
-      # Layer 2b (optional):
+      # Layer 2b (optional): component, and saved stacks of loopTask + Bluetooth tasks,
+      # from the task-watchdog interrupt hook in wdt_forensics.h.
       - lambda: |-
-          id(wdt_last_report).publish_state(wdt_forensics::take_last_report());
+          wdt_forensics::load_previous();
+          wdt_forensics::refresh_tasks();
+          id(wdt_last_report).publish_state(wdt_forensics::last_report());
+          id(wdt_loop_trace).publish_state(wdt_forensics::loop_trace());
+          id(wdt_bt_host).publish_state(wdt_forensics::task_traces(1, 2));
+          id(wdt_bt_hci).publish_state(wdt_forensics::task_traces(3, 4));
+
+# Layer 2b: the hook reads task handles from interrupt context, so they must be resolved
+# beforehand, periodically (the Bluetooth tasks only exist once Bluetooth is up, which can be
+# a while after boot).
+interval:
+  - interval: 10s
+    then:
+      - lambda: 'wdt_forensics::refresh_tasks();'
 
 text_sensor:
   # Reason (Fault / Abort / Task wdt / Interrupt wdt), crashed core, PC, fault address, ELF id.
@@ -89,6 +103,25 @@ text_sensor:
     id: wdt_last_report
     entity_category: diagnostic
     icon: "mdi:dog"
+  # Layer 2b: "elf=<id> stack: 0x..." = where loopTask was waiting, top frame first (the panic
+  # backtrace shows the idle task, not the stuck one). Decode with decode_panic.py.
+  - platform: template
+    name: "${friendly_name} Last Watchdog Backtrace"
+    id: wdt_loop_trace
+    entity_category: diagnostic
+    icon: "mdi:format-list-numbered"
+  # Layer 2b: "BTC_TASK: 0x... | BTU_TASK: 0x..." and the same for hciT + btController
+  # (two sensors: six frames for all four tasks would exceed 255 characters).
+  - platform: template
+    name: "${friendly_name} Last Watchdog BT Host Tasks"
+    id: wdt_bt_host
+    entity_category: diagnostic
+    icon: "mdi:bluetooth"
+  - platform: template
+    name: "${friendly_name} Last Watchdog BT HCI Tasks"
+    id: wdt_bt_hci
+    entity_category: diagnostic
+    icon: "mdi:bluetooth"
 
 # One-off check that the capture works: enable the entity in HA, press it, the device
 # crashes and reboots, and both Last Panic sensors must then be filled in. Disable it again.
@@ -105,6 +138,16 @@ button:
     disabled_by_default: true
     on_press:
       - lambda: "*(volatile int *) 0 = 1;"
+  # Layer 2b check: blocks the main loop for 40 s, the task watchdog fires after 30 s. After
+  # the reset Last Watchdog Backtrace must show vTaskDelay / delay on a chain from this button.
+  - platform: template
+    name: "${friendly_name} Test Watchdog (block loop)"
+    entity_category: diagnostic
+    disabled_by_default: true
+    on_press:
+      - lambda: |-
+          wdt_forensics::refresh_tasks();
+          esphome::delay(40000);
 
 # --- ELF archive hook (native ESP-IDF builds, ESPHome 2026.7+) ----------------------------
 # After every link, copies the firmware ELF to <config folder>/elf-archive/ so a panic from

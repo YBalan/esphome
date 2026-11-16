@@ -528,7 +528,7 @@ light:
     name: Device - Status Strip
     pin: ${rgb_strip_pin}
     num_leds: ${rgb_led_count}
-    rgb_order: ${rgb_order}
+    channel_colors: ${rgb_order}
     chipset: ws2812
     restore_mode: ALWAYS_OFF
     default_transition_length: 0s

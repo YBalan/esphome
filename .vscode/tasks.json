@@ -1,0 +1,83 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AI Helper: install Claude hooks",
+      "detail": "Copies ai-helper/claude-hooks to ~/.claude/hooks/ai-helper and merges settings-hooks.json into ~/.claude/settings.json (backs up what it changes, safe to repeat). Restart Claude sessions afterwards.",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/ai-helper/claude-hooks/install.ps1"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "AI Helper: check Claude hooks (no changes)",
+      "detail": "Reports whether ~/.claude matches ai-helper/claude-hooks. Changes nothing; the task fails (exit 1) when they differ.",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/ai-helper/claude-hooks/install.ps1",
+        "-Check"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "AI Helper: install Copilot hooks",
+      "detail": "Copies ai-helper/copilot-hooks (plus the shared status script) to ~/.copilot/hooks (backs up what it changes, safe to repeat). Restart Copilot sessions afterwards.",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/ai-helper/copilot-hooks/install.ps1"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "AI Helper: check Copilot hooks (no changes)",
+      "detail": "Reports whether ~/.copilot matches ai-helper/copilot-hooks. Changes nothing; the task fails (exit 1) when they differ.",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/ai-helper/copilot-hooks/install.ps1",
+        "-Check"
+      ],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

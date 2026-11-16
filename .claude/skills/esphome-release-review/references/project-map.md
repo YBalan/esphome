@@ -44,7 +44,8 @@ examples are not our devices); `docs/`, `images/`, `stl/`.
   changes matter for `grid-meter` and `garage/generator`. `garage/generator` declares its
   `modbus` hub explicitly (`garage-generator-pzem.yaml`); `grid-meter` still relies on the
   implicit hub, whose timings are ESPHome's defaults (2000ms response wait, 600ms turnaround).
-- The ai-helper PowerShell hooks (`.github/hooks/ai-helper-*.ps1`) call `web_server` REST
+- The ai-helper PowerShell hooks (user level, installed from `ai-helper/claude-hooks/` and
+  `ai-helper/copilot-hooks/` to `~/.claude/hooks/ai-helper/` and `~/.copilot/hooks/ai-helper/`) call `web_server` REST
   URLs by entity **name** (for example `/button/webhook_reasoning/press`,
   `/number/AI Helper Usage Remaining/set`). `web_server` URL/ID changes need a look at them.
 
