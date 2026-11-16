@@ -39,6 +39,8 @@ Common electronics for both modules:
 | [`ai-helper-semaphore.yaml`](ai-helper-semaphore.yaml) / [`.h`](ai-helper-semaphore.h) | Semaphore module: status LED, buzzer, per-status color/brightness/buzzer config, webhook buttons |
 | [`ai-helper-mouse-mover.yaml`](ai-helper-mouse-mover.yaml) / [`.h`](ai-helper-mouse-mover.h) | Mouse mover module: servo sweep, LCD menu, random.org-seeded randomization |
 | [`ai-helper-mouse-mover-defaults.yaml`](ai-helper-mouse-mover-defaults.yaml) | Mouse mover substitutions: pins, angle/step/delay ranges, timing |
+| [`claude-hooks/`](claude-hooks/) | Claude Code **user-level** hooks for the semaphore (status light + usage gauge): scripts, `settings-hooks.json`, `install.ps1` — see [Claude Code](#claude-code) |
+| [`copilot-hooks/`](copilot-hooks/) | GitHub Copilot **user-level** hooks for the semaphore (status light, reusing the same status script): `ai-helper.json`, `install.ps1` — see [GitHub Copilot](#github-copilot) |
 | `secrets.yaml` | WiFi/MQTT credentials (not committed) |
 
 Both device modules are compiled behind `platformio_options.build_flags` (`AI_HELPER_SEMAPHORE_BUILD_ENABLED`, `AI_HELPER_MOUSE_MOVER_BUILD_ENABLED`), so the combined `ai-helper.yaml` build includes both; the standalone YAMLs each enable only one.
@@ -116,18 +118,26 @@ Alongside it, a **`Usage Source`** text entity records which tool is currently d
 POST http://<device-ip>/text/AI%20Helper%20Usage%20Source/set?value=Claude%20Code
 ```
 
-- **Claude Code** reports the real **plan usage** automatically via [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1), updating **both** `Usage Remaining` and `Usage Source` at the **start of reasoning** (`UserPromptSubmit`) and again at **`Stop`**. The live "N% used, resets in ..." figure is not exposed to hooks, persisted to disk, or available via any CLI — it lives only in Anthropic's `anthropic-ratelimit-unified-*` response headers. So the hook reproduces what the Claude Code UI does: it makes one minimal authenticated request using the OAuth token in `~/.claude/.credentials.json`, reads `anthropic-ratelimit-unified-5h-utilization`, and posts `100 * (1 - utilization)` (plus the source tag). `-Window 5h` (default) mirrors the UI's "Current session" bar; `-Window 7d` is the weekly window. `-Mode source` is a lightweight variant that skips the API ping and only tags the source (not wired to any hook at the moment). Use `-Override <percent>` to post a fixed value instead. On any failure (offline, expired token) the gauge keeps its previous value rather than showing a wrong one.
+- **Claude Code** reports the real **plan usage** automatically via `ai-helper-usage-sync.ps1` (user level, `~/.claude/hooks/ai-helper/`, see [Claude Code](#claude-code)), updating **both** `Usage Remaining` and `Usage Source` at the **start of reasoning** (`UserPromptSubmit`) and again at **`Stop`**. The live "N% used, resets in ..." figure is not exposed to hooks, persisted to disk, or available via any CLI — it lives only in Anthropic's `anthropic-ratelimit-unified-*` response headers. So the hook reproduces what the Claude Code UI does: it makes one minimal authenticated request using the OAuth token in `~/.claude/.credentials.json`, reads `anthropic-ratelimit-unified-5h-utilization`, and posts `100 * (1 - utilization)` (plus the source tag). `-Window 5h` (default) mirrors the UI's "Current session" bar; `-Window 7d` is the weekly window. `-Mode source` is a lightweight variant that skips the API ping and only tags the source (not wired to any hook at the moment). Use `-Override <percent>` to post a fixed value instead. On any failure (offline, expired token) the gauge keeps its previous value rather than showing a wrong one.
 
   > Note: this uses your stored Claude credentials to make one tiny extra request per turn, and relies on undocumented rate-limit headers that Anthropic could change.
 
-- **GitHub Copilot** has its own separate quota (not Claude's) with no equivalent hook-accessible usage feed, so its **percentage is best-effort** — it posts a value it estimates at reasoning start and done, tagged with `Usage Source = GitHub Copilot`.
+- **GitHub Copilot** has its own separate quota (not Claude's) with no equivalent hook-accessible usage feed, so there is **no automatic gauge for it**. `.github/copilot-instructions.md` used to tell Copilot to post a best-effort estimate tagged `Usage Source = GitHub Copilot`; those instructions were removed (`c36fc19`), so today it can only be set by hand with the REST calls above (see [GitHub Copilot](#github-copilot)).
 
 ### Claude Code
 
-Claude Code hooks are configured in [`.claude/settings.json`](../.claude/settings.json) and shell out to [`.github/hooks/ai-helper-status-sync.ps1`](../.github/hooks/ai-helper-status-sync.ps1), which translates hook events into webhook calls.
+Claude Code hooks are **user level** since 2026-11-16: they are defined in `~/.claude/settings.json` and the scripts live in `~/.claude/hooks/ai-helper/` (with their own README: event mapping, payload filters, rules for editing the commands). Every repo and the desktop app's Code tab use that one copy, so this repo no longer has a `.claude/settings.json` or `.github/hooks/` for them. Do not add them back: user and project hooks both run, so each event would fire twice. The scripts translate hook events into webhook calls.
 
-1. Confirm the semaphore IP in `.github/hooks/ai-helper-status-sync.ps1` (`$uri` line) matches your device.
-2. Wire hook events to a `-Mode` in `.claude/settings.json`:
+**This repo is the source of truth: [`claude-hooks/`](claude-hooks/)** holds the scripts, the hook definition (`settings-hooks.json`) and an installer. After a Windows reinstall or on a new PC, clone the repo and run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ai-helper\claude-hooks\install.ps1
+```
+
+In VS Code the same thing is a task: **Terminal → Run Task… → `AI Helper: install Claude hooks`** (and `AI Helper: check Claude hooks (no changes)` for the read-only check), defined in [`.vscode/tasks.json`](../.vscode/tasks.json). The installer copies the scripts to `~/.claude/hooks/ai-helper/` and merges the hooks into `~/.claude/settings.json`, keeping every other setting and hook (previous files go to `~/.claude/backups/ai-helper-install-<time>/`). It is safe to run again; `install.ps1 -Check` only reports differences (exit code 1 = not in sync). To change a hook, edit the files in `claude-hooks/`, run `install.ps1`, and restart the Claude session.
+
+1. Confirm the semaphore IP in [`claude-hooks/ai-helper-status-sync.ps1`](claude-hooks/ai-helper-status-sync.ps1) (`$uri` line) matches your device, then run `install.ps1`.
+2. The user-level settings wire the events like this:
 
    | Claude Code hook | `-Mode` | Resulting status |
    |---|---|---|
@@ -138,9 +148,9 @@ Claude Code hooks are configured in [`.claude/settings.json`](../.claude/setting
    | `Stop` | `classify-stop` | inferred from the final assistant message (see below) |
 
 3. `classify-stop` mode reads the hook JSON payload from stdin, extracts the last assistant message, and pattern-matches it: mentions of asking permission → `Allow Action`, mentions of a manual step needed from the user → `Need User Action`, otherwise → `Done`.
-4. The script is defensive by design — any HTTP failure is swallowed and it always exits 0, so a semaphore outage never blocks an agent turn. Each run appends one line to `%TEMP%\ai-helper-status-hooks\hook.log`. The hook commands have a few hard rules (single-quoted `-Command`, no `PermissionRequest`, `; exit 0`); see [`.github/hooks/README.md`](../.github/hooks/README.md) before editing them.
+4. The script is defensive by design — any HTTP failure is swallowed and it always exits 0, so a semaphore outage never blocks an agent turn. Each run appends one line to `%TEMP%\ai-helper-status-hooks\hook.log`. The hook commands have a few hard rules (single-quoted `-Command`, no `PermissionRequest`, `; exit 0`); see [`claude-hooks/README.md`](claude-hooks/README.md) before editing them.
 
-In addition to the status wiring above, `.claude/settings.json` also runs [`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) on two events (see [Remaining-usage gauge](#remaining-usage-gauge)):
+In addition to the status wiring above, the user-level settings also run `ai-helper-usage-sync.ps1` on two events (see [Remaining-usage gauge](#remaining-usage-gauge)):
 
 | Claude Code hook | Args | Effect |
 |---|---|---|
@@ -149,7 +159,15 @@ In addition to the status wiring above, `.claude/settings.json` also runs [`ai-h
 
 ### GitHub Copilot
 
-Copilot CLI reads the same [`.claude/settings.json`](../.claude/settings.json) hooks as "repo settings", so there is no separate Copilot hook file (a second one would run every hook twice). The status hooks therefore fire for Copilot too, through the same `ai-helper-status-sync.ps1`. [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) additionally instructs Copilot to call the webhooks directly via `curl.exe` as part of its normal workflow:
+Copilot (CLI and the desktop app) gets the same status light through its own **user-level** hooks: Copilot loads every `*.json` from `~/.copilot/hooks/` (or `$COPILOT_HOME/hooks/`), so [`copilot-hooks/ai-helper.json`](copilot-hooks/ai-helper.json) is installed there and runs in every repo. It calls the **same** `ai-helper-status-sync.ps1` (the installer copies it from `claude-hooks/` to `~/.copilot/hooks/ai-helper/`), so one script serves both agents. It is a separate pipeline from the Claude hooks — Copilot does not read `~/.claude/settings.json` and Claude does not read `~/.copilot/hooks/` — so nothing fires twice. Install it with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ai-helper\copilot-hooks\install.ps1
+```
+
+or the VS Code task **`AI Helper: install Copilot hooks`** (plus `AI Helper: check Copilot hooks (no changes)` for the read-only check), then restart the Copilot session. Event mapping and the deliberate differences from the Claude wiring (no `PreToolUse` hook, `Stop` lands on `Done`, no usage sync) are documented in [`copilot-hooks/README.md`](copilot-hooks/README.md). After a Copilot session the shared `%TEMP%\ai-helper-status-hooks\hook.log` shows the runs as `[other]` lines.
+
+There is no other Copilot integration: [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) is empty (the manual `curl.exe` status/usage protocol was removed as outdated in `c36fc19`). The webhooks can still be pressed by hand:
 
 ```cmd
 curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_reasoning/press"
@@ -159,9 +177,9 @@ curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_done/press"
 curl.exe -s -o NUL -X POST -d "" "http://172.16.1.15/button/webhook_idle/press"
 ```
 
-[`ai-helper-usage-sync.ps1`](../.github/hooks/ai-helper-usage-sync.ps1) reports the **Claude** plan, so it deliberately does nothing in a Copilot session (it exits unless `CLAUDE_PROJECT_DIR`/`CLAUDECODE` is set, or `-Override` is given). Copilot's gauge comes only from the `curl.exe` protocol above.
+The user-level `ai-helper-usage-sync.ps1` reports the **Claude** plan, so it deliberately does nothing in a Copilot session (it exits unless `CLAUDE_PROJECT_DIR`/`CLAUDECODE` is set, or `-Override` is given). Nothing sets the gauge for Copilot automatically.
 
-To point either integration at your own device, replace `172.16.1.15` everywhere it appears (`ai-helper-status-sync.ps1`, `ai-helper-usage-sync.ps1`, and `copilot-instructions.md`) with your semaphore's IP address.
+To point the integration at your own device, replace `172.16.1.15` in `ai-helper-status-sync.ps1` and `ai-helper-usage-sync.ps1` (in `claude-hooks/`), then run both installers (`claude-hooks\install.ps1` and `copilot-hooks\install.ps1`).
 
 ---
 

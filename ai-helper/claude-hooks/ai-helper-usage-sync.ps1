@@ -19,9 +19,9 @@
 #
 # `-Override <percent>` skips the ping and posts a fixed value (manual/testing).
 #
-# Claude Code only. Copilot CLI also runs the shared .claude/settings.json hooks, but this
-# figure is the Claude plan's, so outside a Claude Code session (no CLAUDE_PROJECT_DIR /
-# CLAUDECODE in the environment) the script does nothing, unless `-Override` is given.
+# Claude Code only. Copilot CLI can run the same Claude-style hooks, but this figure is the
+# Claude plan's, so outside a Claude Code session (no CLAUDE_PROJECT_DIR / CLAUDECODE in the
+# environment) the script does nothing, unless `-Override` is given.
 
 param(
   [string]$DeviceIp = "172.16.1.15",

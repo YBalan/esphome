@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "powershell": "Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue; $d=if($env:COPILOT_HOME){$env:COPILOT_HOME}else{Join-Path $env:USERPROFILE .copilot}; $payload=[Console]::In.ReadToEnd(); & (Join-Path $d hooks/ai-helper/ai-helper-status-sync.ps1) -Mode reasoning -PayloadJson $payload; exit 0",
+        "timeoutSec": 10
+      }
+    ],
+    "PostToolUse": [
+      {
+        "type": "command",
+        "powershell": "Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue; $d=if($env:COPILOT_HOME){$env:COPILOT_HOME}else{Join-Path $env:USERPROFILE .copilot}; $payload=[Console]::In.ReadToEnd(); & (Join-Path $d hooks/ai-helper/ai-helper-status-sync.ps1) -Mode reasoning -PayloadJson $payload; exit 0",
+        "timeoutSec": 10
+      }
+    ],
+    "Notification": [
+      {
+        "type": "command",
+        "matcher": "permission_prompt",
+        "powershell": "Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue; $d=if($env:COPILOT_HOME){$env:COPILOT_HOME}else{Join-Path $env:USERPROFILE .copilot}; $payload=[Console]::In.ReadToEnd(); & (Join-Path $d hooks/ai-helper/ai-helper-status-sync.ps1) -Mode allow_action -PayloadFilter PermissionPrompt -PayloadJson $payload; exit 0",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "matcher": "elicitation_dialog",
+        "powershell": "Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue; $d=if($env:COPILOT_HOME){$env:COPILOT_HOME}else{Join-Path $env:USERPROFILE .copilot}; $payload=[Console]::In.ReadToEnd(); & (Join-Path $d hooks/ai-helper/ai-helper-status-sync.ps1) -Mode need_user_action -PayloadFilter ElicitationDialog -PayloadJson $payload; exit 0",
+        "timeoutSec": 10
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "powershell": "Set-ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue; $d=if($env:COPILOT_HOME){$env:COPILOT_HOME}else{Join-Path $env:USERPROFILE .copilot}; $payload=[Console]::In.ReadToEnd(); & (Join-Path $d hooks/ai-helper/ai-helper-status-sync.ps1) -Mode classify-stop -PayloadJson $payload; exit 0",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}

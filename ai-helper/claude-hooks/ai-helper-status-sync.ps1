@@ -22,31 +22,30 @@ function Read-HookPayload([string]$raw) {
   }
 
   try {
+    # No -Depth: the hook commands run Windows PowerShell 5.1, where that parameter does not exist.
     return $raw | ConvertFrom-Json
   } catch {
     return $null
   }
 }
 
-function Get-WorkspaceRoot {
-  $scriptDir = Split-Path -Parent $PSCommandPath
-  return Split-Path -Parent (Split-Path -Parent $scriptDir)
-}
-
 function Get-StateFile {
+  # One file for every workspace: there is one device, so its last status is one fact.
   $stateDir = Join-Path $env:TEMP "ai-helper-status-hooks"
   New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
-  return Join-Path $stateDir "esphome-ai-helper-status.txt"
+  return Join-Path $stateDir "ai-helper-status.txt"
 }
 
 function Write-HookLog($message) {
   # Small log so a misbehaving hook can be diagnosed from either agent (Claude Code or Copilot).
+  # The hooks are user-level and run for every workspace, so each line says which one (cwd from the payload).
   try {
     $log = Join-Path $env:TEMP "ai-helper-status-hooks\hook.log"
     New-Item -ItemType Directory -Path (Split-Path -Parent $log) -Force | Out-Null
     if ((Test-Path $log) -and (Get-Item $log).Length -gt 100KB) { Set-Content -Path $log -Value "" }
     $agent = if ($env:CLAUDE_PROJECT_DIR -or $env:CLAUDECODE) { "claude" } else { "other" }
-    Add-Content -Path $log -Value ("{0:s} [{1}] {2}" -f (Get-Date), $agent, $message)
+    $where = if ($script:HookCwd) { " cwd=$($script:HookCwd)" } else { "" }
+    Add-Content -Path $log -Value ("{0:s} [{1}] {2}{3}" -f (Get-Date), $agent, $message, $where)
   } catch {
     # Logging is best effort.
   }
@@ -92,6 +91,9 @@ function Normalize-ToolName([string]$toolName) {
   }
 }
 
+# Copilot ignores `matcher`, so every hook runs for every event there. Each filtered hook therefore
+# re-checks the real payload and does nothing on a mismatch.
+# Fails closed: a missing or unparsable payload fails every filter except None.
 function Test-PayloadFilter($payload, [string]$filter) {
   switch ($filter) {
     "None" { return $true }
@@ -194,11 +196,12 @@ function Invoke-StatusWebhook($status) {
   }
 }
 
-# Claude Code and Copilot CLI both run this from the shared .claude/settings.json. Copilot CLI
-# turns a failing permission-related hook into a denial, so nothing may escape: always exit 0.
+# Run from ~/.claude/settings.json (user level, every workspace). Copilot CLI turns a failing
+# permission-related hook into a denial, so nothing may escape: always exit 0.
+# Nothing is ever written to stdout: UserPromptSubmit stdout is injected into Claude's context.
 try {
-  $null = Get-WorkspaceRoot
   $payload = Read-HookPayload -raw $PayloadJson
+  $script:HookCwd = Get-PayloadValue -payload $payload -names @("cwd")
   if (-not (Test-PayloadFilter -payload $payload -filter $PayloadFilter)) {
     $toolName = Get-PayloadValue -payload $payload -names @("tool_name", "toolName")
     $notificationType = Get-PayloadValue -payload $payload -names @("notification_type", "notificationType")
