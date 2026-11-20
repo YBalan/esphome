@@ -151,9 +151,13 @@ mqtt:
   # ("mqtt") and the BLE tracker's scan timeout ("Reboot request from
   # esp32_ble_tracker"). Async hands publishes to a separate task via a
   # queue; when the broker is unreachable messages are dropped, not waited on.
-  #idf_send_async: true
-  # Don't mirror every log line to MQTT: it is one more publish per line.
-  #log_topic:
+  idf_send_async: true
+  # Don't mirror every log line to MQTT: it is one more publish per line, run on the
+  # main loop. It is ON by default whenever topic_prefix is set, so it must be disabled
+  # with an empty key (a commented-out key leaves it enabled). A task-watchdog reset was
+  # caught blocked in log line -> MQTTClientComponent::on_log -> esp_mqtt_client_publish
+  # -> select() waiting for the broker socket (elf=02f8774d, 2026-11-20).
+  log_topic:
   keepalive: 30s
 
 # Enable logger
